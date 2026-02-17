@@ -5,7 +5,6 @@ import {
   Link as LinkIcon,
   Settings2,
   Upload,
-  ChevronRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"

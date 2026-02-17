@@ -37,7 +37,7 @@ export function KpiCards({ title, items }: KpiCardsPayload) {
       <CardContent>
         <div className="space-y-3">
           {items.map((item, idx) => {
-            const numDelta = parseDelta(item.delta)
+            const numDelta = parseDelta(item.delta ?? undefined)
             return (
               <div
                 key={idx}

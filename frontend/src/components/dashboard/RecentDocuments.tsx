@@ -29,7 +29,7 @@ export function RecentDocuments() {
       <div className="bg-card rounded-lg border border-border shadow-soft overflow-hidden">
         <div className="divide-y divide-border">
           {documents.map((doc, i) => {
-            const st = statusLabels[doc.status];
+            const st = (statusLabels[doc.status] ?? statusLabels.draft)!;
             return (
               <button
                 key={i}

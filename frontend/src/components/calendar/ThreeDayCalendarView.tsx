@@ -95,8 +95,8 @@ export function ThreeDayCalendarView({
       <BigCalendar
         localizer={localizer}
         events={calendarEvents}
-        defaultView="threeDays"
-        views={views}
+        defaultView={"threeDays" as "month"}
+        views={views as Record<string, typeof ThreeDayView>}
         defaultDate={defaultDate}
         onSelectEvent={handleSelectEvent}
         onSelectSlot={handleSelectSlot}

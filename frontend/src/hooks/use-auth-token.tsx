@@ -1,4 +1,4 @@
-import { useEffect, useRef, useLayoutEffect } from "react"
+import { useLayoutEffect } from "react"
 import { useAuth } from "@clerk/clerk-react"
 import { setAuthTokenGetter } from "@/api/client"
 

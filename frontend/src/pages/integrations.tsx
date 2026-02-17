@@ -4,8 +4,6 @@ import {
   Settings2,
   CheckCircle2,
   AlertCircle,
-  ChevronRight,
-  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"

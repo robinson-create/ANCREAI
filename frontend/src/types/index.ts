@@ -1,5 +1,16 @@
 // Subscription types
 export type SubscriptionPlan = "free" | "pro"
+
+export interface SubscriptionPlanDetails {
+  id: string
+  name: string
+  price: number
+  max_assistants: number
+  max_storage_gb: number
+  max_chat_tokens: number
+  features: string[]
+  popular?: boolean
+}
 export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled"
 
 // Assistant types

@@ -46,14 +46,14 @@ export function useDictation(options?: UseDictationOptions): UseDictationReturn 
       setIsListening(true)
     })
 
-    session.onSpeech((result) => {
+    session.onSpeech((result: { transcript: string; isFinal?: boolean }) => {
       setTranscript(result.transcript)
       if (result.isFinal === false) {
         optionsRef.current?.onInterimTranscript?.(result.transcript)
       }
     })
 
-    session.onSpeechEnd((result) => {
+    session.onSpeechEnd((result: { transcript: string }) => {
       if (result.transcript) {
         optionsRef.current?.onFinalTranscript?.(result.transcript)
       }

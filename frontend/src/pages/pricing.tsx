@@ -106,7 +106,7 @@ export function PricingPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 <ul className="space-y-3">
-                  {plan.features.map((feature) => (
+                  {plan.features.map((feature: string) => (
                     <li key={feature} className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary" />
                       <span className="text-sm">{feature}</span>

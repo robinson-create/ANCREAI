@@ -71,35 +71,7 @@ function saveHistory(docId: string, entries: HistoryEntry[]) {
   }
 }
 
-// ── Speech Recognition types (Web Speech API) ──
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList
-  resultIndex: number
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean
-  interimResults: boolean
-  lang: string
-  start: () => void
-  stop: () => void
-  abort: () => void
-  onresult: ((ev: SpeechRecognitionEvent) => void) | null
-  onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null
-  onend: (() => void) | null
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognitionInstance
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance
-  }
-}
+// ── Speech Recognition: see src/speech-recognition.d.ts ──
 
 // ── Helpers ──
 
@@ -171,16 +143,19 @@ export function DocumentPromptBar({
 
   // Auto-select first assistant
   useEffect(() => {
-    if (assistants.length > 0 && !selectedAssistantId) {
-      setSelectedAssistantId(assistants[0].id)
+    const first = assistants[0]
+    if (first && !selectedAssistantId) {
+      setSelectedAssistantId(first.id)
     }
   }, [assistants, selectedAssistantId])
 
   // Compute effective collection IDs from selected assistant
   const selectedAssistant = assistants.find((a: Assistant) => a.id === selectedAssistantId)
-  const effectiveCollectionIds = selectedAssistant?.collection_ids?.length
-    ? selectedAssistant.collection_ids
-    : collectionIds
+  const collectionIdsFromAssistant = selectedAssistant?.collection_ids
+  const effectiveCollectionIds =
+    collectionIdsFromAssistant && collectionIdsFromAssistant.length > 0
+      ? collectionIdsFromAssistant
+      : collectionIds
 
   // Load history on mount
   useEffect(() => {

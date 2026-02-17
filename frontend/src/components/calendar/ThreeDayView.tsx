@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { Navigate } from 'react-big-calendar';
+// @ts-expect-error - TimeGrid has no type declarations
 import TimeGrid from 'react-big-calendar/lib/TimeGrid';
 import { format, addDays } from 'date-fns';
 import { fr } from 'date-fns/locale';

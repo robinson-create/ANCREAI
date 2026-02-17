@@ -114,35 +114,7 @@ const FILTER_TABS: { value: HistoryFilter; label: string; icon: typeof FileText 
   { value: "conversation", label: "Discussions", icon: MessageSquare },
 ];
 
-// ── Speech Recognition types (Web Speech API) ──
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
-  onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
-  }
-}
+// ── Speech Recognition types: see src/speech-recognition.d.ts ──
 
 // Keywords that indicate intent
 const EMAIL_KEYWORDS = ["email", "e-mail", "mail", "courriel", "envoyer un mail", "écrire un mail", "rédiger un mail", "composer un mail", "répondre"];
@@ -197,7 +169,7 @@ export function DashboardPage() {
       let finalTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) {
+        if (result?.isFinal && result[0]) {
           finalTranscript += result[0].transcript;
         }
       }
@@ -289,8 +261,8 @@ export function DashboardPage() {
       );
 
       const allConvos = results
-        .filter((r): r is PromiseFulfilledResult<typeof conversations> => r.status === "fulfilled")
-        .flatMap((r) => r.value);
+        .filter((r) => r.status === "fulfilled")
+        .flatMap((r) => (r as PromiseFulfilledResult<Array<{ id: string; title: string; started_at: string; last_message_at: string; message_count: number; assistant: Assistant }>>).value);
 
       setConversations(allConvos);
     };

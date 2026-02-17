@@ -459,7 +459,7 @@ Voir `.env.example` et `frontend/.env.example` pour la liste complète.
        │       ▼
        │  ┌──────────────────────────────────────────────┐
        │  │  Worker Arq                                  │
-       │  │  Parse → OCR (Mistral) → Chunk → Embed → Index │
+       │  │  Parse → OCR(Mistral) → Chunk →Embed → Index │
        │  └──────────────────────────────────────────────┘
        │
        │                 ┌──────────────────┐

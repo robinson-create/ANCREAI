@@ -39,35 +39,7 @@ const suggestions = [
   "Cherche le contrat de prestation",
 ];
 
-// ── Speech Recognition types (Web Speech API) ──
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
-  onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
-  }
-}
+// ── Speech Recognition: see src/speech-recognition.d.ts ──
 
 function formatRelativeDate(dateStr: string): string {
   const date = new Date(dateStr);
@@ -136,7 +108,7 @@ export function SearchPage() {
       let finalTranscript = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) {
+        if (result?.isFinal && result[0]) {
           finalTranscript += result[0].transcript;
         }
       }
@@ -222,8 +194,8 @@ export function SearchPage() {
       })
     );
     const all = results
-      .filter((r): r is PromiseFulfilledResult<typeof allConversations> => r.status === "fulfilled")
-      .flatMap((r) => r.value)
+      .filter((r) => r.status === "fulfilled")
+      .flatMap((r) => (r as PromiseFulfilledResult<Array<{ id: string; title: string; started_at: string; last_message_at: string; message_count: number; assistant: Assistant }>>).value)
       .sort((a, b) => new Date(b.last_message_at).getTime() - new Date(a.last_message_at).getTime());
     setAllConversations(all);
   }, [assistants]);
@@ -238,7 +210,7 @@ export function SearchPage() {
     const paramAssistant = searchParams.get("assistant");
     if (paramAssistant && assistants.some((a: Assistant) => a.id === paramAssistant)) {
       setSelectedAssistantId(paramAssistant);
-    } else if (!selectedAssistantId) {
+    } else if (!selectedAssistantId && assistants[0]) {
       setSelectedAssistantId(assistants[0].id);
     }
   }, [assistants, selectedAssistantId, searchParams, setSelectedAssistantId]);

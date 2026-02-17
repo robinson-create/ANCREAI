@@ -1,4 +1,4 @@
-import { Mail, Download, Clock, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ import { assistantsApi } from "@/api/assistants";
 import { chatApi } from "@/api/chat";
 import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import { mailApi } from "@/api/mail";
-import type { MailThreadSummary, MailThreadDetail, MailMessage, MailAccount, MailSendStatus } from "@/api/mail";
+import type { MailThreadSummary, MailMessage } from "@/api/mail";
 import type { Assistant } from "@/types";
 
 interface EmailAttachment {
@@ -33,35 +33,7 @@ interface EmailAttachment {
   sourceDocId?: string;
 }
 
-// ── Speech Recognition types (Web Speech API) ──
-
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-}
-
-interface SpeechRecognitionInstance extends EventTarget {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-  onresult: ((ev: SpeechRecognitionEvent) => void) | null;
-  onerror: ((ev: SpeechRecognitionErrorEvent) => void) | null;
-  onend: (() => void) | null;
-}
-
-declare global {
-  interface Window {
-    SpeechRecognition: new () => SpeechRecognitionInstance;
-    webkitSpeechRecognition: new () => SpeechRecognitionInstance;
-  }
-}
+// ── Speech Recognition: see src/speech-recognition.d.ts ──
 
 export const EmailComposer = () => {
   const location = useLocation();
@@ -92,7 +64,7 @@ export const EmailComposer = () => {
   const [replyAttachments, setReplyAttachments] = useState<EmailAttachment[]>([]);
 
   // ── Send state ──
-  const [sendingClientId, setSendingClientId] = useState<string | null>(null);
+  const [, setSendingClientId] = useState<string | null>(null);
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
 
