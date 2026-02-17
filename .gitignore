@@ -12,6 +12,8 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: frontend src/lib (utils, prosemirror, dictation)
+!frontend/src/lib/
 parts/
 sdist/
 var/
