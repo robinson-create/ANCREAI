@@ -430,6 +430,10 @@ Ou utiliser le script fourni (si présent) : `make start` / `./start-dev.sh`.
 | `DEV_AUTH_BYPASS` | Bypass auth en dev | `false` |
 | `NANGO_URL` | URL du serveur Nango | `http://localhost:3003` |
 | `NANGO_SECRET_KEY` | Clé secrète Nango | — |
+| `SMTP_ENCRYPTION_KEY` | Clé Fernet pour chiffrer les mots de passe SMTP (connexion Gmail/Outlook SMTP) | — |
+
+> **SMTP** : Pour connecter un compte mail via SMTP (Gmail, Outlook ou serveur perso), générez une clé :
+> `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` puis ajoutez `SMTP_ENCRYPTION_KEY=<la_clé>` dans `.env`.
 
 **Frontend** (`frontend/.env`) — préfixe **`VITE_`** obligatoire pour exposition au navigateur :
 

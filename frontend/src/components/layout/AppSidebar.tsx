@@ -1,6 +1,4 @@
-import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
 import {
   FileText,
   Mail,
@@ -10,27 +8,20 @@ import {
   ChevronRight,
   CreditCard,
   Bot,
-  Loader2,
   LogOut,
-  Plus,
-  ChevronDown,
-  ChevronUp,
   Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AnchorLogo } from "@/components/ui/anchor-logo";
 import { useClerk } from "@clerk/clerk-react";
-import { assistantsApi } from "@/api/assistants";
-import { billingApi } from "@/api/billing";
-import { AssistantModal } from "@/components/assistants/assistant-modal";
-import type { Assistant } from "@/types";
 
 const mainNav = [
   { label: "Recherche", icon: Search, path: "/app/search" },
   { label: "Emails", icon: Mail, path: "/app/email" },
   { label: "Documents", icon: FileText, path: "/app/documents" },
   { label: "Calendrier", icon: Calendar, path: "/app/calendar" },
+  { label: "Assistant", icon: Bot, path: "/app/assistants", matchPaths: ["/app/assistant"] },
 ];
 
 interface AppSidebarProps {
@@ -38,28 +29,10 @@ interface AppSidebarProps {
   onToggle: () => void;
 }
 
-const PLAN_LIMITS = { free: 1, pro: 3 };
-
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useClerk();
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [assistantsExpanded, setAssistantsExpanded] = useState(true);
-
-  // Fetch assistants from API
-  const { data: assistants = [], isLoading } = useQuery({
-    queryKey: ["assistants"],
-    queryFn: assistantsApi.list,
-  });
-
-  const { data: subscription } = useQuery({
-    queryKey: ["subscription"],
-    queryFn: billingApi.getSubscription,
-  });
-
-  const maxAssistants = subscription?.is_pro ? PLAN_LIMITS.pro : PLAN_LIMITS.free;
-  const isAtLimit = assistants.length >= maxAssistants;
 
   return (
     <aside
@@ -91,7 +64,10 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           </span>
         </div>
         {mainNav.map((item) => {
-          const active = location.pathname === item.path || (item.path !== "/app" && location.pathname.startsWith(item.path));
+          const itemPaths = "matchPaths" in item ? [item.path, ...(item.matchPaths ?? [])] : [item.path];
+          const active = itemPaths.some(
+            (p) => location.pathname === p || (p !== "/app" && location.pathname.startsWith(p + "/"))
+          );
           return (
             <Link
               key={item.path}
@@ -119,130 +95,8 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Bottom section: Assistants + Facturation + Réglages */}
-      <div className="border-t border-sidebar-border">
-        {/* Assistants section — collapsible, between nav and settings */}
-        <div className="px-3 pt-4 pb-3">
-          {!collapsed ? (
-            <>
-              {/* Assistants header */}
-              <button
-                onClick={() => setAssistantsExpanded((v) => !v)}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-[11px] font-medium uppercase tracking-wider text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
-              >
-                <Bot className="h-3.5 w-3.5 shrink-0" />
-                <span className="flex-1 text-left">Assistants</span>
-                <span className="text-[10px] font-normal normal-case tracking-normal opacity-70">
-                  {assistants.length}/{maxAssistants}
-                </span>
-                {assistantsExpanded ? (
-                  <ChevronUp className="h-3 w-3" />
-                ) : (
-                  <ChevronDown className="h-3 w-3" />
-                )}
-              </button>
-
-              {/* Assistants list */}
-              {assistantsExpanded && (
-                <div className="space-y-1 mt-3">
-                  {isLoading && (
-                    <div className="flex justify-center py-3">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-sidebar-muted" />
-                    </div>
-                  )}
-
-                  {assistants.map((a: Assistant) => {
-                    const settings = (a.settings || {}) as Record<string, unknown>;
-                    const emoji = (settings.emoji as string) || "";
-                    const role = (settings.role as string) || a.model;
-                    const assistantPath = `/app/assistant/${a.id}`;
-
-                    return (
-                      <Link
-                        key={a.id}
-                        to={assistantPath}
-                        className={cn(
-                          "flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors w-full text-left group",
-                          location.pathname === assistantPath
-                            ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                            : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                        )}
-                      >
-                        {emoji ? (
-                          <span className="text-sm shrink-0">{emoji}</span>
-                        ) : (
-                          <Bot className="h-3.5 w-3.5 shrink-0 text-sidebar-muted" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[13px] font-medium text-sidebar-accent-foreground truncate">{a.name}</div>
-                          <div className="text-[10px] text-sidebar-muted truncate">{role}</div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-
-                  {/* Add assistant button */}
-                  {!isAtLimit && !isLoading && (
-                    <button
-                      onClick={() => setIsModalOpen(true)}
-                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors w-full text-left text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    >
-                      <Plus className="h-3.5 w-3.5 shrink-0" />
-                      <span className="text-[13px]">Ajouter</span>
-                    </button>
-                  )}
-                  {isAtLimit && !isLoading && (
-                    <Link
-                      to="/app/billing"
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-md text-[11px] transition-colors w-full text-left text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                    >
-                      Limite atteinte · Upgrader
-                    </Link>
-                  )}
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Collapsed: show assistant icons */}
-              <Link
-                to="/app/assistants"
-                className="flex items-center justify-center py-2 rounded-md transition-colors w-full text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                title="Assistants"
-              >
-                <Bot className="h-4 w-4" />
-              </Link>
-              {assistants.map((a: Assistant) => {
-                const settings = (a.settings || {}) as Record<string, unknown>;
-                const emoji = (settings.emoji as string) || "";
-                const assistantPath = `/app/assistant/${a.id}`;
-
-                return (
-                  <Link
-                    key={a.id}
-                    to={assistantPath}
-                    className={cn(
-                      "flex items-center justify-center py-1.5 rounded-md transition-colors w-full",
-                      location.pathname === assistantPath
-                        ? "bg-sidebar-accent"
-                        : "text-muted-foreground hover:bg-sidebar-accent"
-                    )}
-                    title={a.name}
-                  >
-                    {emoji ? (
-                      <span className="text-sm">{emoji}</span>
-                    ) : (
-                      <Bot className="h-3.5 w-3.5 text-sidebar-muted" />
-                    )}
-                  </Link>
-                );
-              })}
-            </>
-          )}
-        </div>
-
-        {/* Facturation + Réglages */}
-        <div className="p-3 space-y-1 border-t border-sidebar-border/50">
+      {/* Bottom section: Facturation + Réglages */}
+      <div className="border-t border-sidebar-border p-3 space-y-1">
           <Link
             to="/app/billing"
             className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
@@ -272,14 +126,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
-        </div>
       </div>
-      {/* Create assistant modal */}
-      <AssistantModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        assistant={null}
-      />
     </aside>
   );
 }
