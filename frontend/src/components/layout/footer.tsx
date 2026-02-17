@@ -13,7 +13,7 @@ export function Footer() {
               <span className="font-bold">Ancre</span>
             </Link>
             <p className="text-sm text-muted-foreground">
-              Créez et personnalisez vos assistants IA en quelques clics.
+              Recherche documentaire, rédaction assistée et gestion des calendriers – 100 % souverain.
             </p>
           </div>
 
@@ -22,7 +22,12 @@ export function Footer() {
             <h4 className="text-sm font-semibold">Produit</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link to="/" className="hover:text-foreground">
+                <Link to="/#accueil" className="hover:text-foreground">
+                  Produit
+                </Link>
+              </li>
+              <li>
+                <Link to="/#fonctionnalites" className="hover:text-foreground">
                   Fonctionnalités
                 </Link>
               </li>
@@ -67,10 +72,17 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="mt-8 border-t pt-8 text-center text-sm text-muted-foreground">
-          <p>
-            &copy; {new Date().getFullYear()} Ancre. Tous droits réservés.
-          </p>
+        <div className="mt-8 border-t pt-8 flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 text-sm text-muted-foreground">
+          <p>Ancre – © 2026 Tous droits réservés.</p>
+          <span className="hidden sm:inline">·</span>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+            <Link to="/#accueil" className="hover:text-foreground">Produit</Link>
+            <Link to="/#fonctionnalites" className="hover:text-foreground">Fonctionnalités</Link>
+            <Link to="/pricing" className="hover:text-foreground">Tarifs</Link>
+            <Link to="/cgv" className="hover:text-foreground">Légal</Link>
+            <a href="mailto:contact@mecano-man.com" className="hover:text-foreground">Contact</a>
+            <span>– contact@mecano-man.com</span>
+          </div>
         </div>
       </div>
     </footer>
