@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -15,6 +15,7 @@ import {
   X,
   Building2,
   Briefcase,
+  PenLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,7 @@ import {
   integrationsApi,
   type NangoConnection,
 } from "@/api/integrations";
+import { settingsApi } from "@/api/settings";
 
 // ── Known providers ──
 const KNOWN_PROVIDERS = [
@@ -69,6 +71,38 @@ export function ProfilePage() {
       setInfoDirty(false);
     }
   }, [user]);
+
+  // ── Signature mail (paramètres tenant) ──
+  const signatureRef = useRef<HTMLDivElement>(null);
+  const [signatureDirty, setSignatureDirty] = useState(false);
+  const { data: settingsData } = useQuery({
+    queryKey: ["tenant-settings"],
+    queryFn: settingsApi.get,
+  });
+  const updateSettingsMutation = useMutation({
+    mutationFn: settingsApi.update,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tenant-settings"] });
+      setSignatureDirty(false);
+      toast({ title: "Signature mail sauvegardée" });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de sauvegarder la signature.",
+      });
+    },
+  });
+  useEffect(() => {
+    if (signatureRef.current && settingsData?.mail_signature !== undefined && !signatureDirty) {
+      signatureRef.current.innerHTML = settingsData.mail_signature;
+    }
+  }, [settingsData?.mail_signature]);
+  const saveSignature = useCallback(() => {
+    const html = signatureRef.current?.innerHTML ?? "";
+    updateSettingsMutation.mutate({ mail_signature: html });
+  }, [updateSettingsMutation]);
 
   const savePersonalInfo = async () => {
     if (!user) return;
@@ -277,6 +311,51 @@ export function ProfilePage() {
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          {/* ── Signature mail ── */}
+          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+            <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
+              <PenLine className="h-4 w-4 text-primary" />
+              <h3 className="font-display font-semibold text-foreground text-sm">
+                Signature mail
+              </h3>
+            </div>
+            <div className="p-4 sm:p-5 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Collez votre signature ici (texte, images, liens). Elle sera ajoutée automatiquement à la fin de chaque email. L&apos;IA ne rédige pas la signature.
+              </p>
+              <div
+                ref={signatureRef}
+                contentEditable
+                onInput={() => setSignatureDirty(true)}
+                className="min-h-[100px] px-3 py-2.5 rounded-lg border border-border bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                data-placeholder="Collez votre signature (Ctrl+V)..."
+                suppressContentEditableWarning
+              />
+              <style>{`
+                [data-placeholder]:empty:before {
+                  content: attr(data-placeholder);
+                  color: var(--muted-foreground);
+                }
+              `}</style>
+              <div className="flex justify-end">
+                <Button
+                  variant="premium"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={saveSignature}
+                  disabled={!signatureDirty || updateSettingsMutation.isPending}
+                >
+                  {updateSettingsMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Save className="h-3.5 w-3.5" />
+                  )}
+                  Sauvegarder
+                </Button>
+              </div>
             </div>
           </section>
 

@@ -26,6 +26,7 @@ import { assistantsApi } from "@/api/assistants";
 import { chatApi } from "@/api/chat";
 import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import { mailApi } from "@/api/mail";
+import { settingsApi } from "@/api/settings";
 import type { MailThreadSummary, MailMessage } from "@/api/mail";
 import type { Assistant } from "@/types";
 
@@ -89,6 +90,13 @@ export const EmailComposer = () => {
 
   // ── Mail account state ──
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+
+  // ── Signature mail (paramètres tenant) ──
+  const { data: tenantSettings } = useQuery({
+    queryKey: ["tenant-settings"],
+    queryFn: settingsApi.get,
+  });
+  const mailSignature = tenantSettings?.mail_signature?.trim() ?? "";
 
   // ── Navigation state ──
   const [selectedThread, setSelectedThread] = useState<MailThreadSummary | null>(null);
@@ -386,8 +394,11 @@ export const EmailComposer = () => {
     setSendingClientId(clientSendId);
 
     try {
-      // composeBody is HTML (from AI or contenteditable)
-      const bodyText = stripHtmlToText(composeBody);
+      // composeBody is HTML (from AI or contenteditable); append tenant signature
+      const bodyHtml = composeBody.trim()
+        ? composeBody + (mailSignature ? `<br/><br/>${mailSignature}` : "")
+        : null;
+      const bodyText = stripHtmlToText(bodyHtml || composeBody);
       await mailApi.send({
         client_send_id: clientSendId,
         mail_account_id: selectedAccountId,
@@ -395,7 +406,7 @@ export const EmailComposer = () => {
         to_recipients: [{ name: "", email: composeTo.trim() }],
         subject: composeSubject,
         body_text: bodyText || composeBody,
-        body_html: composeBody.trim() ? composeBody : null,
+        body_html: bodyHtml,
       });
       pollSendStatus(clientSendId);
     } catch (e: any) {
@@ -403,7 +414,7 @@ export const EmailComposer = () => {
       setSendError(e?.message || "Erreur d'envoi");
       setSendingClientId(null);
     }
-  }, [selectedAccountId, composeTo, composeSubject, composeBody, pollSendStatus]);
+  }, [selectedAccountId, composeTo, composeSubject, composeBody, mailSignature, pollSendStatus]);
 
   const handleSendReply = useCallback(async () => {
     if (!selectedAccountId || !replyBody.trim() || !selectedMessage) return;
@@ -413,7 +424,10 @@ export const EmailComposer = () => {
     setSendingClientId(clientSendId);
 
     try {
-      const bodyText = stripHtmlToText(replyBody);
+      const replyHtml = replyBody.trim()
+        ? replyBody + (mailSignature ? `<br/><br/>${mailSignature}` : "")
+        : null;
+      const bodyText = stripHtmlToText(replyHtml || replyBody);
       await mailApi.send({
         client_send_id: clientSendId,
         mail_account_id: selectedAccountId,
@@ -421,7 +435,7 @@ export const EmailComposer = () => {
         to_recipients: [selectedMessage.sender],
         subject: `Re: ${selectedMessage.subject || ""}`,
         body_text: bodyText || replyBody,
-        body_html: replyBody.trim() ? replyBody : null,
+        body_html: replyHtml,
         in_reply_to_message_id: selectedMessage.id,
         provider_thread_id: selectedMessage.provider_thread_id || undefined,
       });
@@ -431,7 +445,7 @@ export const EmailComposer = () => {
       setSendError(e?.message || "Erreur d'envoi");
       setSendingClientId(null);
     }
-  }, [selectedAccountId, replyBody, selectedMessage, pollSendStatus]);
+  }, [selectedAccountId, replyBody, selectedMessage, mailSignature, pollSendStatus]);
 
   const handleRetrySend = useCallback(() => {
     setSendStatus("idle");
@@ -603,6 +617,7 @@ Génère le corps en HTML compatible Gmail, sans Markdown.
 Utilise uniquement : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
 Pas de CSS, scripts ou attributs style.
 N'écris AUCUNE phrase d'introduction (pas de "Voici une proposition", "Voici le mail", etc.).
+Ne rédige PAS de signature (formule de politesse finale, nom, coordonnées). La signature est ajoutée automatiquement.
 Commence directement par la formule de salutation.`;
 
     generateWithAI(prompt, setReplyBody);
@@ -622,6 +637,7 @@ Génère le corps de l'email en HTML compatible Gmail, sans Markdown.
 Utilise uniquement ces balises : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
 Pas de CSS, pas de scripts, pas d'attributs style.
 N'écris AUCUNE phrase d'introduction ou de mise en contexte (pas de "Voici une proposition", "Voici le mail", etc.).
+Ne rédige PAS de signature (formule de politesse finale, nom, coordonnées). La signature est ajoutée automatiquement.
 Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, etc.).`;
 
     generateWithAI(prompt, setComposeBody);
