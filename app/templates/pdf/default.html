@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ title }}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 15mm 25mm 15mm;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.5;
+      color: #1a1a1a;
+    }
+
+    /* Header */
+    .doc-header {
+      border-bottom: 2px solid #2563eb;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .doc-header h1 {
+      font-size: 22pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 8px;
+    }
+    .doc-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 9pt;
+      color: #64748b;
+    }
+    .doc-meta span { white-space: nowrap; }
+
+    /* Blocks */
+    .block { margin-bottom: 20px; }
+    .block-label {
+      font-size: 9pt;
+      font-weight: 600;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+    }
+
+    /* Rich text content */
+    .rich-text h1 { font-size: 18pt; font-weight: 700; margin: 16px 0 8px; }
+    .rich-text h2 { font-size: 15pt; font-weight: 600; margin: 14px 0 6px; }
+    .rich-text h3 { font-size: 12pt; font-weight: 600; margin: 12px 0 4px; }
+    .rich-text p { margin-bottom: 8px; }
+    .rich-text ul, .rich-text ol { margin: 8px 0; padding-left: 24px; }
+    .rich-text li { margin-bottom: 4px; }
+    .rich-text blockquote {
+      border-left: 3px solid #94a3b8;
+      padding-left: 12px;
+      margin: 8px 0;
+      color: #475569;
+      font-style: italic;
+    }
+    .rich-text strong { font-weight: 700; }
+    .rich-text em { font-style: italic; }
+
+    /* Line items table */
+    .line-items-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+      margin: 8px 0;
+    }
+    .line-items-table th {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      padding: 8px 10px;
+      text-align: left;
+      font-weight: 600;
+      font-size: 9pt;
+      text-transform: uppercase;
+      color: #475569;
+    }
+    .line-items-table td {
+      border: 1px solid #e2e8f0;
+      padding: 6px 10px;
+    }
+    .line-items-table .num { text-align: right; }
+    .line-items-total {
+      text-align: right;
+      font-weight: 700;
+      font-size: 12pt;
+      margin-top: 8px;
+      color: #1e293b;
+    }
+
+    /* Clause / Terms */
+    .clause-block, .terms-block {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 4px;
+      padding: 12px 16px;
+    }
+
+    /* Signature */
+    .signature-block {
+      display: flex;
+      gap: 40px;
+      margin-top: 40px;
+    }
+    .signature-party {
+      flex: 1;
+      border-top: 1px solid #1a1a1a;
+      padding-top: 8px;
+    }
+    .signature-party .name { font-weight: 600; }
+    .signature-party .role { font-size: 9pt; color: #64748b; }
+
+    /* Sources */
+    .sources {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+      font-size: 9pt;
+      color: #64748b;
+    }
+    .sources h3 { font-size: 10pt; margin-bottom: 6px; }
+    .sources li { margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="doc-header">
+    <h1>{{ title }}</h1>
+    <div class="doc-meta">
+      {% if meta.reference %}<span>Ref: {{ meta.reference }}</span>{% endif %}
+      {% if meta.date %}<span>Date: {{ meta.date }}</span>{% endif %}
+      {% if meta.client %}<span>Client: {{ meta.client }}</span>{% endif %}
+      {% if meta.author %}<span>Auteur: {{ meta.author }}</span>{% endif %}
+      {% if meta.project %}<span>Projet: {{ meta.project }}</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Blocks -->
+  {% for block in blocks %}
+  <div class="block">
+    {% if block.label %}
+    <div class="block-label">{{ block.label }}</div>
+    {% endif %}
+
+    {% if block.type == "rich_text" %}
+    <div class="rich-text">{{ block.html_content | safe }}</div>
+
+    {% elif block.type == "line_items" %}
+    <table class="line-items-table">
+      <thead>
+        <tr>
+          <th>Description</th>
+          <th class="num">Qte</th>
+          <th>Unite</th>
+          <th class="num">P.U. ({{ block.currency | default("EUR") }})</th>
+          <th class="num">TVA %</th>
+          <th class="num">Total ({{ block.currency | default("EUR") }})</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in block.items %}
+        <tr>
+          <td>{{ item.description }}</td>
+          <td class="num">{{ item.quantity }}</td>
+          <td>{{ item.unit }}</td>
+          <td class="num">{{ "%.2f" | format(item.unit_price) }}</td>
+          <td class="num">{{ item.tax_rate }}%</td>
+          <td class="num">{{ "%.2f" | format(item.total) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% set ns = namespace(grand_total=0) %}
+    {% for item in block.items %}
+      {% set ns.grand_total = ns.grand_total + item.total %}
+    {% endfor %}
+    <div class="line-items-total">Total: {{ "%.2f" | format(ns.grand_total) }} {{ block.currency | default("EUR") }}</div>
+
+    {% elif block.type in ["clause", "terms"] %}
+    <div class="{{ block.type }}-block">
+      <div class="rich-text">{{ block.html_content | safe }}</div>
+    </div>
+
+    {% elif block.type == "signature" %}
+    <div class="signature-block">
+      {% for party in block.parties %}
+      <div class="signature-party">
+        <div class="name">{{ party.name | default("") }}</div>
+        <div class="role">{{ party.role | default("") }}</div>
+        {% if party.date %}<div style="font-size: 9pt; margin-top: 4px;">Date: {{ party.date }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% elif block.type == "attachments" %}
+    <div>
+      <strong>Pieces jointes :</strong>
+      <ul>
+        {% for file in block.files %}
+        <li>{{ file.filename | default(file.name | default("fichier")) }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    {% elif block.type == "variables" %}
+    <div>
+      {% for key, val in block.variables.items() %}
+      <div><strong>{{ key }}:</strong> {{ val }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <!-- Sources -->
+  {% if sources %}
+  <div class="sources">
+    <h3>Sources</h3>
+    <ol>
+      {% for src in sources %}
+      <li>{{ src.document_filename }}{% if src.page_number %}, p. {{ src.page_number }}{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+
+</body>
+</html>

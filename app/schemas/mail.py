@@ -1,0 +1,120 @@
+"""Pydantic schemas for the mail integration."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
+
+
+# ── Mail Account ──
+
+
+class MailAccountRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    user_id: UUID
+    provider: str
+    email_address: str | None = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class MailAccountConnectResponse(BaseModel):
+    account_id: UUID
+    connect_url: str
+    provider: str
+
+
+# ── Mail Message ──
+
+
+class MailMessageBrief(BaseModel):
+    """Lightweight message for thread listings."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    provider_message_id: str
+    provider_thread_id: str | None = None
+    sender: dict
+    to_recipients: list[dict]
+    subject: str | None = None
+    date: datetime
+    snippet: str | None = None
+    is_read: bool = False
+    is_sent: bool = False
+    has_attachments: bool = False
+
+
+class MailMessageRead(MailMessageBrief):
+    """Full message with body."""
+
+    cc_recipients: list[dict] | None = None
+    bcc_recipients: list[dict] | None = None
+    body_text: str | None = None
+    body_html: str | None = None
+    internet_message_id: str | None = None
+    raw_headers: dict | None = None
+    is_draft: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+# ── Threads ──
+
+
+class MailThreadSummary(BaseModel):
+    """Thread summary for listing."""
+
+    thread_key: str
+    subject: str | None = None
+    last_date: datetime
+    snippet: str | None = None
+    message_count: int
+    participants: list[dict]
+
+
+class MailThreadRead(BaseModel):
+    """Full thread with messages."""
+
+    thread_key: str
+    subject: str | None = None
+    messages: list[MailMessageRead]
+
+
+# ── Send Request ──
+
+
+class MailSendRequestCreate(BaseModel):
+    client_send_id: UUID
+    mail_account_id: UUID
+    mode: str = "new"  # new | reply | forward
+    to_recipients: list[dict]
+    cc_recipients: list[dict] | None = None
+    bcc_recipients: list[dict] | None = None
+    subject: str
+    body_text: str | None = None
+    body_html: str | None = None
+    in_reply_to_message_id: UUID | None = None
+    provider_thread_id: str | None = None
+
+
+class MailSendResponse(BaseModel):
+    id: UUID
+    client_send_id: UUID
+    status: str
+
+
+class MailSendStatusRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    client_send_id: UUID
+    status: str
+    provider_message_id: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None

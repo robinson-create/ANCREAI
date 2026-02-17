@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Tiptap Cloud style – Blue accent ── */
+    --background: 210 40% 98%;        /* slate-50 */
+    --foreground: 240 6% 10%;         /* zinc-900 */
+    --card: 0 0% 100%;               /* white */
+    --card-foreground: 240 6% 10%;    /* zinc-900 */
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 221 83% 53%;           /* blue-600 */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 5% 96%;          /* zinc-100 */
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;              /* zinc-100 */
+    --muted-foreground: 240 4% 46%;   /* zinc-500 */
+    --accent: 214 95% 93%;            /* blue-100 */
+    --accent-foreground: 221 83% 53%; /* blue-600 */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 240 6% 90%;             /* zinc-200 */
+    --input: 240 6% 90%;
+    --ring: 217 91% 60%;              /* blue-500 */
+    --radius: 0.625rem;               /* 10px */
+
+    /* Blue accent shades */
+    --accent-soft: 213 94% 68%;       /* blue-400 */
+
+    /* Gold accent (kept for premium badge only) */
+    --gold: 38 92% 50%;
+    --gold-light: 43 96% 96%;
+    --gold-foreground: 26 83% 14%;
+
+    /* Surface */
+    --surface: 210 40% 98%;           /* matches background */
+    --surface-elevated: 0 0% 100%;
+
+    /* Success / Info */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    /* Sidebar – Light style */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 6% 10%;
+    --sidebar-primary: 221 83% 53%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 5% 96%;       /* zinc-100 pill bg */
+    --sidebar-accent-foreground: 240 6% 10%;
+    --sidebar-border: 240 6% 90%;
+    --sidebar-ring: 217 91% 60%;
+    --sidebar-muted: 240 4% 46%;
+
+    /* Unified shadow */
+    --shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04);
+  }
+
+  .dark {
+    --background: 240 6% 7%;
+    --foreground: 210 40% 98%;
+    --card: 240 5% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 240 5% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 240 6% 7%;
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 240 4% 16%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 224 76% 48%;
+
+    /* Blue accent shades (dark) */
+    --accent-soft: 213 94% 68%;
+
+    /* Gold accent (dark) */
+    --gold: 38 92% 50%;
+    --gold-light: 38 30% 15%;
+    --gold-foreground: 43 96% 90%;
+
+    /* Surface (dark) */
+    --surface: 240 6% 7%;
+    --surface-elevated: 240 5% 11%;
+
+    /* Success / Info (dark) */
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --info: 217 91% 60%;
+    --info-foreground: 0 0% 100%;
+
+    /* Sidebar (dark) */
+    --sidebar-background: 240 6% 7%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 240 6% 7%;
+    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 240 4% 16%;
+    --sidebar-ring: 224 76% 48%;
+    --sidebar-muted: 240 5% 55%;
+
+    --shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.15);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* ── Anchor streaming animations ── */
+@keyframes streamPulse {
+  0%, 100% { transform: scale(1); filter: saturate(1); opacity: 1; }
+  50% { transform: scale(1.03); filter: saturate(1.15); opacity: .95; }
+}
+
+@keyframes streamSheen {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+.anchor-streaming {
+  animation: streamPulse 1.2s ease-in-out infinite;
+}
+
+.anchor-sheen {
+  background: linear-gradient(90deg,
+    hsl(217 91% 60% / .08),
+    hsl(217 91% 60% / .22),
+    hsl(217 91% 60% / .08)
+  );
+  background-size: 200% 100%;
+  animation: streamSheen 1.1s linear infinite;
+}
+
+@layer utilities {
+  .shadow-soft {
+    box-shadow: var(--shadow);
+  }
+  .shadow-elevated {
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  }
+  .bg-gradient-gold {
+    background: linear-gradient(135deg, hsl(var(--gold)) 0%, hsl(38 85% 58%) 100%);
+  }
+  .bg-gradient-blue {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--ring)) 100%);
+  }
+}
