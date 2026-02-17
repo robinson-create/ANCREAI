@@ -349,7 +349,7 @@ export function DashboardPage() {
 
   return (
     <div className="flex flex-col h-full animate-fade-in overflow-auto">
-      {/* Top section - actions + prompt */}
+      {/* Top section - prompt first (primary), then smaller CTAs */}
       <div className="flex-shrink-0 flex items-center justify-center px-6 pt-8 pb-4">
         <div className="max-w-2xl w-full space-y-6 text-center">
           <div className="space-y-2">
@@ -357,30 +357,13 @@ export function DashboardPage() {
               Que souhaitez-vous faire ?
             </h1>
             <p className="text-sm text-muted-foreground">
-              Choisissez une action ou décrivez votre besoin ci-dessous.
+              Décrivez votre besoin ci-dessous ou choisissez une action rapide.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {actions.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => navigate(a.path)}
-                className="group flex flex-col items-center gap-3 w-full px-4 py-5 rounded-[var(--radius)] bg-card border border-border shadow-soft hover:shadow-elevated hover:border-primary/30 transition-all text-center"
-              >
-                <div className="flex items-center justify-center w-12 h-12 rounded-lg bg-accent group-hover:bg-gradient-blue transition-colors shrink-0">
-                  <a.icon className="h-5 w-5 text-primary group-hover:text-white" />
-                </div>
-                <div>
-                  <div className="text-sm font-semibold text-foreground">{a.label}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{a.description}</div>
-                </div>
-              </button>
-            ))}
-          </div>
 
-          {/* Prompt bar */}
+          {/* Prompt bar — primary, encourage writing */}
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Ou décrivez votre besoin</p>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Décrivez votre besoin</p>
             <div className="relative">
               <textarea
                 value={prompt}
@@ -416,6 +399,20 @@ export function DashboardPage() {
                 </Button>
               </div>
             </div>
+          </div>
+
+          {/* Smaller CTAs — below prompt to encourage chat-first usage */}
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            {actions.map((a) => (
+              <button
+                key={a.id}
+                onClick={() => navigate(a.path)}
+                className="group inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-muted/50 hover:bg-accent/30 border border-transparent hover:border-primary/20 transition-all"
+              >
+                <a.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                <span className="text-muted-foreground group-hover:text-foreground">{a.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>

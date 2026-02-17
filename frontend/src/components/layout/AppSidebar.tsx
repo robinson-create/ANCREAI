@@ -6,7 +6,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
   Bot,
   LogOut,
   Calendar,
@@ -21,7 +20,6 @@ const mainNav = [
   { label: "Emails", icon: Mail, path: "/app/email" },
   { label: "Documents", icon: FileText, path: "/app/documents" },
   { label: "Calendrier", icon: Calendar, path: "/app/calendar" },
-  { label: "Assistant", icon: Bot, path: "/app/assistants", matchPaths: ["/app/assistant"] },
 ];
 
 interface AppSidebarProps {
@@ -41,9 +39,10 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         collapsed ? "w-16" : "w-60"
       )}
     >
-      {/* Logo — clickable, navigates to home */}
+      {/* Logo — clickable, always navigates to welcome page */}
       <Link
         to="/app"
+        onClick={() => window.scrollTo({ top: 0, left: 0, behavior: "auto" })}
         className="flex items-center h-14 px-4 border-b border-sidebar-border group"
       >
         <div className="transition-transform duration-300 group-hover:rotate-[-12deg]">
@@ -95,28 +94,38 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Bottom section: Facturation + Réglages */}
+      {/* Bottom section: Assistant, Réglages, Connecteurs (subtle), Déconnexion */}
       <div className="border-t border-sidebar-border p-3 space-y-1">
           <Link
-            to="/app/billing"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            to="/app/assistants"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors",
+              (location.pathname === "/app/assistants" || location.pathname.startsWith("/app/assistant"))
+                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            )}
           >
-            <CreditCard className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Facturation</span>}
+            <Bot className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Assistant</span>}
           </Link>
           <Link
             to="/app/profile"
-            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            className={cn(
+              "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors",
+              location.pathname === "/app/profile"
+                ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            )}
           >
             <Settings className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Réglages</span>}
           </Link>
           <button
             onClick={() => signOut({ redirectUrl: "/" })}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive transition-colors w-full"
+            className="flex items-center justify-center px-2 py-1.5 rounded-md text-sidebar-muted/50 hover:text-destructive hover:bg-sidebar-accent/30 transition-colors w-full"
+            title="Déconnexion"
           >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Déconnexion</span>}
+            <LogOut className="h-3.5 w-3.5 shrink-0" />
           </button>
           <Button
             variant="ghost"

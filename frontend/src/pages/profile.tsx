@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -16,6 +17,7 @@ import {
   Building2,
   Briefcase,
   PenLine,
+  CreditCard,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +29,7 @@ import {
   type NangoConnection,
 } from "@/api/integrations";
 import { settingsApi } from "@/api/settings";
+import { billingApi } from "@/api/billing";
 
 // ── Known providers ──
 const KNOWN_PROVIDERS = [
@@ -47,6 +50,7 @@ const EMAIL_PROVIDERS = [
 
 export function ProfilePage() {
   const { user } = useUser();
+  const location = useLocation();
   const { openUserProfile } = useClerk();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -168,6 +172,26 @@ export function ProfilePage() {
       toast({ variant: "destructive", title: "Erreur", description: "Impossible de déconnecter." });
     },
   });
+
+  // ── Billing (Facturation) ──
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription"],
+    queryFn: billingApi.getSubscription,
+  });
+  const { data: plans } = useQuery({
+    queryKey: ["plans"],
+    queryFn: billingApi.getPlans,
+  });
+  const currentPlan = plans?.find((p) => p.id === subscription?.plan);
+
+  // Scroll to hash section (e.g. #integrations) when navigating from sidebar
+  useEffect(() => {
+    const hash = location.hash?.slice(1);
+    if (hash) {
+      const el = document.getElementById(hash);
+      el?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [location.pathname, location.hash]);
 
   return (
     <div className="flex flex-col h-full">
@@ -360,7 +384,7 @@ export function ProfilePage() {
           </section>
 
           {/* ── Connecteurs ── */}
-          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+          <section id="integrations" className="bg-card border border-border rounded-lg shadow-soft overflow-hidden scroll-mt-4">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <Plug className="h-4 w-4 text-primary" />
               <h3 className="font-display font-semibold text-foreground text-sm">
@@ -423,6 +447,37 @@ export function ProfilePage() {
                   </div>
                 );
               })}
+            </div>
+          </section>
+
+          {/* ── Facturation ── */}
+          <section id="billing" className="bg-card border border-border rounded-lg shadow-soft overflow-hidden scroll-mt-4">
+            <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
+              <CreditCard className="h-4 w-4 text-primary" />
+              <h3 className="font-display font-semibold text-foreground text-sm">
+                Facturation
+              </h3>
+            </div>
+            <div className="p-4 sm:p-5 space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Gérez votre abonnement et consultez votre utilisation.
+              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {currentPlan?.name || "Free"} · {currentPlan?.price === 0 ? "Gratuit" : `${currentPlan?.price}€/mois`}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Abonnement actuel
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" asChild>
+                  <Link to="/app/billing">
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                    Gérer la facturation
+                  </Link>
+                </Button>
+              </div>
             </div>
           </section>
 
