@@ -1,4 +1,6 @@
 import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { assistantsApi } from "@/api/assistants";
@@ -36,9 +39,53 @@ interface EmailAttachment {
 
 // ── Speech Recognition: see src/speech-recognition.d.ts ──
 
+const DRAFT_STORAGE_KEY = "ancre-email-draft";
+
+interface EmailDraft {
+  to: string;
+  subject: string;
+  body: string;
+  instruction: string;
+  savedAt: string;
+}
+
+function loadDraft(): EmailDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as EmailDraft;
+  } catch {
+    return null;
+  }
+}
+
+function saveDraft(draft: EmailDraft) {
+  try {
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...draft, savedAt: new Date().toISOString() }));
+  } catch {
+    // ignore
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function stripHtmlToText(html: string): string {
+  if (!html.trim()) return "";
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.textContent || div.innerText || "";
+}
+
 export const EmailComposer = () => {
   const location = useLocation();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // ── Mail account state ──
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -91,6 +138,18 @@ export const EmailComposer = () => {
   const dictationTargetRef = useRef<React.Dispatch<React.SetStateAction<string>>>(setComposeBody);
   const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finalizePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Keep ref in sync for unmount draft save (e.g. user navigates away)
+  const draftRef = useRef({ to: "", subject: "", body: "", instruction: "", composing: false, sendStatus: "idle" as string });
+  draftRef.current = { to: composeTo, subject: composeSubject, body: composeBody, instruction: composeInstruction, composing, sendStatus };
+  useEffect(() => {
+    return () => {
+      const d = draftRef.current;
+      if (d.composing && d.sendStatus !== "sent" && (d.body.trim() || d.to.trim() || d.subject.trim())) {
+        saveDraft({ to: d.to, subject: d.subject, body: d.body, instruction: d.instruction, savedAt: new Date().toISOString() });
+      }
+    };
+  }, []);
 
   // ── Queries ──
 
@@ -199,10 +258,19 @@ export const EmailComposer = () => {
 
   const openCompose = () => {
     setComposing(true);
-    setComposeTo("");
-    setComposeSubject("");
-    setComposeBody("");
-    setComposeInstruction("");
+    const draft = loadDraft();
+    if (draft && (draft.body || draft.to || draft.subject)) {
+      setComposeTo(draft.to || "");
+      setComposeSubject(draft.subject || "");
+      setComposeBody(draft.body || "");
+      setComposeInstruction(draft.instruction || "");
+      toast({ title: "Brouillon restauré", description: "Votre email en cours a été rechargé." });
+    } else {
+      setComposeTo("");
+      setComposeSubject("");
+      setComposeBody("");
+      setComposeInstruction("");
+    }
     setComposeAttachments([]);
     setShowDocPicker(false);
     setSelectedThread(null);
@@ -294,6 +362,7 @@ export const EmailComposer = () => {
           setSendStatus("sent");
           setSendingClientId(null);
           if (sendPollRef.current) clearInterval(sendPollRef.current);
+          clearDraft(); // Don't restore sent email as draft
           // Refresh threads
           queryClient.invalidateQueries({ queryKey: ["mail-threads"] });
           queryClient.invalidateQueries({ queryKey: ["mail-thread-detail"] });
@@ -317,14 +386,16 @@ export const EmailComposer = () => {
     setSendingClientId(clientSendId);
 
     try {
+      // composeBody is HTML (from AI or contenteditable)
+      const bodyText = stripHtmlToText(composeBody);
       await mailApi.send({
         client_send_id: clientSendId,
         mail_account_id: selectedAccountId,
         mode: "new",
         to_recipients: [{ name: "", email: composeTo.trim() }],
         subject: composeSubject,
-        body_text: composeBody,
-        body_html: null,
+        body_text: bodyText || composeBody,
+        body_html: composeBody.trim() ? composeBody : null,
       });
       pollSendStatus(clientSendId);
     } catch (e: any) {
@@ -342,14 +413,15 @@ export const EmailComposer = () => {
     setSendingClientId(clientSendId);
 
     try {
+      const bodyText = stripHtmlToText(replyBody);
       await mailApi.send({
         client_send_id: clientSendId,
         mail_account_id: selectedAccountId,
         mode: "reply",
         to_recipients: [selectedMessage.sender],
         subject: `Re: ${selectedMessage.subject || ""}`,
-        body_text: replyBody,
-        body_html: null,
+        body_text: bodyText || replyBody,
+        body_html: replyBody.trim() ? replyBody : null,
         in_reply_to_message_id: selectedMessage.id,
         provider_thread_id: selectedMessage.provider_thread_id || undefined,
       });
@@ -461,7 +533,7 @@ export const EmailComposer = () => {
 
     const abort = chatApi.stream(
       selectedAssistantId,
-      { message: prompt },
+      { message: prompt, include_history: false },
       (token) => {
         targetSetter((prev) => prev + token);
       },
@@ -487,6 +559,31 @@ export const EmailComposer = () => {
     setIsGenerating(false);
   }, []);
 
+  const handleLeaveCompose = useCallback(() => {
+    // Save draft only if there's content and email wasn't just sent
+    if (sendStatus !== "sent" && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
+      saveDraft({
+        to: composeTo,
+        subject: composeSubject,
+        body: composeBody,
+        instruction: composeInstruction,
+        savedAt: new Date().toISOString(),
+      });
+    }
+    if (sendStatus === "sent") clearDraft();
+    setComposing(false);
+    setComposeTo("");
+    setComposeSubject("");
+    setComposeBody("");
+    setComposeInstruction("");
+    setComposeAttachments([]);
+    setShowDocPicker(false);
+    stopGeneration();
+    stopRecording();
+    setSendStatus("idle");
+    setSendError(null);
+  }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, stopGeneration, stopRecording]);
+
   const generateReply = useCallback(() => {
     if (!selectedMessage) return;
     if (!replyInstruction.trim()) return;
@@ -501,7 +598,12 @@ ${selectedMessage.body_text || selectedMessage.snippet || ""}
 
 Consigne de l'utilisateur : ${replyInstruction.trim()}
 
-Rédige UNIQUEMENT le corps de la réponse (pas d'objet, pas de "Re:"). Commence directement par la formule de salutation.`;
+IMPORTANT : Utilise le contexte fourni (documents vectorisés, mémoires, connexions) pour enrichir ta réponse quand c'est pertinent.
+Génère le corps en HTML compatible Gmail, sans Markdown.
+Utilise uniquement : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
+Pas de CSS, scripts ou attributs style.
+N'écris AUCUNE phrase d'introduction (pas de "Voici une proposition", "Voici le mail", etc.).
+Commence directement par la formule de salutation.`;
 
     generateWithAI(prompt, setReplyBody);
   }, [selectedMessage, replyInstruction, generateWithAI]);
@@ -515,7 +617,12 @@ ${composeSubject ? `Objet : ${composeSubject}` : ""}
 
 Consigne : ${composeInstruction.trim()}
 
-Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de salutation.`;
+IMPORTANT : Utilise le contexte fourni (documents vectorisés, mémoires, connexions CRM, etc.) pour enrichir ta rédaction avec des informations concrètes quand c'est pertinent.
+Génère le corps de l'email en HTML compatible Gmail, sans Markdown.
+Utilise uniquement ces balises : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
+Pas de CSS, pas de scripts, pas d'attributs style.
+N'écris AUCUNE phrase d'introduction ou de mise en contexte (pas de "Voici une proposition", "Voici le mail", etc.).
+Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, etc.).`;
 
     generateWithAI(prompt, setComposeBody);
   }, [composeTo, composeSubject, composeInstruction, generateWithAI]);
@@ -633,7 +740,7 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
         {composing && (
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <button
-              onClick={() => setComposing(false)}
+              onClick={handleLeaveCompose}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
             >
               <Mail className="h-4 w-4" />
@@ -946,7 +1053,7 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
 
         {/* ═══ Thread list ═══ */}
         {isThreadList && hasAccount && (
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+          <div className="w-full max-w-3xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 py-6">
             {/* Search on mobile */}
             <div className="relative sm:hidden mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -1010,7 +1117,7 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
 
         {/* ═══ Thread detail ═══ */}
         {isThreadDetail && selectedThread && (
-          <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4 animate-fade-in">
+          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 animate-fade-in">
             {threadDetail?.messages.map((msg, idx) => {
               const senderInitials = (msg.sender?.name || msg.sender?.email || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
               const isLast = idx === (threadDetail.messages.length - 1);
@@ -1031,8 +1138,14 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
                     </div>
                     {msg.is_sent && <Badge variant="default" className="text-[10px] shrink-0">Envoyé</Badge>}
                   </div>
-                  <div className="text-sm leading-relaxed text-foreground whitespace-pre-line">
-                    {msg.body_text || msg.snippet || ""}
+                  <div className="text-sm leading-relaxed text-foreground prose prose-sm dark:prose-invert max-w-none">
+                    {msg.body_html ? (
+                      <div dangerouslySetInnerHTML={{ __html: msg.body_html }} />
+                    ) : (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {msg.body_text || msg.snippet || ""}
+                      </ReactMarkdown>
+                    )}
                   </div>
 
                   {/* Reply/Forward buttons on last message */}
@@ -1062,14 +1175,15 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
                   <AssistantSelector />
                 </div>
 
-                {/* Main email body field */}
-                <div className="relative">
-                  <textarea
-                    value={replyBody}
-                    onChange={(e) => setReplyBody(e.target.value)}
-                    className="w-full min-h-[160px] sm:min-h-[200px] p-4 pr-14 text-sm leading-relaxed bg-transparent outline-none resize-none text-foreground placeholder:text-muted-foreground"
-                    placeholder="Rédigez directement votre réponse ici ou dictez-la…"
-                    autoFocus
+                {/* Main email body field - single HTML block, copyable (Gmail-ready) */}
+                <div className="relative border-b border-border/50">
+                  <div
+                    contentEditable={!isGenerating}
+                    suppressContentEditableWarning
+                    className="w-full min-h-[160px] sm:min-h-[200px] p-4 pr-14 text-sm leading-relaxed outline-none text-foreground prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline"
+                    data-placeholder="Rédigez ou collez votre réponse. L'IA génère du HTML prêt pour Gmail."
+                    dangerouslySetInnerHTML={{ __html: replyBody || "" }}
+                    onInput={(e) => setReplyBody(e.currentTarget.innerHTML)}
                   />
                   <button
                     onClick={() => toggleRecordingFor(setReplyBody)}
@@ -1229,7 +1343,7 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
 
         {/* ═══ Compose new email ═══ */}
         {composing && (
-          <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 animate-fade-in">
+          <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 py-6 animate-fade-in">
             <div className="bg-card border border-border rounded-xl shadow-soft overflow-hidden">
               {/* To + Subject fields */}
               <div className="border-b border-border">
@@ -1259,14 +1373,15 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
                 <AssistantSelector />
               </div>
 
-              {/* Body */}
-              <div className="relative">
-                <textarea
-                  value={composeBody}
-                  onChange={(e) => setComposeBody(e.target.value)}
-                  className="w-full min-h-[220px] p-4 pr-14 text-sm leading-relaxed bg-transparent outline-none resize-none text-foreground placeholder:text-muted-foreground"
-                  placeholder="Rédigez votre email ici ou dictez-le…"
-                  autoFocus
+              {/* Body - single HTML block, directly copyable (Gmail-ready) */}
+              <div className="relative border-b border-border/50">
+                <div
+                  contentEditable={!isGenerating}
+                  suppressContentEditableWarning
+                  className="w-full min-h-[220px] lg:min-h-[280px] p-4 pr-14 text-sm leading-relaxed outline-none text-foreground prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline"
+                  data-placeholder="Rédigez ou collez votre email ici. L'IA génère du HTML prêt pour Gmail."
+                  dangerouslySetInnerHTML={{ __html: composeBody || "" }}
+                  onInput={(e) => setComposeBody(e.currentTarget.innerHTML)}
                 />
                 <button
                   onClick={() => toggleRecordingFor(setComposeBody)}
@@ -1317,11 +1432,17 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
 
               {/* AI instruction field */}
               <div className="border-t border-border bg-muted/20">
-                <div className="px-4 pt-3 pb-1">
+                <div className="px-4 pt-3 pb-1 flex items-center gap-2 flex-wrap">
                   <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles className="h-3 w-3 text-primary" />
                     Consigne IA
                   </label>
+                  {(assistants.find((a) => a.id === selectedAssistantId)?.collection_ids?.length ||
+                    assistants.find((a) => a.id === selectedAssistantId)?.integration_ids?.length) ? (
+                    <span className="text-[10px] text-muted-foreground" title="L'IA utilisera les documents et connexions de l'assistant">
+                      + contexte RAG
+                    </span>
+                  ) : null}
                 </div>
                 <div className="relative px-4 pb-2">
                   <div className="flex gap-2">
@@ -1418,7 +1539,7 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
                 />
 
                 <div className="flex-1" />
-                <Button variant="ghost" size="sm" onClick={() => { setComposing(false); setComposeInstruction(""); setComposeAttachments([]); stopGeneration(); stopRecording(); setSendStatus("idle"); }}>
+                <Button variant="ghost" size="sm" onClick={handleLeaveCompose}>
                   Annuler
                 </Button>
               </div>
