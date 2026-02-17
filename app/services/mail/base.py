@@ -51,9 +51,9 @@ class SyncResult:
 
 
 class MailProvider(ABC):
-    """Abstract interface for a mail provider (Gmail, Microsoft)."""
+    """Abstract interface for a mail provider (Gmail, Microsoft, SMTP)."""
 
-    def __init__(self, proxy: NangoProxy) -> None:
+    def __init__(self, proxy: "NangoProxy | None" = None) -> None:
         self.proxy = proxy
 
     @abstractmethod

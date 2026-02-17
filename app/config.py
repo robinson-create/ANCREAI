@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     nango_secret_key: str = ""
     nango_public_key: str = ""
 
+    # SMTP (password encryption for smtp_config)
+    smtp_encryption_key: str = ""  # 32-byte base64 (Fernet key)
+
     # CopilotKit
     copilotkit_runtime_url: str = "http://localhost:4000"
 

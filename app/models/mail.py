@@ -55,7 +55,7 @@ class MailAccount(Base):
         index=True,
     )
     provider: Mapped[str] = mapped_column(
-        String(20), nullable=False, comment="gmail | microsoft"
+        String(20), nullable=False, comment="gmail | microsoft | smtp"
     )
     email_address: Mapped[str | None] = mapped_column(
         String(255), nullable=True, comment="Filled after get_profile() on finalize"
@@ -73,6 +73,11 @@ class MailAccount(Base):
         comment="pending | connected | error | revoked",
     )
     scopes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    smtp_config: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment='{"host","port","user","password_encrypted","use_tls"} for smtp provider',
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

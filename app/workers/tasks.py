@@ -466,18 +466,35 @@ async def send_email(ctx: dict, send_request_id: str) -> dict:
             return {"status": "sent", "provider_message_id": req.provider_message_id}
 
         account = req.mail_account
-        if not account or not account.nango_connection:
+        if not account:
             req.status = "failed"
-            req.error_message = "Mail account or Nango connection missing"
+            req.error_message = "Mail account missing"
             await db.commit()
             return {"error": req.error_message}
+
+        # SMTP uses smtp_config; OAuth uses nango_connection
+        if account.provider == "smtp":
+            if not account.smtp_config:
+                req.status = "failed"
+                req.error_message = "SMTP account has no configuration"
+                await db.commit()
+                return {"error": req.error_message}
+        else:
+            if not account.nango_connection:
+                req.status = "failed"
+                req.error_message = "Mail account or Nango connection missing"
+                await db.commit()
+                return {"error": req.error_message}
 
         # Mark as sending
         req.status = "sending"
         await db.commit()
 
-        proxy = _get_proxy(account)
-        provider = get_mail_provider(account.provider, proxy)
+        if account.provider == "smtp":
+            provider = get_mail_provider(account.provider, smtp_config=account.smtp_config)
+        else:
+            proxy = _get_proxy(account)
+            provider = get_mail_provider(account.provider, proxy)
 
         payload = SendPayload(
             to=req.to_recipients,
@@ -517,15 +534,16 @@ async def send_email(ctx: dict, send_request_id: str) -> dict:
         req.error_message = None
         await db.commit()
 
-        # Post-send: refresh thread or full sync
-        redis: ArqRedis = ctx.get("redis")  # type: ignore[assignment]
-        if redis:
-            if send_result.thread_id:
-                await redis.enqueue_job(
-                    "sync_thread", str(account.id), send_result.thread_id
-                )
-            else:
-                await redis.enqueue_job("sync_mail_account", str(account.id))
+        # Post-send: refresh thread or full sync (SMTP has no inbox)
+        if account.provider != "smtp":
+            redis: ArqRedis = ctx.get("redis")  # type: ignore[assignment]
+            if redis:
+                if send_result.thread_id:
+                    await redis.enqueue_job(
+                        "sync_thread", str(account.id), send_result.thread_id
+                    )
+                else:
+                    await redis.enqueue_job("sync_mail_account", str(account.id))
 
         logger.info(
             "Email sent via %s: request=%s message_id=%s",
@@ -578,6 +596,11 @@ async def sync_mail_account(ctx: dict, account_id: str) -> dict:
         if account.status != "connected":
             logger.info("Mail account %s not connected, skipping sync", account_id)
             return {"skipped": True}
+
+        # SMTP has no inbox to sync
+        if account.provider == "smtp":
+            logger.info("Mail account %s is SMTP, no sync needed", account_id)
+            return {"skipped": True, "reason": "smtp"}
 
         if not account.nango_connection:
             logger.error("Mail account %s has no Nango connection", account_id)
@@ -677,8 +700,12 @@ async def sync_thread(ctx: dict, account_id: str, provider_thread_id: str) -> di
             .options(selectinload(MailAccount.nango_connection))
         )
         account = result.scalar_one_or_none()
-        if not account or not account.nango_connection:
-            return {"error": "Account or connection not found"}
+        if not account:
+            return {"error": "Account not found"}
+        if account.provider == "smtp":
+            return {"error": "SMTP has no inbox"}
+        if not account.nango_connection:
+            return {"error": "No Nango connection"}
 
         proxy = _get_proxy(account)
         provider = get_mail_provider(account.provider, proxy)

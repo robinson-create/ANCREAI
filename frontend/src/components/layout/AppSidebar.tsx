@@ -64,7 +64,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   return (
     <aside
       className={cn(
-        "flex flex-col h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 shrink-0",
+        "flex flex-col h-screen max-h-screen bg-sidebar text-sidebar-foreground border-r border-sidebar-border transition-all duration-200 shrink-0 overflow-y-auto",
         collapsed ? "w-16" : "w-60"
       )}
     >
@@ -84,8 +84,8 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       </Link>
 
       {/* Main nav */}
-      <nav className="py-3 px-2 space-y-0.5">
-        <div className={cn("mb-3", collapsed && "hidden")}>
+      <nav className="py-4 px-3 space-y-1">
+        <div className={cn("mb-4", collapsed && "hidden")}>
           <span className="px-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-muted">
             Navigation
           </span>
@@ -103,7 +103,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                 }
               }}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                   : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -122,13 +122,13 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
       {/* Bottom section: Assistants + Facturation + Réglages */}
       <div className="border-t border-sidebar-border">
         {/* Assistants section — collapsible, between nav and settings */}
-        <div className="px-2 pt-2 pb-1">
+        <div className="px-3 pt-4 pb-3">
           {!collapsed ? (
             <>
               {/* Assistants header */}
               <button
                 onClick={() => setAssistantsExpanded((v) => !v)}
-                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-[11px] font-medium uppercase tracking-wider text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-md text-[11px] font-medium uppercase tracking-wider text-sidebar-muted hover:text-sidebar-accent-foreground transition-colors"
               >
                 <Bot className="h-3.5 w-3.5 shrink-0" />
                 <span className="flex-1 text-left">Assistants</span>
@@ -144,7 +144,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
 
               {/* Assistants list */}
               {assistantsExpanded && (
-                <div className="space-y-0.5 mt-1">
+                <div className="space-y-1 mt-3">
                   {isLoading && (
                     <div className="flex justify-center py-3">
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-sidebar-muted" />
@@ -162,7 +162,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                         key={a.id}
                         to={assistantPath}
                         className={cn(
-                          "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors w-full text-left group",
+                          "flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors w-full text-left group",
                           location.pathname === assistantPath
                             ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
                             : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -185,7 +185,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                   {!isAtLimit && !isLoading && (
                     <button
                       onClick={() => setIsModalOpen(true)}
-                      className="flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors w-full text-left text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      className="flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-colors w-full text-left text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     >
                       <Plus className="h-3.5 w-3.5 shrink-0" />
                       <span className="text-[13px]">Ajouter</span>
@@ -194,7 +194,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
                   {isAtLimit && !isLoading && (
                     <Link
                       to="/app/billing"
-                      className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-[11px] transition-colors w-full text-left text-sidebar-muted hover:text-sidebar-accent-foreground"
+                      className="flex items-center gap-2.5 px-3 py-2 rounded-md text-[11px] transition-colors w-full text-left text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     >
                       Limite atteinte · Upgrader
                     </Link>
@@ -242,24 +242,24 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         </div>
 
         {/* Facturation + Réglages */}
-        <div className="p-2 space-y-0.5 border-t border-sidebar-border/50">
+        <div className="p-3 space-y-1 border-t border-sidebar-border/50">
           <Link
             to="/app/billing"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
           >
             <CreditCard className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Facturation</span>}
           </Link>
           <Link
             to="/app/profile"
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
           >
             <Settings className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Réglages</span>}
           </Link>
           <button
             onClick={() => signOut({ redirectUrl: "/" })}
-            className="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive transition-colors w-full"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm text-muted-foreground hover:bg-sidebar-accent hover:text-destructive transition-colors w-full"
           >
             <LogOut className="h-4 w-4 shrink-0" />
             {!collapsed && <span>Déconnexion</span>}

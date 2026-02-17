@@ -30,6 +30,17 @@ class MailAccountConnectResponse(BaseModel):
     provider: str
 
 
+class MailAccountSmtpConnectRequest(BaseModel):
+    """Credentials for SMTP connection (Gmail, Outlook, or custom)."""
+
+    host: str
+    port: int = 587
+    user: str
+    password: str
+    use_tls: bool = True
+    email_address: str | None = None  # Display email; default to user
+
+
 # ── Mail Message ──
 
 

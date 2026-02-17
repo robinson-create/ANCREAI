@@ -19,6 +19,15 @@ export interface MailConnectResponse {
   provider: string
 }
 
+export interface MailSmtpConnectRequest {
+  host: string
+  port?: number
+  user: string
+  password: string
+  use_tls?: boolean
+  email_address?: string
+}
+
 export interface MailRecipient {
   name: string
   email: string
@@ -112,6 +121,16 @@ export const mailApi = {
   finalize: async (accountId: string): Promise<MailAccount> => {
     const response = await apiClient.get<MailAccount>(
       `/mail/accounts/${accountId}/finalize`
+    )
+    return response.data
+  },
+
+  connectSmtp: async (
+    data: MailSmtpConnectRequest
+  ): Promise<MailAccount> => {
+    const response = await apiClient.post<MailAccount>(
+      "/mail/accounts/connect/smtp",
+      data
     )
     return response.data
   },

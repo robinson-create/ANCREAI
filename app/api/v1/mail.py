@@ -21,6 +21,7 @@ from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncS
 from app.schemas.mail import (
     MailAccountConnectResponse,
     MailAccountRead,
+    MailAccountSmtpConnectRequest,
     MailMessageRead,
     MailSendRequestCreate,
     MailSendResponse,
@@ -170,6 +171,89 @@ async def connect_mail_account(
     )
 
 
+@router.post(
+    "/accounts/connect/smtp",
+    response_model=MailAccountRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def connect_smtp_account(
+    data: MailAccountSmtpConnectRequest,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Connect an SMTP account (Gmail SMTP, Outlook SMTP, or custom).
+
+    Verifies the connection before saving. Only one SMTP account per tenant.
+    """
+    from app.core.smtp_crypto import encrypt_smtp_password
+    from app.services.mail.smtp import verify_smtp_connection
+
+    tenant_id = user.tenant_id
+
+    # Verify connection before saving
+    if not verify_smtp_connection(
+        host=data.host,
+        port=data.port,
+        user=data.user,
+        password=data.password,
+        use_tls=data.use_tls,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP connection failed. Check host, port, user and password.",
+        )
+
+    encrypted = encrypt_smtp_password(data.password)
+    if not encrypted:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMTP encryption not configured. Set SMTP_ENCRYPTION_KEY.",
+        )
+
+    smtp_config = {
+        "host": data.host,
+        "port": data.port,
+        "user": data.user,
+        "password_encrypted": encrypted,
+        "use_tls": data.use_tls,
+    }
+
+    # Check if SMTP account already exists for this tenant
+    result = await db.execute(
+        select(MailAccount).where(
+            MailAccount.tenant_id == tenant_id,
+            MailAccount.provider == "smtp",
+        )
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        existing.smtp_config = smtp_config
+        existing.email_address = data.email_address or data.user
+        existing.status = "connected"
+        existing.nango_conn_id = None
+        await db.flush()
+        mail_account = existing
+    else:
+        mail_account = MailAccount(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            provider="smtp",
+            email_address=data.email_address or data.user,
+            nango_conn_id=None,
+            smtp_config=smtp_config,
+            status="connected",
+        )
+        db.add(mail_account)
+        await db.flush()
+
+        # Create sync state for consistency (unused for SMTP)
+        db.add(MailSyncState(mail_account_id=mail_account.id))
+        await db.flush()
+
+    return mail_account
+
+
 @router.get("/accounts/{account_id}/finalize", response_model=MailAccountRead)
 async def finalize_mail_account(
     account_id: UUID,
@@ -179,9 +263,15 @@ async def finalize_mail_account(
     """Finalize a mail account after OAuth popup closes.
 
     Verifies the Nango connection is active, fetches the email profile,
-    and enqueues initial sync.
+    and enqueues initial sync. Not used for SMTP (connected directly).
     """
     account = await _get_account_for_tenant(db, account_id, user.tenant_id)
+
+    if account.provider == "smtp":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMTP accounts are connected directly, no finalize needed",
+        )
 
     if not account.nango_conn_id:
         raise HTTPException(

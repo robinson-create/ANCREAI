@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -59,6 +60,17 @@ export const EmailComposer = () => {
   const [composeAttachments, setComposeAttachments] = useState<EmailAttachment[]>([]);
   const [showDocPicker, setShowDocPicker] = useState(false);
   const [docPickerTarget, setDocPickerTarget] = useState<"compose" | "reply">("compose");
+
+  // ── SMTP connect ──
+  const [showSmtpDialog, setShowSmtpDialog] = useState(false);
+  const [smtpHost, setSmtpHost] = useState("");
+  const [smtpPort, setSmtpPort] = useState("587");
+  const [smtpUser, setSmtpUser] = useState("");
+  const [smtpPassword, setSmtpPassword] = useState("");
+  const [smtpUseTls, setSmtpUseTls] = useState(true);
+  const [smtpEmail, setSmtpEmail] = useState("");
+  const [smtpError, setSmtpError] = useState<string | null>(null);
+  const [smtpLoading, setSmtpLoading] = useState(false);
 
   // ── Reply attachments ──
   const [replyAttachments, setReplyAttachments] = useState<EmailAttachment[]>([]);
@@ -661,22 +673,24 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
             </div>
           )}
 
-          {hasAccount && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => {
-                if (selectedAccountId) {
+          {hasAccount && selectedAccountId && (() => {
+            const acc = accounts.find((a) => a.id === selectedAccountId);
+            const canSync = acc?.provider !== "smtp";
+            return canSync ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 shrink-0"
+                onClick={() => {
                   mailApi.triggerSync(selectedAccountId);
                   queryClient.invalidateQueries({ queryKey: ["mail-threads"] });
-                }
-              }}
-              title="Synchroniser"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-            </Button>
-          )}
+                }}
+                title="Synchroniser"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            ) : null;
+          })()}
 
           <Button
             variant="premium"
@@ -769,9 +783,166 @@ Rédige UNIQUEMENT le corps de l'email. Commence directement par la formule de s
                 <Mail className="h-3.5 w-3.5" />
                 Outlook
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  setSmtpHost("");
+                  setSmtpPort("587");
+                  setSmtpUser("");
+                  setSmtpPassword("");
+                  setSmtpUseTls(true);
+                  setSmtpEmail("");
+                  setSmtpError(null);
+                  setShowSmtpDialog(true);
+                }}
+              >
+                <Server className="h-3.5 w-3.5" />
+                SMTP
+              </Button>
             </div>
           </div>
         )}
+
+        {/* SMTP Connect Dialog */}
+        <Dialog open={showSmtpDialog} onOpenChange={(open) => { setShowSmtpDialog(open); if (!open) setSmtpError(null); }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Connexion SMTP</DialogTitle>
+              <DialogDescription>
+                Gmail (mot de passe d&apos;application), Outlook ou serveur SMTP personnalisé.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setSmtpHost("smtp.gmail.com");
+                  setSmtpPort("587");
+                  setSmtpUseTls(true);
+                }}
+              >
+                Gmail SMTP
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => {
+                  setSmtpHost("smtp.office365.com");
+                  setSmtpPort("587");
+                  setSmtpUseTls(true);
+                }}
+              >
+                Outlook SMTP
+              </Button>
+            </div>
+            <form
+              className="space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                setSmtpError(null);
+                setSmtpLoading(true);
+                try {
+                  const account = await mailApi.connectSmtp({
+                    host: smtpHost,
+                    port: parseInt(smtpPort, 10) || 587,
+                    user: smtpUser,
+                    password: smtpPassword,
+                    use_tls: smtpUseTls,
+                    email_address: smtpEmail || smtpUser || undefined,
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["mail-accounts"] });
+                  setSelectedAccountId(account.id);
+                  setShowSmtpDialog(false);
+                  setSmtpPassword("");
+                } catch (err: unknown) {
+                  const msg = err && typeof err === "object" && "response" in err
+                    ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+                    : (err as Error)?.message;
+                  setSmtpError(msg || "Erreur de connexion SMTP");
+                } finally {
+                  setSmtpLoading(false);
+                }
+              }}
+            >
+              <div className="space-y-2">
+                <Label htmlFor="smtp-host">Serveur</Label>
+                <Input
+                  id="smtp-host"
+                  placeholder="smtp.example.com"
+                  value={smtpHost}
+                  onChange={(e) => setSmtpHost(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="space-y-2 flex-1">
+                  <Label htmlFor="smtp-port">Port</Label>
+                  <Input
+                    id="smtp-port"
+                    type="number"
+                    placeholder="587"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end gap-2 pb-2">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={smtpUseTls}
+                      onChange={(e) => setSmtpUseTls(e.target.checked)}
+                    />
+                    TLS
+                  </label>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-user">Utilisateur (email)</Label>
+                <Input
+                  id="smtp-user"
+                  type="email"
+                  placeholder="vous@exemple.com"
+                  value={smtpUser}
+                  onChange={(e) => setSmtpUser(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-password">Mot de passe</Label>
+                <Input
+                  id="smtp-password"
+                  type="password"
+                  placeholder="Mot de passe ou mot de passe d'application"
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="smtp-email">Email affiché (optionnel)</Label>
+                <Input
+                  id="smtp-email"
+                  type="email"
+                  placeholder="Même que l'utilisateur par défaut"
+                  value={smtpEmail}
+                  onChange={(e) => setSmtpEmail(e.target.value)}
+                />
+              </div>
+              {smtpError && (
+                <p className="text-sm text-destructive">{smtpError}</p>
+              )}
+              <Button type="submit" className="w-full" disabled={smtpLoading}>
+                {smtpLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Connecter
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* ═══ Thread list ═══ */}
         {isThreadList && hasAccount && (
