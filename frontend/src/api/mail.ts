@@ -102,6 +102,18 @@ export interface MailSendStatus {
   error_message: string | null
 }
 
+export interface MailDraft {
+  id: string
+  tenant_id: string
+  mail_account_id: string
+  to_recipients: MailRecipient[]
+  subject: string | null
+  body_html: string | null
+  instruction: string | null
+  created_at: string
+  updated_at: string
+}
+
 // ── API ──
 
 export const mailApi = {
@@ -184,5 +196,34 @@ export const mailApi = {
   // Sync (manual trigger)
   triggerSync: async (accountId: string): Promise<void> => {
     await apiClient.post(`/mail/sync/${accountId}`)
+  },
+
+  // Drafts
+  listDrafts: async (accountId: string): Promise<MailDraft[]> => {
+    const response = await apiClient.get<MailDraft[]>("/mail/drafts", {
+      params: { account_id: accountId },
+    })
+    return response.data
+  },
+
+  getDraft: async (draftId: string): Promise<MailDraft> => {
+    const response = await apiClient.get<MailDraft>(`/mail/drafts/${draftId}`)
+    return response.data
+  },
+
+  saveDraft: async (data: {
+    mail_account_id: string
+    to_recipients: MailRecipient[]
+    subject: string
+    body_html: string
+    instruction?: string
+    draft_id?: string
+  }): Promise<MailDraft> => {
+    const response = await apiClient.post<MailDraft>("/mail/drafts", data)
+    return response.data
+  },
+
+  deleteDraft: async (draftId: string): Promise<void> => {
+    await apiClient.delete(`/mail/drafts/${draftId}`)
   },
 }

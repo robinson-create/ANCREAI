@@ -129,3 +129,31 @@ class MailSendStatusRead(BaseModel):
     provider_message_id: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+
+
+# ── Drafts ──
+
+
+class MailDraftCreate(BaseModel):
+    """Create or update a local draft."""
+
+    mail_account_id: UUID
+    to_recipients: list[dict] = []  # [{"name": "", "email": "..."}]
+    subject: str = ""
+    body_html: str = ""
+    instruction: str = ""
+    draft_id: UUID | None = None  # If provided, update existing draft
+
+
+class MailDraftRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    mail_account_id: UUID
+    to_recipients: list[dict]
+    subject: str | None
+    body_html: str | None
+    instruction: str | None
+    created_at: datetime
+    updated_at: datetime

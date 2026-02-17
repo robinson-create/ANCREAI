@@ -21,13 +21,13 @@ import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { assistantsApi } from "@/api/assistants";
 import { chatApi } from "@/api/chat";
 import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import { mailApi } from "@/api/mail";
 import { settingsApi } from "@/api/settings";
-import type { MailThreadSummary, MailMessage } from "@/api/mail";
+import type { MailThreadSummary, MailMessage, MailDraft } from "@/api/mail";
 import type { Assistant } from "@/types";
 
 interface EmailAttachment {
@@ -115,6 +115,7 @@ export const EmailComposer = () => {
   const [composeAttachments, setComposeAttachments] = useState<EmailAttachment[]>([]);
   const [showDocPicker, setShowDocPicker] = useState(false);
   const [docPickerTarget, setDocPickerTarget] = useState<"compose" | "reply">("compose");
+  const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
 
   // ── SMTP connect ──
   const [showSmtpDialog, setShowSmtpDialog] = useState(false);
@@ -146,6 +147,8 @@ export const EmailComposer = () => {
   const dictationTargetRef = useRef<React.Dispatch<React.SetStateAction<string>>>(setComposeBody);
   const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finalizePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const draftIdRef = useRef<string | null>(null);
+  draftIdRef.current = currentDraftId;
 
   // Keep ref in sync for unmount draft save (e.g. user navigates away)
   const draftRef = useRef({ to: "", subject: "", body: "", instruction: "", composing: false, sendStatus: "idle" as string });
@@ -187,6 +190,43 @@ export const EmailComposer = () => {
     queryFn: () => mailApi.getThread(selectedThread!.thread_key, selectedAccountId!),
     enabled: !!selectedAccountId && !!selectedThread,
     staleTime: 10_000,
+  });
+
+  const { data: drafts = [] } = useQuery({
+    queryKey: ["mail-drafts", selectedAccountId],
+    queryFn: () => mailApi.listDrafts(selectedAccountId!),
+    enabled: !!selectedAccountId,
+    staleTime: 10_000,
+  });
+
+  const saveDraftMutation = useMutation({
+    mutationFn: (params: {
+      to_recipients: { name: string; email: string }[];
+      subject: string;
+      body_html: string;
+      instruction: string;
+      draft_id?: string;
+    }) =>
+      mailApi.saveDraft({
+        mail_account_id: selectedAccountId!,
+        ...params,
+      }),
+    onSuccess: (saved) => {
+      setCurrentDraftId(saved.id);
+      clearDraft();
+      queryClient.invalidateQueries({ queryKey: ["mail-drafts"] });
+      toast({
+        title: "Brouillon sauvegardé",
+        description: "Votre email apparaît dans la liste des brouillons.",
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de sauvegarder le brouillon.",
+      });
+    },
   });
 
   const { data: assistants = [] } = useQuery({
@@ -264,7 +304,17 @@ export const EmailComposer = () => {
     enabled: showDocPicker,
   });
 
+  const openDraft = (draft: MailDraft) => {
+    setCurrentDraftId(draft.id);
+    setComposeTo(draft.to_recipients?.[0]?.email || "");
+    setComposeSubject(draft.subject || "");
+    setComposeBody(draft.body_html || "");
+    setComposeInstruction(draft.instruction || "");
+    setComposing(true);
+  };
+
   const openCompose = () => {
+    setCurrentDraftId(null);
     setComposing(true);
     const draft = loadDraft();
     if (draft && (draft.body || draft.to || draft.subject)) {
@@ -371,6 +421,10 @@ export const EmailComposer = () => {
           setSendingClientId(null);
           if (sendPollRef.current) clearInterval(sendPollRef.current);
           clearDraft(); // Don't restore sent email as draft
+          if (draftIdRef.current) {
+            mailApi.deleteDraft(draftIdRef.current).catch(() => {});
+            queryClient.invalidateQueries({ queryKey: ["mail-drafts"] });
+          }
           // Refresh threads
           queryClient.invalidateQueries({ queryKey: ["mail-threads"] });
           queryClient.invalidateQueries({ queryKey: ["mail-thread-detail"] });
@@ -574,8 +628,8 @@ export const EmailComposer = () => {
   }, []);
 
   const handleLeaveCompose = useCallback(() => {
-    // Save draft only if there's content and email wasn't just sent
-    if (sendStatus !== "sent" && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
+    // Save to localStorage only if no API draft (for restore on new email)
+    if (!currentDraftId && sendStatus !== "sent" && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
       saveDraft({
         to: composeTo,
         subject: composeSubject,
@@ -585,6 +639,7 @@ export const EmailComposer = () => {
       });
     }
     if (sendStatus === "sent") clearDraft();
+    setCurrentDraftId(null);
     setComposing(false);
     setComposeTo("");
     setComposeSubject("");
@@ -596,7 +651,7 @@ export const EmailComposer = () => {
     stopRecording();
     setSendStatus("idle");
     setSendError(null);
-  }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, stopGeneration, stopRecording]);
+  }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, currentDraftId, stopGeneration, stopRecording]);
 
   const generateReply = useCallback(() => {
     if (!selectedMessage) return;
@@ -1090,6 +1145,45 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
             {!threadsLoading && (
               <div className="space-y-2">
+                {/* Brouillons */}
+                {!search &&
+                  drafts.map((draft) => {
+                    const toStr = draft.to_recipients?.[0]?.email || "(pas de destinataire)";
+                    const snippet =
+                      draft.body_html?.replace(/<[^>]+>/g, "").slice(0, 80) || "";
+                    return (
+                      <button
+                        key={draft.id}
+                        onClick={() => openDraft(draft)}
+                        className="group flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border border-dashed hover:shadow-soft hover:border-primary/30 transition-all text-left"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                          <Mail className="h-5 w-5 text-amber-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground truncate">
+                              à {toStr}
+                            </span>
+                            <Badge variant="outline" className="text-[10px] shrink-0">
+                              Brouillon
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-foreground truncate">
+                            {draft.subject || "(sans objet)"}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {snippet}
+                            {snippet ? "…" : ""}
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                          {formatDate(draft.updated_at)}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </button>
+                    );
+                  })}
                 {filteredThreads.map((thread) => {
                   const senderName = thread.participants?.[0]?.name || thread.participants?.[0]?.email || "?";
                   const initials = senderName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -1122,7 +1216,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
               </div>
             )}
 
-            {!threadsLoading && filteredThreads.length === 0 && (
+            {!threadsLoading && filteredThreads.length === 0 && drafts.length === 0 && (
               <div className="text-center py-16 text-sm text-muted-foreground">
                 <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
                 {search ? "Aucun thread trouvé" : "Aucun email synchronisé"}
@@ -1524,8 +1618,33 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                   {sendStatus === "sending" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
                   Envoyer
                 </Button>
-                <Button variant="outline" size="sm" disabled={!composeBody.trim() || isGenerating}>
-                  Brouillon
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    (!composeBody.trim() && !composeTo.trim() && !composeSubject.trim()) ||
+                    isGenerating ||
+                    !selectedAccountId ||
+                    saveDraftMutation.isPending
+                  }
+                  onClick={() => {
+                    const toRecipients = composeTo.trim()
+                      ? [{ name: "", email: composeTo.trim() }]
+                      : [];
+                    saveDraftMutation.mutate({
+                      to_recipients: toRecipients,
+                      subject: composeSubject,
+                      body_html: composeBody,
+                      instruction: composeInstruction,
+                      draft_id: currentDraftId || undefined,
+                    });
+                  }}
+                >
+                  {saveDraftMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    "Brouillon"
+                  )}
                 </Button>
 
                 {/* Attach button */}

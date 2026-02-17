@@ -3,6 +3,7 @@
 Tables:
 - mail_accounts: OAuth-connected email accounts (Gmail, Microsoft)
 - mail_messages: Synced email messages with parsed content
+- mail_drafts: Local drafts from the email composer (not synced from provider)
 - mail_sync_state: Incremental sync cursors per account
 - mail_send_requests: Outbox with idempotency for reliable sending
 """
@@ -179,6 +180,40 @@ class MailMessage(Base):
     # Relationships
     mail_account: Mapped["MailAccount"] = relationship(
         "MailAccount", back_populates="messages"
+    )
+
+
+class MailDraft(Base):
+    """Local draft from the email composer. Visible in the mail list."""
+
+    __tablename__ = "mail_drafts"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mail_account_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("mail_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    to_recipients: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list
+    )  # [{"name": "", "email": "..."}]
+    subject: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    instruction: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
 

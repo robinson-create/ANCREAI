@@ -17,11 +17,13 @@ from sqlalchemy.orm import selectinload
 from app.deps import CurrentUser, DbSession
 from app.integrations.nango.client import nango_client
 from app.integrations.nango.models import NangoConnection, assistant_integrations
-from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncState
+from app.models.mail import MailAccount, MailDraft, MailMessage, MailSendRequest, MailSyncState
 from app.schemas.mail import (
     MailAccountConnectResponse,
     MailAccountRead,
     MailAccountSmtpConnectRequest,
+    MailDraftCreate,
+    MailDraftRead,
     MailMessageRead,
     MailSendRequestCreate,
     MailSendResponse,
@@ -478,6 +480,111 @@ async def get_send_status(
             detail="Send request not found",
         )
     return req
+
+
+# ── Drafts ───────────────────────────────────────────────────────────
+
+
+@router.get("/drafts", response_model=list[MailDraftRead])
+async def list_drafts(
+    user: CurrentUser,
+    db: DbSession,
+    account_id: UUID = Query(...),
+):
+    """List local drafts for a mail account."""
+    await _get_account_for_tenant(db, account_id, user.tenant_id)
+
+    result = await db.execute(
+        select(MailDraft)
+        .where(
+            MailDraft.mail_account_id == account_id,
+            MailDraft.tenant_id == user.tenant_id,
+        )
+        .order_by(MailDraft.updated_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.get("/drafts/{draft_id}", response_model=MailDraftRead)
+async def get_draft(
+    draft_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Get a single draft."""
+    result = await db.execute(
+        select(MailDraft).where(
+            MailDraft.id == draft_id,
+            MailDraft.tenant_id == user.tenant_id,
+        )
+    )
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Draft not found",
+        )
+    return draft
+
+
+@router.post("/drafts", response_model=MailDraftRead, status_code=status.HTTP_201_CREATED)
+async def save_draft(
+    data: MailDraftCreate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Create or update a local draft."""
+    tenant_id = user.tenant_id
+    await _get_account_for_tenant(db, data.mail_account_id, tenant_id)
+
+    if data.draft_id:
+        result = await db.execute(
+            select(MailDraft).where(
+                MailDraft.id == data.draft_id,
+                MailDraft.tenant_id == tenant_id,
+            )
+        )
+        draft = result.scalar_one_or_none()
+        if draft:
+            draft.to_recipients = data.to_recipients
+            draft.subject = data.subject or None
+            draft.body_html = data.body_html or None
+            draft.instruction = data.instruction or None
+            await db.flush()
+            await db.refresh(draft)
+            return draft
+
+    draft = MailDraft(
+        tenant_id=tenant_id,
+        mail_account_id=data.mail_account_id,
+        to_recipients=data.to_recipients,
+        subject=data.subject or None,
+        body_html=data.body_html or None,
+        instruction=data.instruction or None,
+    )
+    db.add(draft)
+    await db.flush()
+    await db.refresh(draft)
+    return draft
+
+
+@router.delete("/drafts/{draft_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_draft(
+    draft_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Delete a local draft."""
+    result = await db.execute(
+        select(MailDraft).where(
+            MailDraft.id == draft_id,
+            MailDraft.tenant_id == user.tenant_id,
+        )
+    )
+    draft = result.scalar_one_or_none()
+    if draft:
+        await db.delete(draft)
+        await db.flush()
 
 
 # ── Threads & Messages ──────────────────────────────────────────────
