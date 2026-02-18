@@ -147,6 +147,13 @@
   animation: streamSheen 1.1s linear infinite;
 }
 
+/* Wallpaper dashboard : remonter légèrement l'image sur écrans moyens/grands (sans toucher au mobile) */
+@media (min-width: 1280px) {
+  .dashboard-wallpaper {
+    background-position: center 22% !important;
+  }
+}
+
 @layer utilities {
   .shadow-soft {
     box-shadow: var(--shadow);
