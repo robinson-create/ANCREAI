@@ -693,7 +693,7 @@ ${selectedMessage.body_text || selectedMessage.snippet || ""}
 
 Consigne de l'utilisateur : ${replyInstruction.trim()}
 
-IMPORTANT : Utilise le contexte fourni (documents vectorisés, mémoires, connexions) pour enrichir ta réponse quand c'est pertinent.
+IMPORTANT : Si du contexte documentaire est fourni, utilise-le UNIQUEMENT s'il est directement lié à la consigne ci-dessus. N'invente pas de contenu à partir de documents sans rapport avec la demande. En cas de doute, ignore le contexte et rédige une réponse simple basée uniquement sur la consigne.
 Génère le corps en HTML compatible Gmail, sans Markdown.
 Utilise uniquement : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
 Pas de CSS, scripts ou attributs style.
@@ -713,7 +713,7 @@ ${composeSubject ? `Objet : ${composeSubject}` : ""}
 
 Consigne : ${composeInstruction.trim()}
 
-IMPORTANT : Utilise le contexte fourni (documents vectorisés, mémoires, connexions CRM, etc.) pour enrichir ta rédaction avec des informations concrètes quand c'est pertinent.
+IMPORTANT : Si du contexte documentaire est fourni, utilise-le UNIQUEMENT s'il est directement lié à la consigne ci-dessus. N'invente pas de contenu à partir de documents sans rapport avec la demande. En cas de doute, ignore le contexte et rédige un email simple basé uniquement sur la consigne.
 Génère le corps de l'email en HTML compatible Gmail, sans Markdown.
 Utilise uniquement ces balises : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
 Pas de CSS, pas de scripts, pas d'attributs style.
