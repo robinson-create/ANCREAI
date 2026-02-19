@@ -45,6 +45,18 @@ const PROVIDER_NAMES: Record<string, string> = {
   stripe: "Stripe",
 };
 
+// ── Helper: sync status ──
+type SyncStatus = "synced" | "processing" | "error" | null;
+
+function computeSyncStatus(docs: DocType[]): SyncStatus {
+  if (docs.length === 0) return null;
+  if (docs.some((d) => d.status === "processing" || d.status === "pending"))
+    return "processing";
+  if (docs.some((d) => d.status === "failed")) return "error";
+  if (docs.every((d) => d.status === "ready")) return "synced";
+  return null;
+}
+
 // ── Helper: document status label ──
 function docStatusLabel(status: string) {
   switch (status) {
@@ -295,6 +307,31 @@ const AssistantPage = () => {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {(() => {
+            const syncStatus = computeSyncStatus(documents);
+            if (syncStatus === "synced")
+              return (
+                <Badge variant="success" className="gap-1.5 text-[10px]">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  Synchronisé
+                </Badge>
+              );
+            if (syncStatus === "processing")
+              return (
+                <Badge variant="status" className="gap-1.5 text-[10px]">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Synchronisation…
+                </Badge>
+              );
+            if (syncStatus === "error")
+              return (
+                <Badge variant="destructive" className="gap-1.5 text-[10px]">
+                  <AlertCircle className="h-3 w-3" />
+                  Erreur de sync
+                </Badge>
+              );
+            return null;
+          })()}
           <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
           <span className="text-sm font-medium text-foreground hidden sm:inline">Configuration</span>
         </div>
@@ -339,6 +376,31 @@ const AssistantPage = () => {
                   {selectedIntegrations.length}
                 </Badge>
               )}
+              {(() => {
+                const syncStatus = computeSyncStatus(documents);
+                if (syncStatus === "synced")
+                  return (
+                    <Badge variant="success" className="gap-1 text-[10px]">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Prêt
+                    </Badge>
+                  );
+                if (syncStatus === "processing")
+                  return (
+                    <Badge variant="status" className="gap-1 text-[10px]">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Sync…
+                    </Badge>
+                  );
+                if (syncStatus === "error")
+                  return (
+                    <Badge variant="destructive" className="gap-1 text-[10px]">
+                      <AlertCircle className="h-3 w-3" />
+                      Erreur
+                    </Badge>
+                  );
+                return null;
+              })()}
             </div>
           </div>
 

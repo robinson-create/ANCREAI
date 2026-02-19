@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { Plus, Bot, AlertCircle, Plug, ExternalLink } from "lucide-react"
+import { Plus, Bot, AlertCircle, Plug, ExternalLink, Loader2, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -15,13 +15,60 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { assistantsApi } from "@/api/assistants"
+import { documentsApi } from "@/api/documents"
 import { billingApi } from "@/api/billing"
 import { AssistantModal } from "@/components/assistants/assistant-modal"
-import type { Assistant } from "@/types"
+import type { Assistant, Document } from "@/types"
 
 const PLAN_LIMITS = {
   free: 1,
   pro: 3,
+}
+
+function AssistantSyncBadge({ collectionId }: { collectionId?: string }) {
+  const { data: documents = [] } = useQuery({
+    queryKey: ["documents", collectionId],
+    queryFn: () => documentsApi.list(collectionId!),
+    enabled: !!collectionId,
+    refetchInterval: (query) => {
+      const docs = query.state.data
+      if (docs?.some((d: Document) => d.status === "processing" || d.status === "pending"))
+        return 5000
+      return false
+    },
+  })
+
+  if (documents.length === 0) return null
+
+  const hasProcessing = documents.some(
+    (d: Document) => d.status === "processing" || d.status === "pending"
+  )
+  const hasFailed = documents.some((d: Document) => d.status === "failed")
+  const allReady = documents.every((d: Document) => d.status === "ready")
+
+  if (hasProcessing)
+    return (
+      <Badge variant="status" className="gap-1 text-[10px]">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Sync…
+      </Badge>
+    )
+  if (allReady)
+    return (
+      <Badge variant="success" className="gap-1 text-[10px]">
+        <CheckCircle2 className="h-3 w-3" />
+        Synchronisé
+      </Badge>
+    )
+  if (hasFailed)
+    return (
+      <Badge variant="destructive" className="gap-1 text-[10px]">
+        <AlertCircle className="h-3 w-3" />
+        Erreur
+      </Badge>
+    )
+
+  return null
 }
 
 export function AssistantsPage() {
@@ -162,6 +209,7 @@ export function AssistantsPage() {
                       <CardTitle className="text-lg">{assistant.name}</CardTitle>
                     </div>
                   </div>
+                  <AssistantSyncBadge collectionId={assistant.collection_ids?.[0]} />
                 </div>
               </CardHeader>
               <CardContent className="flex-1">
