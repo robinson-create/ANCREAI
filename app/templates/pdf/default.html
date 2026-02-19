@@ -166,7 +166,7 @@
         </tr>
       </thead>
       <tbody>
-        {% for item in block.items %}
+        {% for item in block["items"] %}
         <tr>
           <td>{{ item.description }}</td>
           <td class="num">{{ item.quantity }}</td>
@@ -179,7 +179,7 @@
       </tbody>
     </table>
     {% set ns = namespace(grand_total=0) %}
-    {% for item in block.items %}
+    {% for item in block["items"] %}
       {% set ns.grand_total = ns.grand_total + item.total %}
     {% endfor %}
     <div class="line-items-total">Total: {{ "%.2f" | format(ns.grand_total) }} {{ block.currency | default("EUR") }}</div>

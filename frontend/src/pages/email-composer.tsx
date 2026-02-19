@@ -155,14 +155,27 @@ export const EmailComposer = () => {
   const draftIdRef = useRef<string | null>(null);
   draftIdRef.current = currentDraftId;
 
-  // Keep ref in sync for unmount draft save (e.g. user navigates away)
+  // Keep refs in sync for unmount draft save (e.g. user navigates away)
   const draftRef = useRef({ to: "", subject: "", body: "", instruction: "", composing: false, sendStatus: "idle" as string });
   draftRef.current = { to: composeTo, subject: composeSubject, body: composeBody, instruction: composeInstruction, composing, sendStatus };
+  const accountIdRef = useRef<string | null>(null);
+  accountIdRef.current = selectedAccountId;
   useEffect(() => {
     return () => {
       const d = draftRef.current;
-      if (d.composing && d.sendStatus !== "sent" && (d.body.trim() || d.to.trim() || d.subject.trim())) {
-        saveDraft({ to: d.to, subject: d.subject, body: d.body, instruction: d.instruction, savedAt: new Date().toISOString() });
+      const accountId = accountIdRef.current;
+      const draftId = draftIdRef.current;
+      if (d.composing && d.sendStatus !== "sent" && accountId && (d.body.trim() || d.to.trim() || d.subject.trim())) {
+        const toRecipients = d.to.trim() ? [{ name: "", email: d.to.trim() }] : [];
+        mailApi.saveDraft({
+          mail_account_id: accountId,
+          to_recipients: toRecipients,
+          subject: d.subject,
+          body_html: d.body,
+          instruction: d.instruction,
+          draft_id: draftId || undefined,
+        }).catch(() => {});
+        clearDraft();
       }
     };
   }, []);
@@ -637,15 +650,19 @@ export const EmailComposer = () => {
   }, []);
 
   const handleLeaveCompose = useCallback(() => {
-    // Save to localStorage only if no API draft (for restore on new email)
-    if (!currentDraftId && sendStatus !== "sent" && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
-      saveDraft({
-        to: composeTo,
+    // Auto-save draft to server if there's content and email wasn't sent
+    if (sendStatus !== "sent" && selectedAccountId && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
+      const toRecipients = composeTo.trim()
+        ? [{ name: "", email: composeTo.trim() }]
+        : [];
+      saveDraftMutation.mutate({
+        to_recipients: toRecipients,
         subject: composeSubject,
-        body: composeBody,
+        body_html: composeBody,
         instruction: composeInstruction,
-        savedAt: new Date().toISOString(),
+        draft_id: currentDraftId || undefined,
       });
+      clearDraft();
     }
     if (sendStatus === "sent") clearDraft();
     setCurrentDraftId(null);
@@ -660,7 +677,7 @@ export const EmailComposer = () => {
     stopRecording();
     setSendStatus("idle");
     setSendError(null);
-  }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, currentDraftId, stopGeneration, stopRecording]);
+  }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, currentDraftId, selectedAccountId, saveDraftMutation, stopGeneration, stopRecording]);
 
   const generateReply = useCallback(() => {
     if (!selectedMessage) return;
