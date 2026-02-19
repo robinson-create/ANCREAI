@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { AuthTokenProvider } from "@/hooks/use-auth-token"
 import { SearchStreamProvider } from "@/contexts/search-stream"
+import { DocumentGenerationProvider } from "@/contexts/document-generation-context"
 
 // Layouts
 import { PublicLayout } from "@/components/layout/public-layout"
@@ -81,7 +82,9 @@ function App() {
           element={
             <ProtectedRoute>
               <SearchStreamProvider>
-                <NewAppLayout />
+                <DocumentGenerationProvider>
+                  <NewAppLayout />
+                </DocumentGenerationProvider>
               </SearchStreamProvider>
             </ProtectedRoute>
           }

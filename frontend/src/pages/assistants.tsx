@@ -1,20 +1,11 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  Plus,
-  Bot,
-  Settings,
-  Trash2,
-  AlertCircle,
-  Plug,
-  ExternalLink,
-} from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
+import { Plus, Bot, AlertCircle, Plug, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -26,7 +17,6 @@ import { useToast } from "@/hooks/use-toast"
 import { assistantsApi } from "@/api/assistants"
 import { billingApi } from "@/api/billing"
 import { AssistantModal } from "@/components/assistants/assistant-modal"
-import { DeleteAssistantDialog } from "@/components/assistants/delete-assistant-dialog"
 import type { Assistant } from "@/types"
 
 const PLAN_LIMITS = {
@@ -36,12 +26,9 @@ const PLAN_LIMITS = {
 
 export function AssistantsPage() {
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const { toast } = useToast()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
-  const [deletingAssistant, setDeletingAssistant] = useState<Assistant | null>(null)
 
   const { data: subscription } = useQuery({
     queryKey: ["subscription"],
@@ -55,37 +42,8 @@ export function AssistantsPage() {
     queryFn: assistantsApi.list,
   })
 
-  const deleteMutation = useMutation({
-    mutationFn: assistantsApi.delete,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["assistants"] })
-      toast({
-        title: "Assistant supprimé",
-        description: "L'assistant a été supprimé avec succès.",
-      })
-      setDeletingAssistant(null)
-    },
-    onError: () => {
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible de supprimer l'assistant.",
-      })
-    },
-  })
-
   const handleCreateClick = () => {
-    setEditingAssistant(null)
     setIsModalOpen(true)
-  }
-
-  const handleEditClick = (assistant: Assistant) => {
-    setEditingAssistant(assistant)
-    setIsModalOpen(true)
-  }
-
-  const handleDeleteClick = (assistant: Assistant) => {
-    setDeletingAssistant(assistant)
   }
 
   const handleConfigClick = (assistant: Assistant) => {
@@ -202,7 +160,6 @@ export function AssistantsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-lg">{assistant.name}</CardTitle>
-                      <CardDescription>{assistant.model}</CardDescription>
                     </div>
                   </div>
                 </div>
@@ -225,28 +182,14 @@ export function AssistantsPage() {
                   )}
                 </div>
               </CardContent>
-              <CardFooter className="flex gap-2">
+              <CardFooter>
                 <Button
                   variant="default"
-                  className="flex-1"
+                  className="w-full"
                   onClick={() => handleConfigClick(assistant)}
                 >
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Configurer
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleEditClick(assistant)}
-                >
-                  <Settings className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => handleDeleteClick(assistant)}
-                >
-                  <Trash2 className="h-4 w-4" />
                 </Button>
               </CardFooter>
             </Card>
@@ -254,21 +197,14 @@ export function AssistantsPage() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create Modal (édition via page de configuration) */}
       <AssistantModal
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
-        assistant={editingAssistant}
+        assistant={null}
+        onCreated={(id) => navigate(`/app/assistant/${id}`)}
       />
 
-      {/* Delete Dialog */}
-      <DeleteAssistantDialog
-        open={!!deletingAssistant}
-        onOpenChange={(open) => !open && setDeletingAssistant(null)}
-        assistant={deletingAssistant}
-        onConfirm={() => deletingAssistant && deleteMutation.mutate(deletingAssistant.id)}
-        isLoading={deleteMutation.isPending}
-      />
     </div>
   )
 }

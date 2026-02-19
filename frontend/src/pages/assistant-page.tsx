@@ -112,30 +112,35 @@ const AssistantPage = () => {
   });
 
   // ── Config state ──
+  const [assistantName, setAssistantName] = useState("");
   const [consignes, setConsignes] = useState("");
   const [newLink, setNewLink] = useState("");
   const [links, setLinks] = useState<{ url: string; label: string }[]>([]);
   const [selectedIntegrations, setSelectedIntegrations] = useState<string[]>([]);
   const [configDirty, setConfigDirty] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize config from assistant data
   useEffect(() => {
     if (assistant) {
+      setAssistantName(assistant.name || "");
       setConsignes(assistant.system_prompt || "");
       const savedLinks = (assistant.settings as Record<string, unknown>)?.links;
       setLinks(Array.isArray(savedLinks) ? (savedLinks as { url: string; label: string }[]) : []);
       setSelectedIntegrations(assistant.integration_ids || []);
       setConfigDirty(false);
+      setDeleteConfirmName("");
     }
   }, [assistant]);
 
   // ── Mutations ──
 
-  // Save config (system prompt + links)
+  // Save config (name, system prompt, links)
   const saveConfigMutation = useMutation({
     mutationFn: () =>
       assistantsApi.update(id!, {
+        name: assistantName.trim() || assistant?.name,
         system_prompt: consignes,
         integration_ids: selectedIntegrations,
         settings: {
@@ -178,6 +183,19 @@ const AssistantPage = () => {
     },
     onError: () => {
       toast({ variant: "destructive", title: "Erreur", description: "Impossible d'importer le document." });
+    },
+  });
+
+  // Delete assistant
+  const deleteAssistantMutation = useMutation({
+    mutationFn: () => assistantsApi.delete(id!),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assistants"] });
+      toast({ title: "Assistant supprimé", description: "L'assistant et ses données ont été supprimés." });
+      navigate("/app/assistants");
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de supprimer l'assistant." });
     },
   });
 
@@ -260,9 +278,15 @@ const AssistantPage = () => {
         </Button>
         {emoji && <span className="text-lg sm:text-xl">{emoji}</span>}
         <div className="min-w-0 flex-1">
-          <h1 className="font-display font-semibold text-foreground text-sm truncate">
-            {assistant.name}
-          </h1>
+          <Input
+            value={assistantName}
+            onChange={(e) => {
+              setAssistantName(e.target.value);
+              setConfigDirty(true);
+            }}
+            className="h-8 font-display font-semibold text-sm border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            placeholder="Nom de l'assistant"
+          />
           {role && (
             <p className="text-[11px] text-muted-foreground hidden sm:block">
               {role}
@@ -289,8 +313,16 @@ const AssistantPage = () => {
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-foreground font-medium">{assistant.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <Input
+                value={assistantName}
+                onChange={(e) => {
+                  setAssistantName(e.target.value);
+                  setConfigDirty(true);
+                }}
+                className="h-8 text-sm font-medium border-border"
+                placeholder="Nom de l'assistant"
+              />
+              <p className="text-xs text-muted-foreground mt-1.5">
                 Cet assistant fournit le contexte RAG pour vos documents, emails et recherches.
               </p>
             </div>
@@ -555,6 +587,49 @@ const AssistantPage = () => {
               Sauvegarder la configuration
             </Button>
           </div>
+
+          {/* ── Zone de danger : supprimer l'assistant ── */}
+          <section className="space-y-3 pt-8 mt-8 border-t border-border">
+            <div className="flex items-center gap-2">
+              <Trash2 className="h-4 w-4 text-destructive" />
+              <h3 className="font-display font-semibold text-foreground text-sm text-destructive">
+                Zone de danger
+              </h3>
+            </div>
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 space-y-3">
+              <p className="text-sm text-foreground">
+                La suppression de l'assistant est <strong>définitive</strong>. Elle entraîne :
+              </p>
+              <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                <li>La perte de cet assistant et de tous ses paramètres</li>
+                <li>La suppression des documents RAG associés et de leurs indexations</li>
+                <li>La perte du contexte pour les emails et recherches liés</li>
+              </ul>
+              <p className="text-sm text-foreground font-medium">
+                Pour confirmer, saisissez le nom de l'assistant : <strong>{assistant.name}</strong>
+              </p>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  placeholder={`Tapez "${assistant.name}" pour confirmer`}
+                  className="flex-1 border-destructive/40"
+                />
+                <Button
+                  variant="destructive"
+                  onClick={() => deleteAssistantMutation.mutate()}
+                  disabled={deleteConfirmName.trim() !== assistant.name || deleteAssistantMutation.isPending}
+                >
+                  {deleteAssistantMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Supprimer l'assistant
+                </Button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>

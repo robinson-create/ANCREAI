@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/use-toast"
 import { useDocumentStore } from "@/hooks/use-document-store"
+import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { useAutosave } from "@/hooks/use-autosave"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
 import { BlockRenderer } from "@/components/documents/BlockRenderer"
@@ -76,7 +77,10 @@ export function DocumentEditorPage() {
   const [title, setTitle] = useState("")
   const [isExporting, setIsExporting] = useState(false)
   const [isPreview, setIsPreview] = useState(false)
-  const [isGenerating, setIsGenerating] = useState(false)
+  const [isGeneratingLocal, setIsGeneratingLocal] = useState(false)
+  const docGen = useDocumentGeneration()
+  const isGeneratingFromContext = id ? docGen?.generatingDocIds.has(id) ?? false : false
+  const isGenerating = isGeneratingFromContext || isGeneratingLocal
 
   // Track whether current docModel comes from an API load (skip autosave)
   const isLoadingFromApi = useRef(true)
@@ -573,7 +577,7 @@ export function DocumentEditorPage() {
               collectionIds={collectionIds}
               onAddBlock={(type: DocBlockKind) => handleAddBlock(type)}
               isEmpty={blocksEmpty}
-              onGeneratingChange={setIsGenerating}
+              onGeneratingChange={setIsGeneratingLocal}
               initialPrompt={initialPrompt}
             />
           </div>

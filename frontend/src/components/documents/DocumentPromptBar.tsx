@@ -35,10 +35,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { workspaceDocumentsApi } from "@/api/workspace-documents"
 import { assistantsApi } from "@/api/assistants"
 import { useDocumentStore } from "@/hooks/use-document-store"
-import type { Assistant, DocBlock, DocBlockKind, DocPatch } from "@/types"
+import { useDocumentGeneration } from "@/contexts/document-generation-context"
+import type { Assistant, DocBlock, DocBlockKind } from "@/types"
 
 // ── Prompt history ──
 
@@ -73,22 +73,6 @@ function saveHistory(docId: string, entries: HistoryEntry[]) {
 
 // ── Speech Recognition: see src/speech-recognition.d.ts ──
 
-// ── Helpers ──
-
-function applyPatches(
-  patches: DocPatch[],
-  updateBlock: (id: string, patch: Partial<DocBlock>) => void,
-  addBlock: (block: DocBlock, afterId?: string) => void
-) {
-  for (const patch of patches) {
-    if (patch.op === "add_block" && patch.value) {
-      addBlock(patch.value as unknown as DocBlock)
-    } else if (patch.op === "replace_block" && patch.block_id && patch.value) {
-      updateBlock(patch.block_id, patch.value as Partial<DocBlock>)
-    }
-  }
-}
-
 const BLOCK_TYPES: { type: DocBlockKind; label: string; icon: typeof FileText }[] = [
   { type: "rich_text", label: "Texte riche", icon: FileText },
   { type: "line_items", label: "Lignes (devis/facture)", icon: Table2 },
@@ -120,7 +104,6 @@ export function DocumentPromptBar({
   initialPrompt,
 }: DocumentPromptBarProps) {
   const [prompt, setPrompt] = useState("")
-  const [isGenerating, setIsGenerating] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [aiMessage, setAiMessage] = useState<string | null>(null)
@@ -133,6 +116,7 @@ export function DocumentPromptBar({
   const wantsRecordingRef = useRef(false)
 
   const { updateBlock, addBlock } = useDocumentStore()
+  const docGen = useDocumentGeneration()
 
   // Fetch assistants for selector
   const { data: assistants = [] } = useQuery({
@@ -294,82 +278,39 @@ export function DocumentPromptBar({
     }
   }, [isRecording, startRecording, stopRecording])
 
-  // ── AI Generation ──
+  // ── AI Generation (en arrière-plan — peut quitter la page) ──
 
-  const handleGenerate = useCallback(async () => {
-    if (!prompt.trim() || isGenerating) return
+  const isGeneratingFromContext = docGen?.generatingDocIds.has(docId) ?? false
+  const isGenerating = isGeneratingFromContext
 
-    setIsGenerating(true)
-    onGeneratingChange?.(true)
+  const handleGenerate = useCallback(() => {
+    if (!prompt.trim() || isGenerating || !docGen) return
+
     setError(null)
     setAiMessage(null)
 
-    // Stop recording if active
-    if (isRecording) {
-      stopRecording()
-    }
+    if (isRecording) stopRecording()
 
     const sentPrompt = prompt.trim()
+    onGeneratingChange?.(true)
 
-    try {
-      const response = await workspaceDocumentsApi.generate(docId, {
-        prompt: sentPrompt,
-        collection_ids: effectiveCollectionIds,
-        doc_type: docType,
-      })
+    docGen.startGeneration({
+      docId,
+      prompt: sentPrompt,
+      collectionIds: effectiveCollectionIds,
+      docType,
+    })
 
-      const responseMsg = response.message || ""
+    setPrompt("")
 
-      // Detect backend error responses (empty patches with error message)
-      if (
-        (!response.patches || response.patches.length === 0) &&
-        responseMsg.toLowerCase().includes("erreur")
-      ) {
-        setError(responseMsg)
-        return
-      }
-
-      if (!response.patches || response.patches.length === 0) {
-        setError("Aucun contenu genere. Reformulez votre demande ou verifiez l'assistant selectionne.")
-        return
-      }
-
-      applyPatches(response.patches, updateBlock, addBlock)
-
-      // Force save immediately — don't rely on debounced autosave
-      // This ensures AI-generated content persists even if the user
-      // navigates away quickly.
-      const latestModel = useDocumentStore.getState().docModel
-      if (latestModel) {
-        try {
-          await workspaceDocumentsApi.patchContent(docId, latestModel)
-        } catch (err) {
-          console.error("[doc-ai] Failed to persist generated content:", err)
-        }
-      }
-
-      setAiMessage(responseMsg || "Contenu genere avec succes.")
-      setPrompt("")
-
-      // Save to history
-      const entry: HistoryEntry = {
-        prompt: sentPrompt,
-        response: responseMsg || "Contenu genere avec succes.",
-        timestamp: Date.now(),
-      }
-      const updated = [entry, ...history].slice(0, MAX_HISTORY)
-      setHistory(updated)
-      saveHistory(docId, updated)
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Erreur lors de la generation du contenu."
-      )
-    } finally {
-      setIsGenerating(false)
-      onGeneratingChange?.(false)
+    const entry: HistoryEntry = {
+      prompt: sentPrompt,
+      response: "Génération en cours… Vous pouvez quitter la page.",
+      timestamp: Date.now(),
     }
+    const updated = [entry, ...history].slice(0, MAX_HISTORY)
+    setHistory(updated)
+    saveHistory(docId, updated)
   }, [
     prompt,
     isGenerating,
@@ -378,20 +319,30 @@ export function DocumentPromptBar({
     docId,
     effectiveCollectionIds,
     docType,
-    updateBlock,
-    addBlock,
     history,
     onGeneratingChange,
+    docGen,
   ])
+
+  // Mettre à jour l'entrée d'historique quand la génération se termine (si on est resté sur la page)
+  useEffect(() => {
+    if (!isGeneratingFromContext && history[0]?.response === "Génération en cours… Vous pouvez quitter la page.") {
+      setHistory((prev) =>
+        prev.map((h, i) =>
+          i === 0 ? { ...h, response: "Contenu généré avec succès." } : h
+        )
+      )
+    }
+  }, [isGeneratingFromContext, history])
 
   // Auto-generate from initial prompt once handleGenerate is available
   useEffect(() => {
-    if (shouldAutoGenerate.current && prompt && selectedAssistantId && !isGenerating) {
+    if (shouldAutoGenerate.current && prompt && docGen && !isGenerating) {
       shouldAutoGenerate.current = false
       const timer = setTimeout(() => handleGenerate(), 150)
       return () => clearTimeout(timer)
     }
-  }, [prompt, selectedAssistantId, isGenerating, handleGenerate])
+  }, [prompt, docGen, isGenerating, handleGenerate])
 
   // ── Keyboard handler ──
 

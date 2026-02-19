@@ -10,6 +10,7 @@ import {
   Archive,
   Trash2,
   MoreVertical,
+  Construction,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -58,6 +59,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
+import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import type { WorkspaceDocumentListItem } from "@/types"
 
 const DOC_TYPES = [
@@ -101,6 +103,7 @@ export function DocumentsPage() {
   const location = useLocation()
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const docGen = useDocumentGeneration()
 
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newTitle, setNewTitle] = useState("")
@@ -246,7 +249,9 @@ export function DocumentsPage() {
 
       {documents && documents.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {documents.map((doc: WorkspaceDocumentListItem) => (
+          {documents.map((doc: WorkspaceDocumentListItem) => {
+            const isGenerating = docGen?.generatingDocIds.has(doc.id) ?? false
+            return (
             <Card
               key={doc.id}
               className="relative group cursor-pointer hover:shadow-md transition-shadow"
@@ -254,9 +259,16 @@ export function DocumentsPage() {
             >
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                  <Badge variant={STATUS_VARIANTS[doc.status] || "outline"}>
-                    {STATUS_LABELS[doc.status] || doc.status}
-                  </Badge>
+                  {isGenerating ? (
+                    <Badge variant="secondary" className="gap-1.5 bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      En génération
+                    </Badge>
+                  ) : (
+                    <Badge variant={STATUS_VARIANTS[doc.status] || "outline"}>
+                      {STATUS_LABELS[doc.status] || doc.status}
+                    </Badge>
+                  )}
                   <Badge variant="outline" className="text-[10px]">
                     {DOC_TYPES.find((t) => t.value === doc.doc_type)?.label ||
                       doc.doc_type}
@@ -269,8 +281,17 @@ export function DocumentsPage() {
                 </CardDescription>
               </CardHeader>
               <CardFooter className="text-xs text-muted-foreground">
-                Cree le{" "}
-                {new Date(doc.created_at).toLocaleDateString("fr-FR")}
+                {isGenerating ? (
+                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+                    <Construction className="h-3 w-3" />
+                    Génération en cours…
+                  </span>
+                ) : (
+                  <>
+                    Cree le{" "}
+                    {new Date(doc.created_at).toLocaleDateString("fr-FR")}
+                  </>
+                )}
               </CardFooter>
 
               {/* Actions dropdown */}
@@ -307,7 +328,7 @@ export function DocumentsPage() {
                 </DropdownMenuContent>
               </DropdownMenu>
             </Card>
-          ))}
+          )})}
         </div>
       )}
 
