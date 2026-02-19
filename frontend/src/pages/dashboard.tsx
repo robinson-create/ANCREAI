@@ -135,25 +135,7 @@ export function DashboardPage() {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const wantsRecordingRef = useRef(false);
 
-  const handleSubmit = useCallback(() => {
-    const text = prompt.trim();
-    if (!text) return;
-    const intent = detectIntent(text);
-    switch (intent) {
-      case "email":
-        navigate("/app/email", { state: { prompt: text } });
-        break;
-      case "document":
-        navigate("/app/documents", { state: { prompt: text } });
-        break;
-      default:
-        navigate(`/app/search?q=${encodeURIComponent(text)}`);
-        break;
-    }
-  }, [prompt, navigate]);
-
-  // ── Speech Recognition ──
-
+  // ── Speech Recognition (définis en premier pour être utilisés dans handleSubmit)
   const startRecording = useCallback(() => {
     const SpeechRecognitionCtor =
       window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -216,6 +198,24 @@ export function DashboardPage() {
     }
   }, []);
 
+  const handleSubmit = useCallback(() => {
+    const text = prompt.trim();
+    if (!text) return;
+    stopRecording();
+    const intent = detectIntent(text);
+    switch (intent) {
+      case "email":
+        navigate("/app/email", { state: { prompt: text, autoGenerate: true } });
+        break;
+      case "document":
+        navigate("/app/documents", { state: { prompt: text } });
+        break;
+      default:
+        navigate(`/app/search?q=${encodeURIComponent(text)}`);
+        break;
+    }
+  }, [prompt, navigate, stopRecording]);
+
   const toggleRecording = useCallback(() => {
     if (isRecording) {
       stopRecording();
@@ -223,6 +223,11 @@ export function DashboardPage() {
       startRecording();
     }
   }, [isRecording, startRecording, stopRecording]);
+
+  // Arrêter le micro au démontage (navigation vers une autre page)
+  useEffect(() => {
+    return () => stopRecording();
+  }, [stopRecording]);
 
   // ── Fetch documents ──
   const { data: documents = [] } = useQuery({

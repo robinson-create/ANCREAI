@@ -144,6 +144,7 @@ export const EmailComposer = () => {
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const wantsRecordingRef = useRef(false);
   const abortGenerationRef = useRef<(() => void) | null>(null);
+  const pendingAutoGenerateRef = useRef<string | null>(null);
   const dictationTargetRef = useRef<React.Dispatch<React.SetStateAction<string>>>(setComposeBody);
   const sendPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const finalizePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -247,6 +248,7 @@ export const EmailComposer = () => {
   useEffect(() => {
     const state = location.state as {
       prompt?: string;
+      autoGenerate?: boolean;
       fromDocument?: { id: string; title: string; pdfUrl: string };
     } | null;
     if (state?.fromDocument) {
@@ -269,6 +271,9 @@ export const EmailComposer = () => {
     } else if (state?.prompt) {
       setComposing(true);
       setComposeInstruction(state.prompt);
+      if (state.autoGenerate) {
+        pendingAutoGenerateRef.current = state.prompt;
+      }
       window.history.replaceState({}, "");
     }
   }, [location.state]);
@@ -697,6 +702,21 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
     generateWithAI(prompt, setComposeBody);
   }, [composeTo, composeSubject, composeInstruction, generateWithAI]);
+
+  // Auto-lancer la génération quand on arrive depuis le dashboard avec une dictée
+  useEffect(() => {
+    const pending = pendingAutoGenerateRef.current;
+    if (
+      pending &&
+      composing &&
+      composeInstruction.trim() === pending.trim() &&
+      selectedAssistantId &&
+      !isGenerating
+    ) {
+      pendingAutoGenerateRef.current = null;
+      generateComposeEmail();
+    }
+  }, [composing, composeInstruction, selectedAssistantId, isGenerating, generateComposeEmail]);
 
   // ── Determine current view ──
   const isThreadList = !composing && !selectedThread;
