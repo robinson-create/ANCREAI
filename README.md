@@ -11,6 +11,7 @@
 - **Citations** — Sources citées avec nom de fichier, numéro de page et extrait
 - **Documents** — Éditeur de documents structurés avec IA (contrats, devis, NDA…)
 - **Emails** — Compositeur d'emails assisté par IA avec contexte RAG
+- **Email Suggestion** — L'assistant propose de transformer une réponse actionnable en email via un bloc CTA (suivi, synthèse, relance, proposition)
 - **Recherche** — Interface de recherche avec historique, reprise de conversations et dictée vocale
 - **Dictée vocale** — Reconnaissance vocale native (Web Speech API) sur toutes les pages
 - **Generative UI** — Blocs dynamiques (KPIs, tableaux, étapes) générés par le LLM
@@ -117,12 +118,38 @@ Message utilisateur
        - Instructions pour les outils (blocks UI + intégrations)
   6. Appel LLM (Mistral Medium) avec tool-calling :
        - Boucle itérative (max 5 tours) :
-         · Si outil "block" → Generative UI (KPI, tableau, étapes)
+         · Si outil "block" → Generative UI (KPI, tableau, étapes, callout)
+         · Si outil "suggestEmail" → Crée un EmailDraftBundle en DB + bloc CTA
          · Si outil "integration" → Appel API externe via Nango
          · Sinon → Réponse texte
   7. Streaming SSE des tokens vers le frontend
   8. Sauvegarde en DB (messages, citations, blocks, tokens)
   9. Extraction des citations (top-5 chunks, score > 0)
+```
+
+### Email Suggestion (chat → email)
+
+```
+Réponse assistant (contenu actionnable: synthèse, suivi, relance…)
+       │
+       ▼
+  LLM appelle suggestEmail(subject, body_draft, tone, reason)
+       │
+       ▼
+  Backend crée un EmailDraftBundle en DB
+    (tenant_id, conversation_id, subject, body_draft, tone, reason, citations)
+       │
+       ▼
+  SSE event: block { type: "email_suggestion", payload: { bundle_id, subject, reason, tone } }
+       │
+       ▼
+  Frontend affiche un bloc CTA "Transformer en email"
+    - Bouton "Créer l'email" → /app/email?bundle=<bundle_id>
+    - Bouton "Ignorer" → masque le bloc
+       │
+       ▼
+  Page Email Composer charge le bundle via GET /mail/bundles/{id}
+    → Hydrate le sujet, le brouillon et le ton
 ```
 
 ### Cloisonnement des données
@@ -371,6 +398,11 @@ Ou utiliser le script fourni (si présent) : `make start` / `./start-dev.sh`.
 | `GET` | `/api/v1/workspace-documents/{id}` | Détails d'un document |
 | `PATCH` | `/api/v1/workspace-documents/{id}` | Modifier un document |
 | `POST` | `/api/v1/workspace-documents/{id}/ai` | Actions IA sur le document |
+
+### Email Draft Bundles
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `GET` | `/api/v1/mail/bundles/{id}` | Récupérer un bundle email (tenant-scoped) |
 
 ### Usage & Billing
 | Méthode | Endpoint | Description |
