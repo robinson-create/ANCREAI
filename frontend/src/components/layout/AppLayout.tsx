@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
+import { useSearchView } from "@/contexts/search-view-context";
 import { CommandBar } from "@/components/CommandBar";
 import { CreateModal } from "@/components/CreateModal";
 import { Plus, Menu } from "lucide-react";
@@ -35,6 +36,9 @@ export function NewAppLayout() {
   }, []);
 
   const isDashboard = location.pathname === "/app";
+  const searchViewCtx = useSearchView();
+  const isSearchHome =
+    location.pathname === "/app/search" && (searchViewCtx?.isSearchHome ?? true);
 
   return (
     <div className={`flex h-screen w-full overflow-hidden ${isDashboard ? "" : "bg-background"}`}>
@@ -62,7 +66,7 @@ export function NewAppLayout() {
         )}
 
         <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
-          {isDashboard && (
+          {(isDashboard || isSearchHome) && (
             <div
               className="absolute inset-0 z-0 pointer-events-none bg-white"
               aria-hidden

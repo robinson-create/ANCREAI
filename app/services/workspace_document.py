@@ -32,6 +32,41 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 _GENERATE_MAX_TOKENS = 16_384
+_SUGGEST_TITLE_MAX_TOKENS = 64
+
+
+def _extract_text_from_prosemirror(node: dict) -> str:
+    """Recursively extract plain text from ProseMirror JSON node."""
+    if not isinstance(node, dict):
+        return ""
+    text = node.get("text", "")
+    if text:
+        return str(text)
+    content = node.get("content", [])
+    if isinstance(content, list):
+        return " ".join(_extract_text_from_prosemirror(c) for c in content)
+    return ""
+
+
+def _extract_text_from_doc_model(doc_model: DocModel) -> str:
+    """Extract plain text from DocModel blocks for summarization."""
+    parts: list[str] = []
+    for block in doc_model.blocks:
+        block_type = getattr(block, "type", None) or (block if isinstance(block, dict) else {}).get("type", "")
+        if block_type in ("rich_text", "clause", "terms"):
+            content = getattr(block, "content", None) or (block if isinstance(block, dict) else {}).get("content", {})
+            if isinstance(content, dict):
+                parts.append(_extract_text_from_prosemirror(content))
+        elif block_type == "line_items":
+            items = getattr(block, "items", None) or (block if isinstance(block, dict) else {}).get("items", [])
+            for item in items:
+                desc = (
+                    getattr(item, "description", None)
+                    or (item if isinstance(item, dict) else {}).get("description", "")
+                )
+                if desc:
+                    parts.append(str(desc))
+    return "\n".join(p for p in parts if p).strip()[:3000]
 
 
 def _repair_truncated_json(text: str) -> dict | None:
@@ -464,6 +499,48 @@ FORMAT DE RÉPONSE (JSON) :
             message="Erreur lors de la génération : le modèle n'a pas renvoyé un JSON valide.",
             sources=sources,
         )
+
+    async def suggest_title(
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+        doc_id: UUID,
+    ) -> WorkspaceDocument | None:
+        """Generate a summary title from document content and update the doc."""
+        doc = await self.get(db, tenant_id, doc_id)
+        if not doc:
+            return None
+        try:
+            doc_model = DocModel.model_validate(doc.content_json)
+        except Exception:
+            logger.warning("Could not validate doc_model for suggest_title, skipping")
+            return doc
+
+        text = _extract_text_from_doc_model(doc_model)
+        if not text or len(text.strip()) < 20:
+            logger.info("Not enough content for title suggestion, keeping current title")
+            return doc
+
+        system_prompt = """Tu dois générer un titre court et descriptif (max 80 caractères) en français pour ce document.
+Réponds UNIQUEMENT avec le titre, rien d'autre. Pas de guillemets, pas de ponctuation finale."""
+        try:
+            raw = await self._llm_call(
+                system_prompt,
+                text[:2000],
+                json_mode=False,
+                max_tokens=_SUGGEST_TITLE_MAX_TOKENS,
+            )
+            title = raw.strip().strip('"\'')
+            if len(title) > 80:
+                title = title[:77] + "..."
+            if title:
+                doc.title = title
+                await db.flush()
+                await db.refresh(doc)
+                logger.info("Suggested title for doc %s: %s", doc_id, title)
+        except Exception as e:
+            logger.warning("Title suggestion failed: %s", e)
+        return doc
 
     async def rewrite_block(
         self,

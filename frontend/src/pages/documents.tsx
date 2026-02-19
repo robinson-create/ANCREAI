@@ -11,6 +11,7 @@ import {
   Trash2,
   MoreVertical,
   Construction,
+  FolderPlus,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -60,6 +61,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
+import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
 import type { WorkspaceDocumentListItem } from "@/types"
 
 const DOC_TYPES = [
@@ -117,6 +119,7 @@ export function DocumentsPage() {
   })
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [addToFolderTarget, setAddToFolderTarget] = useState<{ id: string; title: string } | null>(null)
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -179,7 +182,7 @@ export function DocumentsPage() {
       const docType = detectDocType(prompt)
       window.history.replaceState({}, "")
       workspaceDocumentsApi
-        .create({ title: prompt.slice(0, 80), doc_type: docType })
+        .create({ title: "Sans titre", doc_type: docType })
         .then((doc) => {
           queryClient.invalidateQueries({ queryKey: ["workspace-documents"] })
           navigate(`/app/documents/${doc.id}`, { state: { prompt } })
@@ -307,6 +310,10 @@ export function DocumentsPage() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  <DropdownMenuItem onClick={() => setAddToFolderTarget({ id: doc.id, title: doc.title })}>
+                    <FolderPlus className="h-4 w-4 mr-2" />
+                    Ajouter à un dossier
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => duplicateMutation.mutate(doc.id)}>
                     <Copy className="h-4 w-4 mr-2" />
                     Dupliquer
@@ -410,6 +417,15 @@ export function DocumentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AddToFolderDialog
+        open={!!addToFolderTarget}
+        onOpenChange={(open) => !open && setAddToFolderTarget(null)}
+        itemType="document"
+        itemId={addToFolderTarget?.id ?? ""}
+        itemTitle={addToFolderTarget?.title}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
+      />
     </div>
   )
 }

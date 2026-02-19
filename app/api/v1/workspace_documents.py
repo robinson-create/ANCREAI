@@ -188,6 +188,24 @@ async def ai_add_line_item(
     )
 
 
+@router.post("/{doc_id}/ai/suggest-title", response_model=WorkspaceDocumentRead)
+async def ai_suggest_title(
+    doc_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> WorkspaceDocumentRead:
+    """Generate a summary title from document content and update the doc."""
+    doc = await workspace_document_service.suggest_title(
+        db, user.tenant_id, doc_id
+    )
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document introuvable.",
+        )
+    return WorkspaceDocumentRead.model_validate(doc)
+
+
 # ── Export ──
 
 

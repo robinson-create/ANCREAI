@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -9,11 +10,19 @@ import {
   Bot,
   LogOut,
   Calendar,
+  Folder,
+  Plus,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { AnchorLogo } from "@/components/ui/anchor-logo";
 import { useClerk } from "@clerk/clerk-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { foldersApi } from "@/api/folders";
+import { FolderCreateDialog } from "@/components/folders/FolderCreateDialog";
+import { useToast } from "@/hooks/use-toast";
 
 const mainNav = [
   { label: "Recherche", icon: Search, path: "/app/search" },
@@ -27,10 +36,40 @@ interface AppSidebarProps {
   onToggle: () => void;
 }
 
+const FOLDERS_VISIBLE = 5;
+
 export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useClerk();
+  const [foldersExpanded, setFoldersExpanded] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: folders = [] } = useQuery({
+    queryKey: ["folders"],
+    queryFn: () => foldersApi.list(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => foldersApi.create({ name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["folders"] });
+      toast({ title: "Dossier créé" });
+      setCreateOpen(false);
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de créer le dossier.",
+      });
+    },
+  });
+
+  const displayedFolders = foldersExpanded ? folders : folders.slice(0, FOLDERS_VISIBLE);
+  const hasMoreFolders = folders.length > FOLDERS_VISIBLE;
 
   return (
     <aside
@@ -39,21 +78,15 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
         collapsed ? "w-16" : "w-60"
       )}
     >
-      {/* Logo — clickable, always navigates to welcome page */}
-      <Link
-        to="/app"
-        onClick={() => window.scrollTo({ top: 0, left: 0, behavior: "auto" })}
-        className="flex items-center h-14 px-4 border-b border-sidebar-border group"
-      >
-        <div className="transition-transform duration-300 group-hover:rotate-[-12deg]">
-          <AnchorLogo size="sm" />
-        </div>
+      {/* Logo — non cliquable */}
+      <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
+        <AnchorLogo size="sm" />
         {!collapsed && (
           <span className="ml-2.5 text-sm font-semibold text-sidebar-foreground">
             Ancre
           </span>
         )}
-      </Link>
+      </div>
 
       {/* Main nav */}
       <nav className="py-4 px-3 space-y-1">
@@ -63,7 +96,7 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           </span>
         </div>
         {mainNav.map((item) => {
-          const itemPaths = "matchPaths" in item ? [item.path, ...(item.matchPaths ?? [])] : [item.path];
+          const itemPaths: string[] = [item.path];
           const active = itemPaths.some(
             (p) => location.pathname === p || (p !== "/app" && location.pathname.startsWith(p + "/"))
           );
@@ -90,6 +123,79 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
           );
         })}
       </nav>
+
+      {/* Dossiers section */}
+      <div className="border-t border-sidebar-border py-3 px-3">
+        <div className={cn("flex items-center gap-2 mb-2", collapsed && "justify-center")}>
+          {!collapsed && (
+            <span className="px-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-muted flex-1">
+              Dossiers
+            </span>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-7 w-7 shrink-0", collapsed && "mx-auto")}
+            onClick={() => setCreateOpen(true)}
+            title="Nouveau dossier"
+          >
+            <Plus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+        {collapsed ? (
+          <Link
+            to="/app/search"
+            className="flex justify-center py-2 rounded-md text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            title="Dossiers"
+          >
+            <Folder className="h-4 w-4" />
+          </Link>
+        ) : (
+          <div className="space-y-0.5">
+            {displayedFolders.map((f) => {
+              const isActive =
+                location.pathname === "/app/search" &&
+                new URLSearchParams(location.search || "").get("folder") === f.id;
+              return (
+                <Link
+                  key={f.id}
+                  to={`/app/search?folder=${f.id}`}
+                  className={cn(
+                    "flex items-center gap-2 px-2 py-2 rounded-md text-sm transition-colors",
+                    isActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <span
+                    className="h-2 w-2 rounded-full shrink-0"
+                    style={{ backgroundColor: f.color || "var(--muted)" }}
+                  />
+                  <span className="truncate flex-1">{f.name}</span>
+                </Link>
+              );
+            })}
+            {hasMoreFolders && (
+              <button
+                onClick={() => setFoldersExpanded((v) => !v)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground w-full"
+              >
+                {foldersExpanded ? (
+                  <>
+                    <ChevronUp className="h-3 w-3" />
+                    Voir moins
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="h-3 w-3" />
+                    Voir plus ({folders.length - FOLDERS_VISIBLE})
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Spacer */}
       <div className="flex-1" />
@@ -136,6 +242,13 @@ export function AppSidebar({ collapsed, onToggle }: AppSidebarProps) {
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </Button>
       </div>
+
+      <FolderCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSubmit={(name) => createMutation.mutateAsync(name).then(() => undefined)}
+        mode="create"
+      />
     </aside>
   );
 }

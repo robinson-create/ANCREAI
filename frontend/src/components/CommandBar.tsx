@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 const pages = [
-  { label: "Accueil", path: "/app", icon: LayoutDashboard },
+  { label: "Accueil", path: "/app/search", icon: LayoutDashboard },
   { label: "Documents", path: "/app/documents", icon: FileText },
   { label: "Emails", path: "/app/email", icon: Mail },
   { label: "Recherche", path: "/app/search", icon: Search },

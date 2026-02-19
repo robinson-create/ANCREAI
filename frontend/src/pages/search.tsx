@@ -1,16 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   Search,
   User,
   FileText,
-  Plug,
   ChevronDown,
   ChevronUp,
   ChevronRight,
   Loader2,
   Send,
+  SendHorizontal,
   Anchor,
   MessageSquare,
   Clock,
@@ -18,25 +18,78 @@ import {
   MicOff,
   Copy,
   Check,
+  FolderPlus,
+  FileEdit,
+  Mail,
+  Folder,
+  Plus,
+  MoreVertical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { assistantsApi } from "@/api/assistants";
 import { chatApi } from "@/api/chat";
+import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import type { Assistant, Citation } from "@/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useCopilotReadable } from "@copilotkit/react-core";
 import { BlockRenderer } from "@/components/blocks/BlockRenderer";
 import { useSearchStream } from "@/contexts/search-stream";
+import { useSearchView } from "@/contexts/search-view-context";
+import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
+import { FolderCreateDialog } from "@/components/folders/FolderCreateDialog";
+import { FolderDetailPanel } from "@/components/folders/FolderDetailPanel";
+import { foldersApi } from "@/api/folders";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
-const suggestions = [
-  "Résume le dernier échange avec le client Dupont",
-  "Quelles sont les clauses du NDA en cours ?",
-  "Trouve les tarifs actuels",
-  "Cherche le contrat de prestation",
+// Même structure que le dashboard pour l'activité
+const MOCK_EMAILS = [
+  { subject: "Relance devis TechCo", to: "j.martin@techco.fr", date: "2026-02-10", status: "Envoyé" },
+  { subject: "Proposition commerciale Q1", to: "j.martin@techco.fr", date: "2026-01-28", status: "Envoyé" },
+  { subject: "Proposition partenariat Acme", to: "contact@acme.com", date: "2026-02-08", status: "Brouillon" },
+  { subject: "Confirmation RDV vendredi", to: "s.dupont@client.fr", date: "2026-02-07", status: "Envoyé" },
+  { subject: "Suivi projet phase 2", to: "s.dupont@client.fr", date: "2026-02-01", status: "Envoyé" },
+];
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  contract: "Contrat",
+  quote: "Devis",
+  invoice: "Facture",
+  nda: "NDA",
+  report: "Rapport",
+  note: "Note",
+  email: "Email",
+  other: "Document",
+};
+
+interface HistoryItem {
+  id: string;
+  type: "document" | "email" | "conversation";
+  title: string;
+  subtitle: string;
+  date: string;
+  sortDate: number;
+  status?: string;
+  path: string;
+  /** Pour "Ajouter à un dossier" : type API folder */
+  folderItemType?: "document" | "email_thread" | "conversation";
+  folderItemId?: string;
+}
+
+const actions = [
+  { id: "document", label: "Rédiger un document", icon: FileText, path: "/app/documents" },
+  { id: "email", label: "Composer un email", icon: Mail, path: "/app/email" },
+  { id: "search", label: "Rechercher une info", icon: Search, path: "/app/search" },
 ];
 
 // ── Speech Recognition: see src/speech-recognition.d.ts ──
@@ -60,7 +113,10 @@ function formatRelativeDate(dateStr: string): string {
 
 export function SearchPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // ── Stream state from persistent context (survives navigation) ──
   const {
@@ -72,7 +128,10 @@ export function SearchPage() {
     sendMessage,
     loadConversation,
     resetConversation,
+    conversationId,
   } = useSearchStream();
+  const searchViewCtx = useSearchView();
+  const setSearchHome = searchViewCtx?.setSearchHome;
 
   // ── Local UI state (resets on unmount — that's fine) ──
   const [query, setQuery] = useState("");
@@ -80,6 +139,12 @@ export function SearchPage() {
   const [isRecording, setIsRecording] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [forceListView, setForceListView] = useState(false);
+  const [addToFolderTarget, setAddToFolderTarget] = useState<{
+    itemType: "document" | "email_thread" | "conversation";
+    itemId: string;
+    itemTitle?: string;
+  } | null>(null);
+  const [folderCreateOpen, setFolderCreateOpen] = useState(false);
 
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -173,6 +238,31 @@ export function SearchPage() {
     queryFn: assistantsApi.list,
   });
 
+  // Fetch documents for activity list
+  const { data: documents = [] } = useQuery({
+    queryKey: ["workspace-documents"],
+    queryFn: () => workspaceDocumentsApi.list(),
+    staleTime: 30_000,
+  });
+
+  // Fetch folders for Dossiers section
+  const { data: folders = [] } = useQuery({
+    queryKey: ["folders"],
+    queryFn: () => foldersApi.list(),
+  });
+
+  const folderCreateMutation = useMutation({
+    mutationFn: (name: string) => foldersApi.create({ name }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["folders"] });
+      toast({ title: "Dossier créé" });
+      setFolderCreateOpen(false);
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de créer le dossier." });
+    },
+  });
+
   // Fetch conversations for ALL assistants (unified history)
   const [allConversations, setAllConversations] = useState<
     Array<{
@@ -203,6 +293,76 @@ export function SearchPage() {
   useEffect(() => {
     fetchAllConversations();
   }, [fetchAllConversations]);
+
+  // Build unified history (documents + emails + conversations) for "Documents récents"
+  const historyItems = useMemo<HistoryItem[]>(() => {
+    const items: HistoryItem[] = [];
+    for (const doc of documents) {
+      items.push({
+        id: `doc-${doc.id}`,
+        type: "document",
+        title: doc.title || "Sans titre",
+        subtitle: DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type,
+        date: formatRelativeDate(doc.updated_at),
+        sortDate: new Date(doc.updated_at).getTime(),
+        status: doc.status,
+        path: `/app/documents/${doc.id}`,
+        folderItemType: "document",
+        folderItemId: doc.id,
+      });
+    }
+    for (const email of MOCK_EMAILS) {
+      items.push({
+        id: `email-${email.subject}`,
+        type: "email",
+        title: email.subject,
+        subtitle: `À : ${email.to}`,
+        date: formatRelativeDate(email.date),
+        sortDate: new Date(email.date).getTime(),
+        status: email.status,
+        path: "/app/email",
+        // Pas de folderItemId : emails mock sans thread_key réel
+      });
+    }
+    for (const convo of allConversations) {
+      items.push({
+        id: `convo-${convo.id}`,
+        type: "conversation",
+        title: convo.title || "Nouvelle discussion",
+        subtitle: convo.assistant.name,
+        date: formatRelativeDate(convo.last_message_at),
+        sortDate: new Date(convo.last_message_at).getTime(),
+        status: `${convo.message_count} msg`,
+        path: `/app/search?assistant=${convo.assistant.id}&conversation=${convo.id}`,
+        folderItemType: "conversation",
+        folderItemId: convo.id,
+      });
+    }
+    items.sort((a, b) => b.sortDate - a.sortDate);
+    return items;
+  }, [documents, allConversations]);
+
+  const typeIcon = (type: HistoryItem["type"]) => {
+    switch (type) {
+      case "document":
+        return <FileEdit className="h-4 w-4 text-blue-500" />;
+      case "email":
+        return <Send className="h-4 w-4 text-emerald-500" />;
+      case "conversation":
+        return <MessageSquare className="h-4 w-4 text-violet-500" />;
+    }
+  };
+
+  const typeBg = (type: HistoryItem["type"]) => {
+    switch (type) {
+      case "document":
+        return "bg-blue-500/10";
+      case "email":
+        return "bg-emerald-500/10";
+      case "conversation":
+        return "bg-violet-500/10";
+    }
+  };
 
   // Auto-select first assistant (only if context doesn't already have one)
   useEffect(() => {
@@ -330,6 +490,12 @@ export function SearchPage() {
   const selectedAssistant = assistants.find((a: Assistant) => a.id === selectedAssistantId);
   const hasConversation = messages.length > 0 && !forceListView;
 
+  // Sync search home state for wallpaper in AppLayout
+  useEffect(() => {
+    setSearchHome?.(!hasConversation);
+    return () => setSearchHome?.(true);
+  }, [hasConversation, setSearchHome]);
+
   const handleCopy = useCallback((messageId: string, content: string) => {
     navigator.clipboard.writeText(content);
     setCopiedMessageId(messageId);
@@ -383,6 +549,24 @@ export function SearchPage() {
                 {selectedAssistant.name}
               </Badge>
             )}
+            {conversationId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto shrink-0 gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAddToFolderTarget({
+                    itemType: "conversation",
+                    itemId: conversationId,
+                    itemTitle: conversationTitle ?? undefined,
+                  });
+                }}
+              >
+                <FolderPlus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Ranger dans un dossier</span>
+              </Button>
+            )}
           </div>
         ) : (
           /* Normal header */
@@ -410,161 +594,242 @@ export function SearchPage() {
 
       {/* ── Content ── */}
       {!hasConversation ? (
-        /* ═══ List view: search bar + history cards ═══ */
-        <div className="flex-1 overflow-auto bg-surface">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            {/* Search hero */}
-            <div className="pt-12 pb-6 text-center space-y-3">
-              <div className="mx-auto w-14 h-14 rounded-lg bg-accent flex items-center justify-center">
-                <Search className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-display text-xl font-semibold text-foreground">
-                  Interrogez vos sources
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-                  Posez une question en langage naturel. L'IA cherchera dans vos
-                  documents et sources connectées.
+        /* ═══ Vue accueil : design identique au dashboard ═══ */
+        <div className="flex flex-col min-h-full animate-fade-in overflow-auto">
+          {/* Hero — fond mer, prompt centré (identique dashboard) */}
+          <div className="flex-1 flex items-center justify-center px-6 py-16 md:py-24">
+            <div className="max-w-2xl w-full space-y-10 text-center">
+              <div className="space-y-3">
+                <h1 className="font-display text-3xl md:text-4xl font-bold text-white tracking-tight">
+                  Que souhaitez-vous faire ?
+                </h1>
+                <p className="text-sm text-white/90 md:text-base">
+                  Décrivez votre besoin ci-dessous ou choisissez une action rapide.
                 </p>
               </div>
-              {selectedAssistant && (
-                <div className="flex justify-center gap-2">
-                  {selectedAssistant.collection_ids.length > 0 && (
-                    <Badge variant="outline" className="gap-1">
-                      <FileText className="h-3 w-3" />
-                      {selectedAssistant.collection_ids.length} collection{selectedAssistant.collection_ids.length > 1 ? "s" : ""}
-                    </Badge>
-                  )}
-                  {selectedAssistant.integration_ids.length > 0 && (
-                    <Badge variant="outline" className="gap-1">
-                      <Plug className="h-3 w-3" />
-                      {selectedAssistant.integration_ids.length} connecteur{selectedAssistant.integration_ids.length > 1 ? "s" : ""}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
 
-            {/* Search input */}
-            <div className="sticky top-0 z-10 bg-surface pb-4">
-              <div className="relative">
-                <input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                  placeholder="Rechercher dans vos sources..."
-                  className="w-full text-sm bg-card border border-border rounded-lg px-4 py-4 pr-24 outline-none focus:ring-4 focus:ring-ring/15 focus:border-ring/35 text-foreground placeholder:text-muted-foreground shadow-soft transition-colors"
-                  disabled={isSearching}
-                  autoFocus
-                />
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={toggleRecording}
+              {/* Prompt bar — style dashboard */}
+              <div className="space-y-2">
+                <p className="text-xs text-white/80 font-medium uppercase tracking-wider">
+                  Décrivez votre besoin
+                </p>
+                <div className="relative">
+                  <textarea
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey && query.trim()) {
+                        e.preventDefault();
+                        handleSearch();
+                      }
+                    }}
+                    rows={3}
+                    placeholder="Ex : Rédige un email de relance pour le client TechCo concernant le devis en attente…"
+                    className="w-full text-sm bg-card/95 backdrop-blur-sm border border-border rounded-[var(--radius)] px-5 py-4 pr-28 outline-none focus:ring-4 focus:ring-ring/15 focus:border-ring/35 text-foreground placeholder:text-muted-foreground shadow-soft resize-none leading-relaxed transition-colors"
                     disabled={isSearching}
-                    className={cn(
-                      "inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors",
-                      isRecording
-                        ? "bg-destructive text-destructive-foreground animate-pulse"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    )}
-                    title={isRecording ? "Arrêter la dictée" : "Dicter"}
-                  >
-                    {isRecording ? (
-                      <MicOff className="h-3.5 w-3.5" />
-                    ) : (
-                      <Mic className="h-4 w-4" />
-                    )}
-                  </button>
-                  <Button
-                    variant="premium"
-                    size="icon"
-                    className="h-9 w-9 rounded-full"
-                    onClick={handleSearch}
-                    disabled={!query.trim() || isSearching || !selectedAssistantId}
-                  >
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Send className="h-4 w-4" />
-                    )}
-                  </Button>
+                  />
+                  <div className="absolute right-3 bottom-3 flex items-center gap-1.5">
+                    <button
+                      onClick={toggleRecording}
+                      className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                        isRecording
+                          ? "bg-destructive text-destructive-foreground animate-pulse"
+                          : "bg-muted hover:bg-accent/20 text-muted-foreground hover:text-foreground"
+                      )}
+                      title={isRecording ? "Arrêter la dictée" : "Dicter"}
+                    >
+                      {isRecording ? (
+                        <MicOff className="h-4 w-4" />
+                      ) : (
+                        <Mic className="h-4 w-4" />
+                      )}
+                    </button>
+                    <Button
+                      variant="premium"
+                      size="icon"
+                      className="h-10 w-10 rounded-full"
+                      disabled={!query.trim() || isSearching || !selectedAssistantId}
+                      onClick={handleSearch}
+                    >
+                      {isSearching ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <SendHorizontal className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Suggestions */}
-            <div className="space-y-2 pb-6">
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">
-                Suggestions
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {suggestions.map((s) => (
+              {/* Quick actions — style dashboard */}
+              <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                {actions.map((a) => (
                   <button
-                    key={s}
-                    onClick={() => setQuery(s)}
-                    className="text-left text-sm px-4 py-3 rounded-lg bg-card border border-border hover:border-primary/30 hover:shadow-soft transition-all text-foreground"
+                    key={a.id}
+                    onClick={() => navigate(a.path)}
+                    className="group inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-muted/50 hover:bg-accent/30 border border-transparent hover:border-primary/20 transition-all"
                   >
-                    {s}
+                    <a.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                    <span className="text-muted-foreground group-hover:text-foreground">
+                      {a.label}
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* ── History cards ── */}
-            {allConversations.length > 0 && (
-              <div className="pb-8">
+          {/* Partie blanche : Dossiers + Documents récents */}
+          <div className="flex-shrink-0 mt-auto px-6 py-6 md:py-8 border-t border-border bg-white">
+            <div className="max-w-3xl mx-auto space-y-8">
+              {/* Section Dossiers */}
+              <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="h-px flex-1 bg-border" />
                   <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    <Clock className="h-3.5 w-3.5" />
-                    Recherches récentes
+                    <Folder className="h-3.5 w-3.5" />
+                    Dossiers
                   </div>
                   <div className="h-px flex-1 bg-border" />
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {allConversations.map((conv) => {
-                    const emoji = getAssistantEmoji(conv.assistant);
-                    return (
-                      <button
-                        key={conv.id}
-                        onClick={() => handleLoadConversation(conv.id, conv.assistant.id, conv.title)}
-                        className="group flex flex-col text-left p-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all"
-                      >
-                        <div className="flex items-start gap-3 mb-3">
-                          <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                            {emoji ? (
-                              <span className="text-sm">{emoji}</span>
-                            ) : (
-                              <MessageSquare className="h-4 w-4 text-violet-500" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground line-clamp-2 leading-snug">
-                              {conv.title}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-auto min-w-0">
-                          <span className="text-[11px] text-muted-foreground truncate">
-                            {conv.assistant.name}
-                          </span>
-                          <span className="text-muted-foreground/30 shrink-0">·</span>
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0 whitespace-nowrap">
-                            {conv.message_count} msg
-                          </Badge>
-                          <span className="ml-auto text-[11px] text-muted-foreground shrink-0 whitespace-nowrap">
-                            {formatRelativeDate(conv.last_message_at)}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="flex flex-wrap items-center gap-2">
+                  {folders.map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSearchParams((p) => {
+                        const n = new URLSearchParams(p);
+                        n.set("folder", f.id);
+                        return n;
+                      })}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-sm font-medium text-foreground"
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: f.color || "var(--muted)" }}
+                      />
+                      {f.name}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setFolderCreateOpen(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border hover:border-primary/30 hover:bg-accent/20 transition-all text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Nouveau dossier
+                  </button>
                 </div>
               </div>
-            )}
+
+              {/* Section Documents récents / Activité récente */}
+              {historyItems.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-px flex-1 bg-border" />
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      <Clock className="h-3.5 w-3.5" />
+                      Documents récents
+                    </div>
+                    <div className="h-px flex-1 bg-border" />
+                  </div>
+                  <div className="space-y-1.5">
+                    {historyItems.slice(0, 15).map((item) => (
+                      <div
+                        key={item.id}
+                        className="group flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-card/95 backdrop-blur-sm border border-border hover:shadow-soft hover:border-primary/20 transition-all"
+                      >
+                        <button
+                          onClick={() => {
+                            if (item.type === "conversation") {
+                              const convId = item.id.replace("convo-", "");
+                              const match = item.path.match(/assistant=([^&]+)/);
+                              const assistantId = match?.[1];
+                              const assistant = assistants.find((a: Assistant) => a.id === assistantId);
+                              if (assistant) {
+                                handleLoadConversation(convId, assistant.id, item.title);
+                              }
+                            } else {
+                              navigate(item.path);
+                            }
+                          }}
+                          className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-lg ${typeBg(item.type)} flex items-center justify-center shrink-0`}
+                          >
+                            {typeIcon(item.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-foreground truncate">
+                              {item.title}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {item.subtitle}
+                            </div>
+                          </div>
+                          {item.status && (
+                            <Badge variant="outline" className="shrink-0 text-[10px] hidden sm:inline-flex">
+                              {item.status}
+                            </Badge>
+                          )}
+                          <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:block">
+                            {item.date}
+                          </span>
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </button>
+                        {item.folderItemId && item.folderItemType && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem
+                                onClick={() =>
+                                  setAddToFolderTarget({
+                                    itemType: item.folderItemType!,
+                                    itemId: item.folderItemId!,
+                                    itemTitle: item.title,
+                                  })
+                                }
+                              >
+                                <FolderPlus className="h-4 w-4 mr-2" />
+                                Ajouter à un dossier
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
+
+          <FolderCreateDialog
+            open={folderCreateOpen}
+            onOpenChange={setFolderCreateOpen}
+            onSubmit={(name) => folderCreateMutation.mutateAsync(name).then(() => undefined)}
+            mode="create"
+          />
+
+          {searchParams.get("folder") && (
+            <FolderDetailPanel
+              folderId={searchParams.get("folder")!}
+              onClose={() => setSearchParams((p) => {
+                const n = new URLSearchParams(p);
+                n.delete("folder");
+                return n;
+              })}
+            />
+          )}
         </div>
       ) : (
         /* ═══ Conversation view ═══ */
@@ -744,6 +1009,15 @@ export function SearchPage() {
           </div>
         </>
       )}
+
+      <AddToFolderDialog
+        open={!!addToFolderTarget}
+        onOpenChange={(open) => !open && setAddToFolderTarget(null)}
+        itemType={addToFolderTarget?.itemType ?? "conversation"}
+        itemId={addToFolderTarget?.itemId ?? ""}
+        itemTitle={addToFolderTarget?.itemTitle}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
+      />
     </div>
   );
 }

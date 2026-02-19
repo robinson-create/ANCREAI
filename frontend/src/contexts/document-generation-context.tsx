@@ -191,6 +191,13 @@ export function DocumentGenerationProvider({
 
         await workspaceDocumentsApi.patchContent(docId, modelToSend)
 
+        // Générer un titre résumé à partir du contenu (au lieu du prompt)
+        try {
+          await workspaceDocumentsApi.suggestTitle(docId)
+        } catch (titleErr) {
+          console.warn("[doc-gen] Title suggestion failed:", titleErr)
+        }
+
         queryClient.invalidateQueries({ queryKey: ["workspace-documents"] })
         queryClient.invalidateQueries({ queryKey: ["workspace-document", docId] })
       } catch (err) {

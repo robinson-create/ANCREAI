@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,7 @@ import { mailApi } from "@/api/mail";
 import { settingsApi } from "@/api/settings";
 import type { MailThreadSummary, MailMessage, MailDraft } from "@/api/mail";
 import type { Assistant } from "@/types";
+import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
 
 interface EmailAttachment {
   id: string;
@@ -135,6 +136,9 @@ export const EmailComposer = () => {
   const [, setSendingClientId] = useState<string | null>(null);
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // ── Add to folder ──
+  const [addToFolderTarget, setAddToFolderTarget] = useState<{ threadKey: string; subject: string } | null>(null);
 
   // ── Shared state ──
   const [isRecording, setIsRecording] = useState(false);
@@ -795,6 +799,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
   };
 
   return (
+    <>
     <div className="flex flex-col h-full">
       {/* ── Header with breadcrumb ── */}
       <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-surface-elevated shrink-0 flex-wrap">
@@ -1208,29 +1213,51 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                   const senderName = thread.participants?.[0]?.name || thread.participants?.[0]?.email || "?";
                   const initials = senderName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
                   return (
-                    <button
+                    <div
                       key={thread.thread_key}
-                      onClick={() => { setSelectedThread(thread); setSelectedMessage(null); setReplying(false); }}
                       className="group flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
                     >
-                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 font-display font-semibold text-xs text-foreground">
-                        {initials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground truncate">{senderName}</span>
-                          {thread.message_count > 1 && (
-                            <span className="text-[10px] text-muted-foreground">({thread.message_count})</span>
-                          )}
+                      <button
+                        onClick={() => { setSelectedThread(thread); setSelectedMessage(null); setReplying(false); }}
+                        className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                      >
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 font-display font-semibold text-xs text-foreground">
+                          {initials}
                         </div>
-                        <div className="text-sm text-foreground truncate">{thread.subject || "(sans objet)"}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5 truncate">{thread.snippet}</div>
-                      </div>
-                      <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
-                        {formatDate(thread.last_date)}
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-foreground truncate">{senderName}</span>
+                            {thread.message_count > 1 && (
+                              <span className="text-[10px] text-muted-foreground">({thread.message_count})</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-foreground truncate">{thread.subject || "(sans objet)"}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">{thread.snippet}</div>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                          {formatDate(thread.last_date)}
+                        </div>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          <DropdownMenuItem onClick={() => setAddToFolderTarget({ threadKey: thread.thread_key, subject: thread.subject || "(sans objet)" })}>
+                            <FolderPlus className="h-4 w-4 mr-2" />
+                            Ajouter à un dossier
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   );
                 })}
               </div>
@@ -1747,7 +1774,18 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
         </Dialog>
       </div>
     </div>
+
+    <AddToFolderDialog
+      open={!!addToFolderTarget}
+      onOpenChange={(open) => !open && setAddToFolderTarget(null)}
+      itemType="email_thread"
+      itemId={addToFolderTarget?.threadKey ?? ""}
+      itemTitle={addToFolderTarget?.subject}
+      onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
+    />
+  </>
   );
 };
+
 
 export default EmailComposer;

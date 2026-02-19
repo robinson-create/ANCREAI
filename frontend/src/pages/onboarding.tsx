@@ -364,7 +364,7 @@ export function OnboardingPage() {
       if (data.checkout_url) {
         window.location.href = data.checkout_url;
       } else {
-        navigate("/app");
+        navigate("/app/search");
       }
     },
     onError: () => {

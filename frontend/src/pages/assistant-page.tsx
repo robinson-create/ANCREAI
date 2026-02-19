@@ -252,7 +252,7 @@ const AssistantPage = () => {
         <div className="text-center space-y-3">
           <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
           <p className="text-muted-foreground">Assistant introuvable</p>
-          <Button variant="outline" onClick={() => navigate("/app")}>
+          <Button variant="outline" onClick={() => navigate("/app/search")}>
             Retour à l'accueil
           </Button>
         </div>

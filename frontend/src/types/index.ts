@@ -268,3 +268,41 @@ export interface AiActionResponse {
   sources: DocSource[]
   message: string
 }
+
+// Folder types
+export interface Folder {
+  id: string
+  name: string
+  description: string | null
+  color: string | null
+  item_counts: { conversation: number; document: number; email_thread: number }
+  created_at: string
+  updated_at: string
+}
+
+export interface FolderItem {
+  id: string
+  item_type: "conversation" | "document" | "email_thread"
+  item_id: string
+  title: string
+  subtitle: string | null
+  date: string
+  added_at: string
+}
+
+export interface FolderCreate {
+  name: string
+  description?: string | null
+  color?: string | null
+}
+
+export interface FolderUpdate {
+  name?: string
+  description?: string | null
+  color?: string | null
+}
+
+export interface FolderItemAdd {
+  item_type: "conversation" | "document" | "email_thread"
+  item_id: string
+}

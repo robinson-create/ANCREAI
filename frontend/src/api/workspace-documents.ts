@@ -123,6 +123,13 @@ export const workspaceDocumentsApi = {
     return data
   },
 
+  suggestTitle: async (id: string): Promise<WorkspaceDocument> => {
+    const { data } = await apiClient.post<WorkspaceDocument>(
+      `/workspace-documents/${id}/ai/suggest-title`
+    )
+    return data
+  },
+
   exportPdf: async (id: string): Promise<{ url: string }> => {
     const { data } = await apiClient.post<{ url: string }>(
       `/workspace-documents/${id}/export/pdf`

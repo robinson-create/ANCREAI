@@ -5,6 +5,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner"
 import { AuthTokenProvider } from "@/hooks/use-auth-token"
 import { SearchStreamProvider } from "@/contexts/search-stream"
 import { DocumentGenerationProvider } from "@/contexts/document-generation-context"
+import { SearchViewProvider } from "@/contexts/search-view-context"
 
 // Layouts
 import { PublicLayout } from "@/components/layout/public-layout"
@@ -47,7 +48,7 @@ function App() {
                   routing="path"
                   path="/login"
                   signUpUrl="/signup"
-                  afterSignInUrl="/app"
+                  afterSignInUrl="/app/search"
                 />
               </div>
             }
@@ -60,7 +61,7 @@ function App() {
                   routing="path"
                   path="/signup"
                   signInUrl="/login"
-                  afterSignUpUrl="/app"
+                  afterSignUpUrl="/app/search"
                 />
               </div>
             }
@@ -83,13 +84,15 @@ function App() {
             <ProtectedRoute>
               <SearchStreamProvider>
                 <DocumentGenerationProvider>
-                  <NewAppLayout />
+                  <SearchViewProvider>
+                    <NewAppLayout />
+                  </SearchViewProvider>
                 </DocumentGenerationProvider>
               </SearchStreamProvider>
             </ProtectedRoute>
           }
         >
-          <Route path="/app" element={<DashboardPage />} />
+          <Route path="/app" element={<Navigate to="/app/search" replace />} />
           <Route path="/app/assistants" element={<AssistantsPage />} />
           {/* Redirect old chat route to assistant config page */}
           <Route path="/app/assistants/:id" element={<Navigate to="/app/assistants" replace />} />
