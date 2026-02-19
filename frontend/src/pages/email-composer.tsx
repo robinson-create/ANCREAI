@@ -20,7 +20,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { assistantsApi } from "@/api/assistants";
 import { chatApi } from "@/api/chat";
@@ -86,6 +86,7 @@ function stripHtmlToText(html: string): string {
 
 export const EmailComposer = () => {
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -294,6 +295,38 @@ export const EmailComposer = () => {
       window.history.replaceState({}, "");
     }
   }, [location.state]);
+
+  // Load email draft bundle from chat suggestion
+  useEffect(() => {
+    const bundleId = searchParams.get("bundle");
+    if (!bundleId) return;
+
+    console.log("[Analytics] email_bundle_loading", { bundle_id: bundleId });
+
+    mailApi
+      .getBundle(bundleId)
+      .then((bundle) => {
+        setComposing(true);
+        if (bundle.subject) setComposeSubject(bundle.subject);
+        if (bundle.body_draft) setComposeBody(bundle.body_draft);
+        if (bundle.tone) {
+          setComposeInstruction(`Ton : ${bundle.tone}`);
+        }
+        console.log("[Analytics] email_bundle_loaded", { bundle_id: bundleId });
+        // Clear the bundle param to avoid re-fetching
+        searchParams.delete("bundle");
+        setSearchParams(searchParams, { replace: true });
+      })
+      .catch((err) => {
+        console.error("[Analytics] email_bundle_load_failed", { bundle_id: bundleId, error: err });
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger le brouillon suggéré.",
+          variant: "destructive",
+        });
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Polling cleanup on unmount ──
   useEffect(() => {

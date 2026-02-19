@@ -72,6 +72,7 @@ async def _run_llm_producer(
                 conversation_history=history,
                 integrations=integrations_data,
                 db=retrieval_db,
+                conversation_id=conversation_id,
             ):
                 if event.event == "token":
                     full_response += event.data
@@ -210,6 +211,7 @@ async def chat(
         conversation_history=history,
         integrations=integrations_data or None,
         db=db,
+        conversation_id=conversation_id,
     )
 
     # Save user message

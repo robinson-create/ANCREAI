@@ -114,6 +114,18 @@ export interface MailDraft {
   updated_at: string
 }
 
+export interface EmailDraftBundle {
+  id: string
+  tenant_id: string
+  conversation_id: string | null
+  subject: string | null
+  body_draft: string | null
+  tone: string | null
+  reason: string | null
+  citations: Record<string, unknown>[] | null
+  created_at: string
+}
+
 // ── API ──
 
 export const mailApi = {
@@ -225,5 +237,13 @@ export const mailApi = {
 
   deleteDraft: async (draftId: string): Promise<void> => {
     await apiClient.delete(`/mail/drafts/${draftId}`)
+  },
+
+  // Email Draft Bundles (chat → email suggestion)
+  getBundle: async (bundleId: string): Promise<EmailDraftBundle> => {
+    const response = await apiClient.get<EmailDraftBundle>(
+      `/mail/bundles/${bundleId}`
+    )
+    return response.data
   },
 }

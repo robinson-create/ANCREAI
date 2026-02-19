@@ -157,3 +157,31 @@ class MailDraftRead(BaseModel):
     instruction: str | None
     created_at: datetime
     updated_at: datetime
+
+
+# ── Email Draft Bundles (chat → email suggestion) ──
+
+
+class EmailDraftBundleCreate(BaseModel):
+    """Created internally by the suggestEmail tool handler."""
+
+    conversation_id: UUID | None = None
+    subject: str | None = None
+    body_draft: str | None = None
+    tone: str | None = None
+    reason: str | None = None
+    citations: list[dict] | None = None
+
+
+class EmailDraftBundleRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    conversation_id: UUID | None = None
+    subject: str | None = None
+    body_draft: str | None = None
+    tone: str | None = None
+    reason: str | None = None
+    citations: list[dict] | None = None
+    created_at: datetime

@@ -108,6 +108,17 @@ export const calendarConnectCtaSchema = z.object({
 export type CalendarConnectCtaPayload = z.infer<typeof calendarConnectCtaSchema>
 
 // ---------------------------------------------------------------------------
+// Email Suggestion
+// ---------------------------------------------------------------------------
+export const emailSuggestionSchema = z.object({
+  bundle_id: z.string(),
+  subject: z.string(),
+  reason: z.string(),
+  tone: z.enum(["formal", "friendly", "neutral"]),
+})
+export type EmailSuggestionPayload = z.infer<typeof emailSuggestionSchema>
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 export const blockSchemas = {
@@ -119,4 +130,5 @@ export const blockSchemas = {
   calendar_event_card: calendarEventCardSchema,
   calendar_event_choices: calendarEventChoicesSchema,
   calendar_connect_cta: calendarConnectCtaSchema,
+  email_suggestion: emailSuggestionSchema,
 } as const

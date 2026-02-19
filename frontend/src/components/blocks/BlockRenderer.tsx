@@ -9,6 +9,7 @@ import { ErrorBlock } from "./ErrorBlock"
 import { CalendarEventCard } from "./calendar/CalendarEventCard"
 import { CalendarEventChoices } from "./calendar/CalendarEventChoices"
 import { CalendarConnectProviderCTA } from "./calendar/CalendarConnectProviderCTA"
+import { EmailSuggestionBlock } from "./EmailSuggestionBlock"
 
 const blockComponents = {
   kpi_cards: KpiCards,
@@ -19,6 +20,7 @@ const blockComponents = {
   calendar_event_card: CalendarEventCard,
   calendar_event_choices: CalendarEventChoices,
   calendar_connect_cta: CalendarConnectProviderCTA,
+  email_suggestion: EmailSuggestionBlock,
 } as const
 
 type RenderableBlockType = keyof typeof blockComponents

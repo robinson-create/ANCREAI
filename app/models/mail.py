@@ -6,6 +6,7 @@ Tables:
 - mail_drafts: Local drafts from the email composer (not synced from provider)
 - mail_sync_state: Incremental sync cursors per account
 - mail_send_requests: Outbox with idempotency for reliable sending
+- email_draft_bundles: Server-side context bundles for chat-to-email suggestions
 """
 
 from __future__ import annotations
@@ -331,3 +332,38 @@ class MailSendRequest(Base):
         "MailAccount", back_populates="send_requests"
     )
     in_reply_to: Mapped["MailMessage | None"] = relationship("MailMessage")
+
+
+class EmailDraftBundle(Base):
+    """Server-side context bundle for chat-to-email suggestions.
+
+    Created by the suggestEmail tool handler during chat.
+    Retrieved by the email composer to hydrate the compose form.
+    """
+
+    __tablename__ = "email_draft_bundles"
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    conversation_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    subject: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    body_draft: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tone: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="formal | friendly | neutral"
+    )
+    reason: Mapped[str | None] = mapped_column(
+        Text, nullable=True, comment="Why the email was suggested"
+    )
+    citations: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

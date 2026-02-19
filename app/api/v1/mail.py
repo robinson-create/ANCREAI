@@ -17,8 +17,16 @@ from sqlalchemy.orm import selectinload
 from app.deps import CurrentUser, DbSession
 from app.integrations.nango.client import nango_client
 from app.integrations.nango.models import NangoConnection, assistant_integrations
-from app.models.mail import MailAccount, MailDraft, MailMessage, MailSendRequest, MailSyncState
+from app.models.mail import (
+    EmailDraftBundle,
+    MailAccount,
+    MailDraft,
+    MailMessage,
+    MailSendRequest,
+    MailSyncState,
+)
 from app.schemas.mail import (
+    EmailDraftBundleRead,
     MailAccountConnectResponse,
     MailAccountRead,
     MailAccountSmtpConnectRequest,
@@ -740,3 +748,28 @@ async def trigger_sync(
     await pool.close()
 
     return {"status": "sync_queued"}
+
+
+# ── Email Draft Bundles ──────────────────────────────────────────────
+
+
+@router.get("/bundles/{bundle_id}", response_model=EmailDraftBundleRead)
+async def get_email_bundle(
+    bundle_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Fetch an email draft bundle by ID (tenant-scoped)."""
+    result = await db.execute(
+        select(EmailDraftBundle).where(
+            EmailDraftBundle.id == bundle_id,
+            EmailDraftBundle.tenant_id == user.tenant_id,
+        )
+    )
+    bundle = result.scalar_one_or_none()
+    if not bundle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email draft bundle not found",
+        )
+    return bundle

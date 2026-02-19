@@ -143,7 +143,46 @@ BLOCK_TOOL_CALLOUT = {
     },
 }
 
-BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT]
+BLOCK_TOOL_EMAIL_SUGGESTION = {
+    "type": "function",
+    "function": {
+        "name": "suggestEmail",
+        "strict": True,
+        "description": (
+            "Suggère la création d'un email à partir de ta réponse. "
+            "Utilise cet outil quand ta réponse contient un contenu actionable "
+            "que l'utilisateur pourrait vouloir envoyer par email : suivi, "
+            "synthèse, relance, proposition commerciale, compte-rendu, "
+            "ou quand l'utilisateur demande explicitement d'écrire/envoyer un email."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "Sujet proposé pour l'email",
+                },
+                "body_draft": {
+                    "type": "string",
+                    "description": "Brouillon du corps de l'email (texte brut, sans markdown ni HTML)",
+                },
+                "tone": {
+                    "type": "string",
+                    "enum": ["formal", "friendly", "neutral"],
+                    "description": "Ton suggéré pour l'email",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Explication courte de pourquoi cet email est suggéré (ex: 'Cette synthèse peut être envoyée à vos collaborateurs')",
+                },
+            },
+            "required": ["subject", "body_draft", "tone", "reason"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT, BLOCK_TOOL_EMAIL_SUGGESTION]
 
 # Map tool function name → block type for the frontend
 _TOOL_NAME_TO_BLOCK_TYPE = {
@@ -151,6 +190,7 @@ _TOOL_NAME_TO_BLOCK_TYPE = {
     "renderTable": "table",
     "renderSteps": "steps",
     "renderCallout": "callout",
+    "suggestEmail": "email_suggestion",
 }
 
 # Map calendar tool names → block types for the frontend
@@ -163,11 +203,12 @@ _CALENDAR_TOOL_TO_BLOCK_TYPE = {
 
 BLOCK_INSTRUCTIONS = """
 INSTRUCTIONS POUR LES BLOCS VISUELS :
-Tu disposes de 4 outils pour afficher des blocs structurés dans le chat :
+Tu disposes de 5 outils pour afficher des blocs structurés dans le chat :
 - `renderKpiCards` → quand ta réponse contient des KPIs, métriques ou chiffres comparatifs
 - `renderSteps` → quand ta réponse décrit un plan, une procédure ou des étapes séquentielles
 - `renderTable` → quand ta réponse compare des options ou présente des données tabulaires
 - `renderCallout` → quand tu dois alerter, avertir ou mettre en avant un point important
+- `suggestEmail` → quand ta réponse contient un contenu actionable que l'utilisateur pourrait envoyer par email (synthèse, suivi, relance, proposition, compte-rendu). Propose uniquement quand le contenu se prête clairement à un envoi par email. Ne suggère PAS pour des réponses purement informatives ou des questions.
 Garde le texte concis et complémentaire ; mets la structure dans les blocs.
 Ne pas inventer de données manquantes ; si une valeur n'est pas disponible, indique "N/A".
 Tu peux combiner texte et plusieurs blocs dans une même réponse.
@@ -306,6 +347,42 @@ Remember to cite your sources (document name and page number) when using informa
                 })
         return blocks
 
+    @staticmethod
+    async def _handle_suggest_email(
+        args: dict,
+        tenant_id: UUID,
+        conversation_id: UUID | None = None,
+        citations: list | None = None,
+    ) -> dict:
+        """Create an EmailDraftBundle in DB and return the block payload."""
+        from app.database import async_session_maker
+        from app.models.mail import EmailDraftBundle
+
+        bundle = EmailDraftBundle(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            subject=args.get("subject"),
+            body_draft=args.get("body_draft"),
+            tone=args.get("tone"),
+            reason=args.get("reason"),
+            citations=citations,
+        )
+        async with async_session_maker() as db:
+            db.add(bundle)
+            await db.commit()
+            bundle_id = bundle.id
+
+        return {
+            "id": str(uuid4()),
+            "type": "email_suggestion",
+            "payload": {
+                "bundle_id": str(bundle_id),
+                "subject": args.get("subject", ""),
+                "reason": args.get("reason", ""),
+                "tone": args.get("tone", "neutral"),
+            },
+        }
+
     async def chat(
         self,
         message: str,
@@ -315,6 +392,7 @@ Remember to cite your sources (document name and page number) when using informa
         conversation_history: list[dict] | None = None,
         integrations: list[dict] | None = None,
         db: AsyncSession | None = None,
+        conversation_id: UUID | None = None,
     ) -> tuple[str, list[Citation], list[dict], int, int]:
         """
         Non-streaming chat with tool-calling loop.
@@ -378,7 +456,27 @@ Remember to cite your sources (document name and page number) when using informa
 
             has_integration_calls = False
             for tc in assistant_msg.tool_calls:
-                if tc.function.name in _TOOL_NAME_TO_BLOCK_TYPE:
+                if tc.function.name == "suggestEmail":
+                    # Email suggestion: create bundle in DB, emit block with bundle_id
+                    try:
+                        args = json.loads(tc.function.arguments)
+                    except json.JSONDecodeError:
+                        args = {}
+                    try:
+                        block = await self._handle_suggest_email(
+                            args=args,
+                            tenant_id=tenant_id,
+                            conversation_id=conversation_id,
+                        )
+                        all_blocks.append(block)
+                    except Exception as e:
+                        logger.warning("Failed to create email bundle: %s", e)
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": "OK",
+                    })
+                elif tc.function.name in _TOOL_NAME_TO_BLOCK_TYPE:
                     # Block tools: parse as UI blocks, send dummy response
                     block_type = _TOOL_NAME_TO_BLOCK_TYPE.get(tc.function.name)
                     try:
@@ -494,6 +592,7 @@ Remember to cite your sources (document name and page number) when using informa
         conversation_history: list[dict] | None = None,
         integrations: list[dict] | None = None,
         db: AsyncSession | None = None,
+        conversation_id: UUID | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         """
         Streaming chat with SSE events and tool-calling loop.
@@ -606,7 +705,32 @@ Remember to cite your sources (document name and page number) when using informa
                 })
 
                 for tc_data in tool_calls_acc.values():
-                    if tc_data["name"] in _TOOL_NAME_TO_BLOCK_TYPE:
+                    if tc_data["name"] == "suggestEmail":
+                        # Email suggestion: create bundle in DB, emit block with bundle_id
+                        try:
+                            args = json.loads(tc_data["arguments"])
+                        except json.JSONDecodeError:
+                            args = {}
+                        try:
+                            block = await self._handle_suggest_email(
+                                args=args,
+                                tenant_id=tenant_id,
+                                conversation_id=conversation_id,
+                            )
+                            yield ChatStreamEvent(event="block", data=block)
+                        except Exception as e:
+                            logger.warning("Failed to create email bundle: %s", e)
+                            yield ChatStreamEvent(event="block", data={
+                                "id": str(uuid4()),
+                                "type": "error",
+                                "payload": {"message": f"Email suggestion failed: {e}"},
+                            })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_data["id"],
+                            "content": "OK",
+                        })
+                    elif tc_data["name"] in _TOOL_NAME_TO_BLOCK_TYPE:
                         # Block/UI tool: emit as block
                         block_type = _TOOL_NAME_TO_BLOCK_TYPE.get(tc_data["name"])
                         try:
