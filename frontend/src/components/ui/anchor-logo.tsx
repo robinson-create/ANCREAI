@@ -1,5 +1,6 @@
 import { Anchor } from "lucide-react"
 import { cn } from "@/lib/utils"
+import ancreLogo from "@/assets/ancre-logo.png"
 
 interface AnchorLogoProps {
   streaming?: boolean
@@ -8,9 +9,9 @@ interface AnchorLogoProps {
 }
 
 const sizeClasses = {
-  sm: "h-7 w-7 rounded-md",
-  md: "h-9 w-9 rounded-lg",
-  lg: "h-12 w-12 rounded-lg",
+  sm: "h-6 w-6",
+  md: "h-8 w-8",
+  lg: "h-10 w-10",
 }
 
 const iconSizes = {
@@ -27,9 +28,9 @@ export function AnchorLogo({
   return (
     <div
       className={cn(
-        "relative border border-border bg-card overflow-hidden shrink-0",
+        "relative overflow-hidden shrink-0",
         sizeClasses[size],
-        streaming ? "anchor-streaming" : "",
+        streaming ? "anchor-streaming rounded-lg border border-border bg-card" : "",
         className
       )}
       aria-label="Ancre"
@@ -37,9 +38,17 @@ export function AnchorLogo({
       {/* Sheen overlay during streaming */}
       {streaming && <div className="absolute inset-0 anchor-sheen" />}
 
-      {/* Anchor icon */}
+      {/* Logo image (or fallback icon during streaming) */}
       <div className="relative grid h-full w-full place-items-center">
-        <Anchor className={cn(iconSizes[size], "text-primary")} />
+        {streaming ? (
+          <Anchor className={cn(iconSizes[size], "text-primary")} />
+        ) : (
+          <img
+            src={ancreLogo}
+            alt="Ancre"
+            className="h-full w-full object-contain"
+          />
+        )}
       </div>
 
       {/* Blue dot indicator during streaming */}
