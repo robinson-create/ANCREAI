@@ -164,7 +164,7 @@ BLOCK_TOOL_EMAIL_SUGGESTION = {
                 },
                 "body_draft": {
                     "type": "string",
-                    "description": "Brouillon du corps de l'email (texte brut, sans markdown ni HTML)",
+                    "description": "Brouillon du corps de l'email en HTML compatible Gmail. Utilise uniquement : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href>. Pas de CSS, pas de Markdown. Commence directement par la salutation.",
                 },
                 "tone": {
                     "type": "string",

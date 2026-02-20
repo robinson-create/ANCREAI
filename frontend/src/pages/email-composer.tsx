@@ -1,6 +1,7 @@
 import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { marked } from "marked";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -308,7 +309,7 @@ export const EmailComposer = () => {
       .then((bundle) => {
         setComposing(true);
         if (bundle.subject) setComposeSubject(bundle.subject);
-        if (bundle.body_draft) setComposeBody(bundle.body_draft);
+        if (bundle.body_draft) setComposeBody(marked.parse(bundle.body_draft) as string);
         if (bundle.tone) {
           setComposeInstruction(`Ton : ${bundle.tone}`);
         }
