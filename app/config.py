@@ -96,6 +96,12 @@ class Settings(BaseSettings):
     hybrid_rrf_k: int = 60
     postgres_fts_config: str = "simple"
 
+    # Minimum relevance score for chunks to be included in context.
+    # Chunks below this threshold are discarded to avoid polluting
+    # the LLM with irrelevant documents (e.g. bike parts for a salary question).
+    # Uses rerank_score > fused_score > score, whichever is available.
+    rag_min_relevance_score: float = 0.15
+
     # --- Rerank (remote) ---
     rerank_enabled: bool = True
     rerank_provider: str = "hf_endpoint"  # hf_endpoint | mistral

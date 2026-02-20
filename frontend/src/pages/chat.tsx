@@ -224,6 +224,11 @@ export function ChatPage() {
       abortFnRef.current()
       abortFnRef.current = null
     }
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.isStreaming ? { ...msg, isStreaming: false } : msg
+      )
+    )
     setIsRunning(false)
   }, [])
 
@@ -745,9 +750,20 @@ export function ChatPage() {
                 />
                 <div className="absolute bottom-2 right-2 flex items-center gap-1">
                   <DictationToggle />
-                  <ComposerPrimitive.Send className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                    <Send className="h-4 w-4" />
-                  </ComposerPrimitive.Send>
+                  {isRunning ? (
+                    <button
+                      type="button"
+                      onClick={onCancel}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      title="Arrêter la génération"
+                    >
+                      <Square className="h-3.5 w-3.5 fill-current" />
+                    </button>
+                  ) : (
+                    <ComposerPrimitive.Send className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                      <Send className="h-4 w-4" />
+                    </ComposerPrimitive.Send>
+                  )}
                 </div>
               </ComposerPrimitive.Root>
               <p className="mt-2 text-center text-xs text-muted-foreground">

@@ -248,6 +248,17 @@ class ChatService:
         self.model = settings.llm_model
         self.max_tokens = settings.llm_max_tokens
 
+    @staticmethod
+    def _filter_relevant_chunks(
+        chunks: list[RetrievedChunk],
+        min_score: float,
+    ) -> list[RetrievedChunk]:
+        """Filter out chunks below the relevance threshold."""
+        return [
+            c for c in chunks
+            if (c.rerank_score or c.fused_score or c.score) >= min_score
+        ]
+
     def _build_system_prompt(
         self,
         custom_prompt: str | None,
@@ -256,20 +267,23 @@ class ChatService:
     ) -> str:
         """Build system prompt with context and integration instructions."""
         base_prompt = custom_prompt or (
-            "You are a helpful assistant that answers questions based on the provided context. "
-            "Always cite your sources by mentioning the document name and page number when available. "
-            "If you cannot find the answer in the context, say so clearly."
+            "Tu es un assistant utile et polyvalent. "
+            "Tu peux répondre à des questions générales grâce à tes connaissances, "
+            "ET utiliser le contexte documentaire fourni quand il est pertinent. "
+            "Si un contexte documentaire est fourni, utilise-le UNIQUEMENT s'il est pertinent par rapport à la question. "
+            "Si le contexte n'a aucun rapport avec la question, ignore-le complètement et réponds avec tes propres connaissances. "
+            "Quand tu utilises des informations du contexte, cite tes sources (nom du document et numéro de page)."
         )
 
         if context:
             prompt = f"""{base_prompt}
 
-Use the following context to answer questions. Cite the sources when you use information from them.
+Le contexte documentaire suivant est disponible. Utilise-le UNIQUEMENT s'il est pertinent pour répondre à la question. S'il n'a aucun rapport, ignore-le et réponds normalement.
 
-CONTEXT:
+CONTEXTE :
 {context}
 
-Remember to cite your sources (document name and page number) when using information from the context."""
+Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises des informations du contexte."""
         else:
             prompt = base_prompt
 
@@ -409,6 +423,9 @@ Remember to cite your sources (document name and page number) when using informa
                 collection_ids=collection_ids,
                 db=db,
             )
+
+        # Filter out low-relevance chunks to avoid polluting general questions
+        chunks = self._filter_relevant_chunks(chunks, settings.rag_min_relevance_score)
 
         # Build context
         context = self.retrieval.build_context(chunks) if chunks else ""
@@ -609,6 +626,9 @@ Remember to cite your sources (document name and page number) when using informa
                 collection_ids=collection_ids,
                 db=db,
             )
+
+        # Filter out low-relevance chunks to avoid polluting general questions
+        chunks = self._filter_relevant_chunks(chunks, settings.rag_min_relevance_score)
 
         # Build context
         context = self.retrieval.build_context(chunks) if chunks else ""
