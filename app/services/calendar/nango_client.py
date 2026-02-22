@@ -19,8 +19,8 @@ class NangoCalendarClient:
     """Client for calendar operations via Nango proxy"""
 
     def __init__(self):
-        self.nango_url = settings.NANGO_URL
-        self.nango_secret = settings.NANGO_SECRET_KEY
+        self.nango_url = settings.nango_url
+        self.nango_secret = settings.nango_secret_key
         self.timeout = 30.0
 
     # ========== Public API ==========
