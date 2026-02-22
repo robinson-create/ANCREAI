@@ -59,6 +59,14 @@ export interface MailMessage extends MailMessageBrief {
   updated_at: string
 }
 
+export interface MailContactSummary {
+  email: string
+  name: string | null
+  total_threads: number
+  unread_count: number
+  last_date: string
+}
+
 export interface MailThreadSummary {
   thread_key: string
   subject: string | null
@@ -66,6 +74,7 @@ export interface MailThreadSummary {
   snippet: string | null
   message_count: number
   participants: MailRecipient[]
+  has_unread: boolean
 }
 
 export interface MailThreadDetail {
@@ -177,9 +186,16 @@ export const mailApi = {
   },
 
   // Threads & Messages
+  listContacts: async (accountId: string): Promise<MailContactSummary[]> => {
+    const response = await apiClient.get<MailContactSummary[]>("/mail/contacts", {
+      params: { account_id: accountId },
+    })
+    return response.data
+  },
+
   listThreads: async (
     accountId: string,
-    params?: { limit?: number; offset?: number }
+    params?: { limit?: number; offset?: number; contact_email?: string }
   ): Promise<MailThreadSummary[]> => {
     const response = await apiClient.get<MailThreadSummary[]>("/mail/threads", {
       params: { account_id: accountId, ...params },

@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Calendar, Filter, Plus, Link as LinkIcon } from 'lucide-react';
+import { Calendar, Filter, Link as LinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -127,10 +127,6 @@ export function CalendarPage() {
           >
             <Filter className="w-4 h-4 mr-2" />
             Filtres
-          </Button>
-          <Button size="sm" onClick={() => setShowCreateDialog(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            Nouvel événement
           </Button>
         </div>
       </div>

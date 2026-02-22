@@ -30,6 +30,7 @@ from app.schemas.mail import (
     MailAccountConnectResponse,
     MailAccountRead,
     MailAccountSmtpConnectRequest,
+    MailContactSummary,
     MailDraftCreate,
     MailDraftRead,
     MailMessageRead,
@@ -595,7 +596,73 @@ async def delete_draft(
         await db.flush()
 
 
-# ── Threads & Messages ──────────────────────────────────────────────
+# ── Contacts & Threads & Messages ──────────────────────────────────────────────
+
+
+@router.get("/contacts", response_model=list[MailContactSummary])
+async def list_contacts(
+    user: CurrentUser,
+    db: DbSession,
+    account_id: UUID = Query(...),
+):
+    """List contacts (senders/recipients) grouped by email with thread counts."""
+    tenant_id = user.tenant_id
+
+    # Verify account ownership
+    await _get_account_for_tenant(db, account_id, tenant_id)
+
+    # Complex SQL query with CTE to group by contact
+    from sqlalchemy import text
+
+    query = text("""
+        WITH thread_contacts AS (
+            SELECT
+                COALESCE(provider_thread_id, provider_message_id) as thread_key,
+                CASE
+                    WHEN is_sent THEN (to_recipients->0->>'email')
+                    ELSE (sender->>'email')
+                END as contact_email,
+                CASE
+                    WHEN is_sent THEN NULLIF(to_recipients->0->>'name', '')
+                    ELSE NULLIF(sender->>'name', '')
+                END as contact_name,
+                MAX(date) as thread_date,
+                BOOL_OR(NOT is_read) as has_unread
+            FROM mail_messages
+            WHERE mail_account_id = :account_id
+              AND tenant_id = :tenant_id
+              AND is_draft = false
+            GROUP BY thread_key, contact_email, contact_name
+        )
+        SELECT
+            contact_email as email,
+            contact_name as name,
+            COUNT(*) as total_threads,
+            SUM(CASE WHEN has_unread THEN 1 ELSE 0 END) as unread_count,
+            MAX(thread_date) as last_date
+        FROM thread_contacts
+        WHERE contact_email IS NOT NULL
+        GROUP BY contact_email, contact_name
+        ORDER BY last_date DESC
+    """)
+
+    result = await db.execute(
+        query, {"account_id": str(account_id), "tenant_id": str(tenant_id)}
+    )
+    rows = result.fetchall()
+
+    contacts = [
+        MailContactSummary(
+            email=row.email,
+            name=row.name,
+            total_threads=row.total_threads,
+            unread_count=row.unread_count,
+            last_date=row.last_date,
+        )
+        for row in rows
+    ]
+
+    return contacts
 
 
 @router.get("/threads", response_model=list[MailThreadSummary])
@@ -603,10 +670,11 @@ async def list_threads(
     user: CurrentUser,
     db: DbSession,
     account_id: UUID = Query(...),
+    contact_email: str | None = Query(None),
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
 ):
-    """List email threads for a mail account."""
+    """List email threads for a mail account, optionally filtered by contact."""
     tenant_id = user.tenant_id
 
     # Verify account ownership
@@ -624,12 +692,34 @@ async def list_threads(
             sa_func.max(MailMessage.date).label("last_date"),
             sa_func.max(MailMessage.snippet).label("snippet"),
             sa_func.count(MailMessage.id).label("message_count"),
+            sa_func.bool_or(~MailMessage.is_read).label("has_unread"),
         )
         .where(
             MailMessage.mail_account_id == account_id,
             MailMessage.tenant_id == tenant_id,
+            MailMessage.is_draft == False,
         )
-        .group_by(thread_key)
+    )
+
+    # Filter by contact if provided
+    if contact_email:
+        from sqlalchemy import or_
+
+        stmt = stmt.where(
+            or_(
+                MailMessage.sender["email"].astext == contact_email,
+                MailMessage.to_recipients.op("@>")(
+                    sa_func.jsonb_build_array(
+                        sa_func.jsonb_build_object(
+                            literal_column("'email'"), contact_email
+                        )
+                    )
+                ),
+            )
+        )
+
+    stmt = (
+        stmt.group_by(thread_key)
         .order_by(sa_func.max(MailMessage.date).desc())
         .limit(limit)
         .offset(offset)
@@ -665,6 +755,7 @@ async def list_threads(
                 snippet=row.snippet,
                 message_count=row.message_count,
                 participants=participants,
+                has_unread=row.has_unread,
             )
         )
 

@@ -28,7 +28,7 @@ import { chatApi } from "@/api/chat";
 import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import { mailApi } from "@/api/mail";
 import { settingsApi } from "@/api/settings";
-import type { MailThreadSummary, MailMessage, MailDraft } from "@/api/mail";
+import type { MailThreadSummary, MailMessage, MailDraft, MailContactSummary } from "@/api/mail";
 import type { Assistant } from "@/types";
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
 
@@ -142,6 +142,10 @@ export const EmailComposer = () => {
   // ── Tabs ──
   const [activeTab, setActiveTab] = useState<"inbox" | "drafts">("inbox");
 
+  // ── Navigation level (contacts → threads → detail) ──
+  const [viewLevel, setViewLevel] = useState<"contacts" | "threads" | "detail">("contacts");
+  const [selectedContact, setSelectedContact] = useState<MailContactSummary | null>(null);
+
   // ── Add to folder ──
   const [addToFolderTarget, setAddToFolderTarget] = useState<{ threadKey: string; subject: string } | null>(null);
 
@@ -201,10 +205,20 @@ export const EmailComposer = () => {
     }
   }, [accounts, selectedAccountId]);
 
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ["mail-contacts", selectedAccountId],
+    queryFn: () => mailApi.listContacts(selectedAccountId!),
+    enabled: !!selectedAccountId && activeTab === "inbox",
+    staleTime: 15_000,
+  });
+
   const { data: threads = [], isLoading: threadsLoading } = useQuery({
-    queryKey: ["mail-threads", selectedAccountId],
-    queryFn: () => mailApi.listThreads(selectedAccountId!, { limit: 50 }),
-    enabled: !!selectedAccountId,
+    queryKey: ["mail-threads", selectedAccountId, selectedContact?.email],
+    queryFn: () => mailApi.listThreads(selectedAccountId!, {
+      limit: 50,
+      contact_email: selectedContact?.email || undefined,
+    }),
+    enabled: !!selectedAccountId && viewLevel === "threads",
     staleTime: 15_000,
   });
 
@@ -795,6 +809,8 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
   useEffect(() => {
     const resetTs = (location.state as { reset?: number } | null)?.reset;
     if (resetTs) {
+      setViewLevel("contacts");
+      setSelectedContact(null);
       setSelectedThread(null);
       setSelectedMessage(null);
       setReplying(false);
@@ -809,9 +825,35 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [(location.state as { reset?: number } | null)?.reset]);
 
+  // ── Navigation handlers ──
+  const handleContactClick = (contact: MailContactSummary) => {
+    setSelectedContact(contact);
+    setViewLevel("threads");
+  };
+
+  const handleThreadClick = (thread: MailThreadSummary) => {
+    setSelectedThread(thread);
+    setViewLevel("detail");
+    setSelectedMessage(null);
+    setReplying(false);
+  };
+
+  const handleBackToThreads = () => {
+    setSelectedThread(null);
+    setViewLevel("threads");
+    setReplying(false);
+  };
+
+  const handleBackToContacts = () => {
+    setSelectedContact(null);
+    setSelectedThread(null);
+    setViewLevel("contacts");
+    setReplying(false);
+  };
+
   // ── Determine current view ──
   const isThreadList = !composing && !selectedThread;
-  const isThreadDetail = !composing && !!selectedThread;
+  const isThreadDetail = !composing && !!selectedThread && viewLevel === "detail";
 
   const connectedAccount = accounts.find((a) => a.id === selectedAccountId && a.status === "connected");
   const hasAccount = !!connectedAccount;
@@ -1337,66 +1379,90 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                       </div>
                     );
                   })}
-                {/* Inbox tab */}
-                {activeTab === "inbox" &&
-                  filteredThreads.map((thread) => {
-                  const senderName = thread.participants?.[0]?.name || thread.participants?.[0]?.email || "?";
-                  const initials = senderName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
+                {/* Inbox tab - Vue contacts (level 1) */}
+                {activeTab === "inbox" && viewLevel === "contacts" &&
+                  contacts.map((contact) => {
+                  const initials = (contact.name || contact.email)
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase();
                   return (
-                    <div
-                      key={thread.thread_key}
-                      className="group flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
+                    <button
+                      key={contact.email}
+                      onClick={() => handleContactClick(contact)}
+                      className="flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
                     >
-                      <button
-                        onClick={() => { setSelectedThread(thread); setSelectedMessage(null); setReplying(false); }}
-                        className="flex items-center gap-4 flex-1 min-w-0 text-left"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 font-display font-semibold text-xs text-foreground">
-                          {initials}
+                      <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0 font-display font-semibold text-xs text-foreground">
+                        {initials}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {contact.name || contact.email}
                         </div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {contact.email}
+                        </div>
+                      </div>
+                      {contact.unread_count > 0 && (
+                        <Badge variant="default" className="shrink-0">
+                          {contact.unread_count}
+                        </Badge>
+                      )}
+                      <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                        {formatDate(contact.last_date)}
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                })}
+
+                {/* Inbox tab - Vue threads d'un contact (level 2) */}
+                {activeTab === "inbox" && viewLevel === "threads" && selectedContact && (
+                  <>
+                    <Button variant="ghost" onClick={handleBackToContacts} className="mb-2">
+                      ← {selectedContact.name || selectedContact.email}
+                    </Button>
+                    {threads.map((thread) => (
+                      <button
+                        key={thread.thread_key}
+                        onClick={() => handleThreadClick(thread)}
+                        className="flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
+                      >
+                        {thread.has_unread && (
+                          <div className="w-2 h-2 rounded-full bg-primary shrink-0" />
+                        )}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground truncate">{senderName}</span>
-                            {thread.message_count > 1 && (
-                              <span className="text-[10px] text-muted-foreground">({thread.message_count})</span>
-                            )}
+                          <div className="text-sm font-medium text-foreground truncate">
+                            {thread.subject || "(sans objet)"}
                           </div>
-                          <div className="text-sm text-foreground truncate">{thread.subject || "(sans objet)"}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5 truncate">{thread.snippet}</div>
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {thread.snippet}
+                          </div>
                         </div>
                         <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
                           {formatDate(thread.last_date)}
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                       </button>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                          <DropdownMenuItem onClick={() => setAddToFolderTarget({ threadKey: thread.thread_key, subject: thread.subject || "(sans objet)" })}>
-                            <FolderPlus className="h-4 w-4 mr-2" />
-                            Ajouter à un dossier
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  );
-                })}
+                    ))}
+                  </>
+                )}
               </div>
             )}
 
-            {!threadsLoading && activeTab === "inbox" && filteredThreads.length === 0 && (
+            {!loadingContacts && !threadsLoading && activeTab === "inbox" && viewLevel === "contacts" && contacts.length === 0 && (
               <div className="text-center py-16 text-sm text-muted-foreground">
                 <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
-                {search ? "Aucun thread trouvé" : "Aucun email synchronisé"}
+                Aucun email synchronisé
+              </div>
+            )}
+
+            {!threadsLoading && activeTab === "inbox" && viewLevel === "threads" && threads.length === 0 && (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                Aucune conversation avec ce contact
               </div>
             )}
 
@@ -1412,6 +1478,11 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
         {/* ═══ Thread detail ═══ */}
         {isThreadDetail && selectedThread && (
           <div className="w-full max-w-2xl lg:max-w-4xl xl:max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-4 animate-fade-in">
+            {/* Back button to threads list */}
+            <Button variant="ghost" onClick={handleBackToThreads} className="mb-2 gap-2">
+              ← Retour aux conversations
+            </Button>
+
             {threadDetail?.messages.map((msg, idx) => {
               const senderInitials = (msg.sender?.name || msg.sender?.email || "?").split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
               const isLast = idx === (threadDetail.messages.length - 1);

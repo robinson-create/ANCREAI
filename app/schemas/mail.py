@@ -76,6 +76,19 @@ class MailMessageRead(MailMessageBrief):
     updated_at: datetime
 
 
+# ── Contacts ──
+
+
+class MailContactSummary(BaseModel):
+    """Contact summary grouped by sender/recipient."""
+
+    email: str
+    name: str | None = None
+    total_threads: int
+    unread_count: int
+    last_date: datetime
+
+
 # ── Threads ──
 
 
@@ -88,6 +101,7 @@ class MailThreadSummary(BaseModel):
     snippet: str | None = None
     message_count: int
     participants: list[dict]
+    has_unread: bool = False
 
 
 class MailThreadRead(BaseModel):
