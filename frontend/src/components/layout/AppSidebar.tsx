@@ -14,6 +14,7 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ import { useToast } from "@/hooks/use-toast";
 const mainNav = [
   { label: "Recherche", icon: Search, path: "/app/search" },
   { label: "Emails", icon: Mail, path: "/app/email" },
+  { label: "Contacts", icon: Users, path: "/app/contacts" },
   { label: "Documents", icon: FileText, path: "/app/documents" },
   { label: "Calendrier", icon: Calendar, path: "/app/calendar" },
 ];

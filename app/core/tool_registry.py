@@ -235,11 +235,13 @@ def register_builtin_tools() -> None:
     _register_calendar_tools()
     _register_integration_tools()
 
+    from app.core.tools.contact_tools import register_contact_tools
     from app.core.tools.delegation_tool import register_delegation_tool
     from app.core.tools.document_tool import register_document_tool
     from app.core.tools.retrieval_tool import register_retrieval_tool
     from app.core.tools.web_search_tool import register_web_search_tool
     register_retrieval_tool()
+    register_contact_tools()
     register_document_tool()
     register_web_search_tool()
     register_delegation_tool()

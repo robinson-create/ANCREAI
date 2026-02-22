@@ -9,6 +9,7 @@ from app.api.v1 import (
     calendar,
     chat,
     collections,
+    contacts,
     copilotkit,
     dictation,
     documents,
@@ -40,6 +41,7 @@ api_router.include_router(integrations.router, prefix="/integrations", tags=["in
 api_router.include_router(dictation.router, prefix="/dictation", tags=["dictation"])
 api_router.include_router(workspace_documents.router, prefix="/workspace-documents", tags=["workspace-documents"])
 api_router.include_router(mail.router, prefix="/mail", tags=["mail"])
+api_router.include_router(contacts.router, prefix="/contacts", tags=["contacts"])
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboarding"])
 api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 api_router.include_router(folders.router, prefix="/folders", tags=["folders"])

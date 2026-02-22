@@ -30,6 +30,8 @@ import { DocumentWorkspace } from "@/pages/document-workspace"
 import { SearchPage } from "@/pages/search"
 import { OnboardingPage } from "@/pages/onboarding"
 import { CalendarPage } from "@/pages/CalendarPage"
+import { ContactsPage } from "@/pages/ContactsPage"
+import { ContactDetailPage } from "@/pages/ContactDetailPage"
 
 function App() {
   return (
@@ -104,6 +106,8 @@ function App() {
           <Route path="/app/workspace" element={<DocumentWorkspace />} />
           <Route path="/app/email" element={<EmailComposer />} />
           <Route path="/app/search" element={<SearchPage />} />
+          <Route path="/app/contacts" element={<ContactsPage />} />
+          <Route path="/app/contacts/:contactId" element={<ContactDetailPage />} />
           <Route path="/app/calendar" element={<CalendarPage />} />
         </Route>
       </Routes>

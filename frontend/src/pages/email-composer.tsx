@@ -28,6 +28,7 @@ import { chatApi } from "@/api/chat";
 import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import { mailApi } from "@/api/mail";
 import { settingsApi } from "@/api/settings";
+import { contactsApi } from "@/api/contacts";
 import type { MailThreadSummary, MailMessage, MailDraft, MailContactSummary } from "@/api/mail";
 import type { Assistant } from "@/types";
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
@@ -188,6 +189,52 @@ export const EmailComposer = () => {
       }
     };
   }, []);
+
+  // ── Contact prefill from URL param ──
+  useEffect(() => {
+    const contactId = searchParams.get("contact");
+    if (contactId && !composing) {
+      // Fetch contact and prefill recipient
+      contactsApi
+        .get(contactId)
+        .then((contact) => {
+          const fullName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
+          const recipient = fullName ? `${fullName} <${contact.primary_email}>` : contact.primary_email;
+
+          setComposeTo(recipient);
+          setComposing(true);
+
+          // Optional: Set instruction based on contact type for tone adaptation
+          const toneMap: Record<string, string> = {
+            client: "professionnel et chaleureux",
+            prospect: "engageant et informatif",
+            partenaire: "collaboratif",
+            fournisseur: "courtois et direct",
+            candidat: "accueillant et encourageant",
+            interne: "décontracté et efficace",
+            autre: "neutre",
+          };
+          const suggestedTone = toneMap[contact.contact_type] || "neutre";
+
+          // Prefill instruction hint (user can override)
+          if (!composeInstruction) {
+            setComposeInstruction(`Ton suggéré: ${suggestedTone}`);
+          }
+
+          // Remove contact param to avoid re-triggering
+          searchParams.delete("contact");
+          setSearchParams(searchParams, { replace: true });
+        })
+        .catch((err) => {
+          console.error("Failed to fetch contact for prefill:", err);
+          toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de charger le contact.",
+          });
+        });
+    }
+  }, [searchParams, composing, composeInstruction, setSearchParams, toast]);
 
   // ── Queries ──
 

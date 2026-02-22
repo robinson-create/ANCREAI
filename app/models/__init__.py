@@ -17,6 +17,7 @@ from app.models.document_template import DocumentTemplate
 from app.models.mail import MailAccount, MailMessage, MailSyncState, MailSendRequest
 from app.models.web_source import WebSource
 from app.models.folder import Folder, FolderItem
+from app.models.contact import Contact, Company, ContactUpdate, ContactEmailLink
 from app.models.agent_run import AgentRun, AgentRunStatus, AgentProfile
 from app.models.user_memory import UserMemory
 from app.models.assistant_memory import AssistantMemory
@@ -51,6 +52,10 @@ __all__ = [
     "WebSource",
     "Folder",
     "FolderItem",
+    "Contact",
+    "Company",
+    "ContactUpdate",
+    "ContactEmailLink",
     "AgentRun",
     "AgentRunStatus",
     "AgentProfile",

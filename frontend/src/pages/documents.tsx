@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useNavigate, useLocation } from "react-router-dom"
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import {
   Plus,
   FileEdit,
@@ -60,6 +60,7 @@ import {
 } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
+import { contactsApi } from "@/api/contacts"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
 import type { WorkspaceDocumentListItem } from "@/types"
@@ -103,6 +104,7 @@ function detectDocType(text: string): string {
 export function DocumentsPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const docGen = useDocumentGeneration()
@@ -112,6 +114,7 @@ export function DocumentsPage() {
   const [newDocType, setNewDocType] = useState("generic")
   const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
   const promptHandled = useRef(false)
+  const contactPrefillHandled = useRef(false)
 
   const { data: documents, isLoading, error } = useQuery({
     queryKey: ["workspace-documents", statusFilter],
@@ -192,6 +195,42 @@ export function DocumentsPage() {
         })
     }
   }, [location.state, navigate, queryClient, toast])
+
+  // Contact prefill from URL param
+  useEffect(() => {
+    const contactId = searchParams.get("contact")
+    if (contactId && !contactPrefillHandled.current) {
+      contactPrefillHandled.current = true
+      contactsApi
+        .get(contactId)
+        .then((contact) => {
+          const fullName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim()
+          const contactName = fullName || contact.primary_email
+
+          // Prefill title with contact name
+          setNewTitle(`Document pour ${contactName}`)
+          setNewDocType("generic")
+          setIsCreateOpen(true)
+
+          // Remove contact param
+          searchParams.delete("contact")
+          setSearchParams(searchParams, { replace: true })
+
+          toast({
+            title: "Nouveau document",
+            description: `Créez un document pour ${contactName}`,
+          })
+        })
+        .catch((err) => {
+          console.error("Failed to fetch contact for document prefill:", err)
+          toast({
+            variant: "destructive",
+            title: "Erreur",
+            description: "Impossible de charger le contact.",
+          })
+        })
+    }
+  }, [searchParams, setSearchParams, toast])
 
   return (
     <div className="container py-8 space-y-6">

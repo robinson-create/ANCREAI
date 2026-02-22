@@ -264,6 +264,7 @@ class ChatService:
         custom_prompt: str | None,
         context: str,
         integrations: list[dict] | None = None,
+        contact_context: str = "",
     ) -> str:
         """Build system prompt with context and integration instructions."""
         base_prompt = custom_prompt or (
@@ -286,6 +287,10 @@ CONTEXTE :
 Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises des informations du contexte."""
         else:
             prompt = base_prompt
+
+        # Add contact context if available
+        if contact_context:
+            prompt += contact_context
 
         prompt += BLOCK_INSTRUCTIONS
         prompt += CALENDAR_SYSTEM_PROMPT_ADDITION
@@ -633,6 +638,14 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         # Build context
         context = self.retrieval.build_context(chunks) if chunks else ""
 
+        # Build contact context
+        contact_context = ""
+        if db:
+            from app.services.contact_context import contact_context_service
+            contact_context = await contact_context_service.get_contact_context_for_message(
+                db, tenant_id, message
+            )
+
         # Yield start event with chunk info
         yield ChatStreamEvent(
             event="start",
@@ -643,7 +656,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         messages = []
         messages.append({
             "role": "system",
-            "content": self._build_system_prompt(system_prompt, context, integrations),
+            "content": self._build_system_prompt(system_prompt, context, integrations, contact_context),
         })
 
         if conversation_history:
