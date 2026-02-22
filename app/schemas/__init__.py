@@ -17,10 +17,26 @@ from app.schemas.mail import (
     MailSendResponse,
     MailSendStatusRead,
 )
+from app.schemas.memory import (
+    UserMemoryRead,
+    UserMemoryUpdate,
+    AssistantMemoryRead,
+    AssistantMemoryUpdate,
+    ConversationContextRead,
+    ConversationContextUpdate,
+    Fact,
+)
+from app.schemas.agent_run import AgentRunCreate, AgentRunRead, AgentRunStatusUpdate
+from app.schemas.observability import (
+    AuditLogCreate,
+    AuditLogRead,
+    LLMTraceCreate,
+    LLMTraceRead,
+)
 
 __all__ = [
     "TenantCreate",
-    "TenantRead", 
+    "TenantRead",
     "TenantUpdate",
     "AssistantCreate",
     "AssistantRead",
@@ -44,4 +60,18 @@ __all__ = [
     "MailSendRequestCreate",
     "MailSendResponse",
     "MailSendStatusRead",
+    "UserMemoryRead",
+    "UserMemoryUpdate",
+    "AssistantMemoryRead",
+    "AssistantMemoryUpdate",
+    "ConversationContextRead",
+    "ConversationContextUpdate",
+    "Fact",
+    "AgentRunCreate",
+    "AgentRunRead",
+    "AgentRunStatusUpdate",
+    "AuditLogCreate",
+    "AuditLogRead",
+    "LLMTraceCreate",
+    "LLMTraceRead",
 ]

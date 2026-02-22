@@ -123,6 +123,22 @@ class Settings(BaseSettings):
     rerank_final_topn: int = 10
     rerank_max_passage_chars: int = 1500
 
+    # --- Web search ---
+    web_search_enabled: bool = False
+    web_search_provider: str = "brave"  # brave | serper | tavily
+    web_search_api_key: str = ""
+    web_search_topk: int = 5
+    web_search_timeout_seconds: int = 8
+    web_cache_ttl_hours: int = 24  # TTL for cached web results
+
+    # --- Agent runtime ---
+    agent_stream_ttl: int = 600  # Redis stream TTL in seconds
+    agent_stream_maxlen: int = 2000  # XTRIM approximate maxlen
+    agent_sse_heartbeat_interval: float = 15.0  # seconds between heartbeats
+    agent_sse_hard_timeout: float = 180.0  # max SSE duration (seconds)
+    agent_stuck_run_threshold: int = 600  # seconds before a run is considered stuck
+    agent_delta_batch_ms: int = 300  # batch delta events every N ms
+
 
 @lru_cache
 def get_settings() -> Settings:

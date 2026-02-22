@@ -1,0 +1,4 @@
+{"query": "Quels sont les termes du contrat de service?", "expected_chunks": ["chunk_001", "chunk_002"], "tags": ["contract"]}
+{"query": "Quel est le chiffre d'affaires du Q3?", "expected_chunks": ["chunk_010"], "tags": ["finance"]}
+{"query": "Résumé de la politique de confidentialité", "expected_answer": "La politique couvre la collecte, le traitement et la protection des données personnelles.", "tags": ["legal"]}
+{"query": "Quelles sont les conditions de résiliation?", "expected_chunks": ["chunk_020", "chunk_021"], "tags": ["contract", "legal"]}

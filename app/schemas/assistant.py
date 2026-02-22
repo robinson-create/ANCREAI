@@ -12,6 +12,7 @@ class AssistantBase(BaseModel):
     name: str
     system_prompt: str | None = None
     model: str = "mistral-medium-latest"
+    agent_profile: str = "reactive"
     settings: dict | None = None
 
 
@@ -28,6 +29,7 @@ class AssistantUpdate(BaseModel):
     name: str | None = None
     system_prompt: str | None = None
     model: str | None = None
+    agent_profile: str | None = None
     settings: dict | None = None
     collection_ids: list[UUID] | None = None
     integration_ids: list[UUID] | None = None

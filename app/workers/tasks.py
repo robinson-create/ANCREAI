@@ -780,21 +780,37 @@ async def startup(ctx: dict) -> None:
     logger.info("Worker starting up...")
     await vector_store.ensure_collection()
 
+    # Register all agent tools once at startup
+    from app.core.tool_registry import register_builtin_tools
+    register_builtin_tools()
+    logger.info("Tool registry initialized")
+
 
 async def shutdown(ctx: dict) -> None:
     """Worker shutdown hook."""
     logger.info("Worker shutting down...")
+    # Close agent stream redis if it was opened
+    stream_redis = ctx.get("stream_redis")
+    if stream_redis:
+        await stream_redis.aclose()
     await engine.dispose()
 
 
 class WorkerSettings:
     """Arq worker settings."""
 
-    functions = [process_document, crawl_website, send_email, sync_mail_account, sync_thread]
+    from app.workers.agent_tasks import run_agent, watchdog_stuck_runs
+
+    functions = [process_document, crawl_website, send_email, sync_mail_account, sync_thread, run_agent]
     cron_jobs = [
         cron(
             sync_all_mail_accounts,
             minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55},
+        ),
+        cron(
+            watchdog_stuck_runs,
+            minute={0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
+                    32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58},
         ),
     ]
     on_startup = startup

@@ -17,6 +17,12 @@ from app.models.document_template import DocumentTemplate
 from app.models.mail import MailAccount, MailMessage, MailSyncState, MailSendRequest
 from app.models.web_source import WebSource
 from app.models.folder import Folder, FolderItem
+from app.models.agent_run import AgentRun, AgentRunStatus, AgentProfile
+from app.models.user_memory import UserMemory
+from app.models.assistant_memory import AssistantMemory
+from app.models.conversation_context import ConversationContext
+from app.models.audit_log import AuditLog
+from app.models.llm_trace import LLMTrace
 
 __all__ = [
     "Tenant",
@@ -45,4 +51,12 @@ __all__ = [
     "WebSource",
     "Folder",
     "FolderItem",
+    "AgentRun",
+    "AgentRunStatus",
+    "AgentProfile",
+    "UserMemory",
+    "AssistantMemory",
+    "ConversationContext",
+    "AuditLog",
+    "LLMTrace",
 ]

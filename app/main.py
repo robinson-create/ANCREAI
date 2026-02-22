@@ -9,10 +9,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import get_settings
+from app.core.logging import setup_logging
+from app.core.middleware import ObservabilityMiddleware
 from app.database import engine
 from app.api.v1.router import api_router
 
 settings = get_settings()
+
+# Initialize structured logging before anything else
+setup_logging()
 
 
 @asynccontextmanager
@@ -24,8 +29,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(text("SELECT 1"))
     
     yield
-    
+
     # Shutdown
+    from app.core.streams import close_redis
+    await close_redis()
     await engine.dispose()
 
 
@@ -36,6 +43,9 @@ app = FastAPI(
     lifespan=lifespan,
     debug=settings.debug,
 )
+
+# Observability middleware (injects request_id, tenant_id into structlog context)
+app.add_middleware(ObservabilityMiddleware)
 
 # CORS middleware
 app.add_middleware(

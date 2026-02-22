@@ -25,13 +25,14 @@ async def retrieve_context(
     tenant_id: UUID,
     collection_ids: list[UUID] | None,
     query: str,
+    include_web: bool = False,
 ) -> list[RetrievedChunk]:
-    """Full hybrid retrieval pipeline: keyword + vector -> RRF -> rerank.
+    """Full hybrid retrieval pipeline: keyword + vector [+ web] -> RRF -> rerank.
 
     Steps:
     1) Embed query
-    2) Keyword search (Postgres FTS) + Vector search (Qdrant) in parallel
-    3) RRF merge
+    2) Keyword search + Vector search [+ Web search] in parallel
+    3) RRF merge (2 or 3 sources)
     4) Rerank (with fallback), or just take top-N from RRF
     """
     t0 = time.perf_counter()
@@ -40,7 +41,7 @@ async def retrieve_context(
     query_embedding = await embedding_service.embed_query(query)
     t_embed = time.perf_counter()
 
-    # 2) Run keyword + vector search in parallel
+    # 2) Run searches in parallel
     keyword_task = keyword_search(
         db=db,
         tenant_id=tenant_id,
@@ -56,17 +57,49 @@ async def retrieve_context(
         topk=settings.hybrid_vector_topk,
     )
 
-    keyword_results, vector_results = await asyncio.gather(keyword_task, vector_task)
+    tasks: list = [keyword_task, vector_task]
+
+    # Optional web search as third source
+    web_chunks: list[RetrievedChunk] = []
+    if include_web and settings.web_search_enabled:
+        from app.core.tools.web_search_tool import web_results_to_chunks
+        from app.services.web_search import search_web
+
+        async def _web_task() -> list[RetrievedChunk]:
+            resp = await search_web(query=query, db=db)
+            return web_results_to_chunks(resp.results)
+
+        tasks.append(_web_task())
+
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    keyword_results = results[0] if not isinstance(results[0], Exception) else []
+    vector_results = results[1] if not isinstance(results[1], Exception) else []
+    if len(results) > 2 and not isinstance(results[2], Exception):
+        web_chunks = results[2]
+
     t_search = time.perf_counter()
 
+    if isinstance(results[0], Exception):
+        logger.warning("keyword_search_failed", error=str(results[0]))
+    if isinstance(results[1], Exception):
+        logger.warning("vector_search_failed", error=str(results[1]))
+    if len(results) > 2 and isinstance(results[2], Exception):
+        logger.warning("web_search_failed", error=str(results[2]))
+
     logger.info(
-        "Hybrid search: %d keyword + %d vector results",
+        "Hybrid search: %d keyword + %d vector + %d web results",
         len(keyword_results),
         len(vector_results),
+        len(web_chunks),
     )
 
-    # 3) RRF merge
-    merged = rrf_merge(keyword_results, vector_results, k=settings.hybrid_rrf_k)
+    # 3) RRF merge (2 or 3 sources)
+    merged = rrf_merge(
+        keyword_results, vector_results,
+        k=settings.hybrid_rrf_k,
+        web_results=web_chunks or None,
+    )
     candidates = merged[: settings.rerank_max_candidates]
 
     # 4) Rerank (with fallback)

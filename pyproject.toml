@@ -44,6 +44,9 @@ dependencies = [
     # Utils
     "httpx>=0.28.0",
     "python-dotenv>=1.0.0",
+
+    # Observability
+    "structlog>=24.1.0",
     
     # Authentication & Billing
     "clerk-backend-api>=1.0.0",

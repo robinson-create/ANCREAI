@@ -2,14 +2,27 @@
 
 from fastapi import APIRouter
 
-from app.api.v1 import tenants, assistants, collections, documents, chat, usage, billing, webhooks, settings
-from app.api.v1 import copilotkit
-from app.api.v1 import integrations
-from app.api.v1 import dictation
-from app.api.v1 import workspace_documents
-from app.api.v1 import mail
-from app.api.v1 import onboarding
-from app.api.v1 import calendar, folders
+from app.api.v1 import (
+    agent_chat,
+    assistants,
+    billing,
+    calendar,
+    chat,
+    collections,
+    copilotkit,
+    dictation,
+    documents,
+    folders,
+    integrations,
+    mail,
+    onboarding,
+    settings,
+    stats,
+    tenants,
+    usage,
+    webhooks,
+    workspace_documents,
+)
 
 api_router = APIRouter()
 
@@ -30,3 +43,5 @@ api_router.include_router(mail.router, prefix="/mail", tags=["mail"])
 api_router.include_router(onboarding.router, prefix="/onboarding", tags=["onboarding"])
 api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"])
 api_router.include_router(folders.router, prefix="/folders", tags=["folders"])
+api_router.include_router(agent_chat.router, prefix="/chat", tags=["agent-chat"])
+api_router.include_router(stats.router, prefix="/stats", tags=["stats"])

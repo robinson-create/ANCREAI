@@ -37,6 +37,9 @@ class Assistant(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     system_prompt: Mapped[str | None] = mapped_column(Text)
     model: Mapped[str] = mapped_column(String(100), default="mistral-medium-latest")
+    agent_profile: Mapped[str] = mapped_column(
+        String(20), default="reactive", nullable=False,
+    )
     settings: Mapped[dict | None] = mapped_column(JSONB, default=dict)
     
     created_at: Mapped[datetime] = mapped_column(
