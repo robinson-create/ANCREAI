@@ -168,6 +168,10 @@ class MailMessage(Base):
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     is_draft: Mapped[bool] = mapped_column(Boolean, default=False)
     has_attachments: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_indexed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false",
+        comment="Whether this message has been indexed into RAG",
+    )
     raw_headers: Mapped[dict | None] = mapped_column(
         JSONB, nullable=True, comment="References, In-Reply-To for threading"
     )

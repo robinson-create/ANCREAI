@@ -25,16 +25,20 @@ class Chunk(Base):
         primary_key=True,
         default=uuid4,
     )
-    document_id: Mapped[UUID] = mapped_column(
+    document_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("documents.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
 
     # Denormalized for FTS query performance (avoids JOINs)
     tenant_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
     collection_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True))
+
+    # Multi-source support (document, email, etc.)
+    source_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
 
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -59,4 +63,4 @@ class Chunk(Base):
     )
 
     # Relationships
-    document: Mapped["Document"] = relationship("Document", back_populates="chunks")
+    document: Mapped["Document | None"] = relationship("Document", back_populates="chunks")

@@ -663,13 +663,40 @@ async def sync_mail_account(ctx: dict, account_id: str) -> dict:
         sync_state.error = None
         await db.commit()
 
+        # Index new emails into RAG
+        indexed_chunks = 0
+        try:
+            from app.services.mail.indexer import (
+                get_or_create_email_collection,
+                index_unindexed_emails,
+            )
+
+            email_collection_id = await get_or_create_email_collection(
+                db, account.tenant_id
+            )
+            indexed_chunks = await index_unindexed_emails(
+                db, account.id, account.tenant_id, email_collection_id
+            )
+            if indexed_chunks:
+                await db.commit()
+                logger.info(
+                    "Indexed %d email chunks for account %s",
+                    indexed_chunks,
+                    account_id,
+                )
+        except Exception as e:
+            logger.warning(
+                "Email RAG indexing failed for account %s: %s", account_id, e
+            )
+
         logger.info(
-            "Mail sync complete: account=%s provider=%s upserted=%d",
+            "Mail sync complete: account=%s provider=%s upserted=%d indexed_chunks=%d",
             account_id,
             account.provider,
             count,
+            indexed_chunks,
         )
-        return {"upserted": count, "cursor": sync_result.cursor}
+        return {"upserted": count, "cursor": sync_result.cursor, "indexed_chunks": indexed_chunks}
 
     except Exception as e:
         logger.exception("Mail sync failed: account=%s", account_id)

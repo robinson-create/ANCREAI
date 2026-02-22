@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
@@ -139,6 +139,9 @@ export const EmailComposer = () => {
   const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
   const [sendError, setSendError] = useState<string | null>(null);
 
+  // ── Tabs ──
+  const [activeTab, setActiveTab] = useState<"inbox" | "drafts">("inbox");
+
   // ── Add to folder ──
   const [addToFolderTarget, setAddToFolderTarget] = useState<{ threadKey: string; subject: string } | null>(null);
 
@@ -245,6 +248,21 @@ export const EmailComposer = () => {
         variant: "destructive",
         title: "Erreur",
         description: "Impossible de sauvegarder le brouillon.",
+      });
+    },
+  });
+
+  const deleteDraftMutation = useMutation({
+    mutationFn: (draftId: string) => mailApi.deleteDraft(draftId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mail-drafts"] });
+      toast({ title: "Brouillon supprimé" });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de supprimer le brouillon.",
       });
     },
   });
@@ -773,6 +791,24 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
     }
   }, [composing, composeInstruction, selectedAssistantId, isGenerating, generateComposeEmail]);
 
+  // ── Reset to inbox when sidebar "Emails" is re-clicked ──
+  useEffect(() => {
+    const resetTs = (location.state as { reset?: number } | null)?.reset;
+    if (resetTs) {
+      setSelectedThread(null);
+      setSelectedMessage(null);
+      setReplying(false);
+      setReplyBody("");
+      setReplyInstruction("");
+      setReplyAttachments([]);
+      setActiveTab("inbox");
+      if (composing) {
+        handleLeaveCompose();
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [(location.state as { reset?: number } | null)?.reset]);
+
   // ── Determine current view ──
   const isThreadList = !composing && !selectedThread;
   const isThreadDetail = !composing && !!selectedThread;
@@ -1212,6 +1248,22 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
               />
             </div>
 
+            {/* Tabs */}
+            <div className="flex items-center gap-1 border-b border-border mb-4">
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "inbox" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("inbox")}
+              >
+                Boîte de réception ({filteredThreads.length})
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "drafts" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("drafts")}
+              >
+                Brouillons ({drafts.length})
+              </button>
+            </div>
+
             {threadsLoading && (
               <div className="flex items-center justify-center py-16 text-muted-foreground">
                 <Loader2 className="h-5 w-5 animate-spin mr-2" />
@@ -1221,46 +1273,73 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
             {!threadsLoading && (
               <div className="space-y-2">
-                {/* Brouillons */}
-                {!search &&
+                {/* Brouillons tab */}
+                {activeTab === "drafts" &&
                   drafts.map((draft) => {
                     const toStr = draft.to_recipients?.[0]?.email || "(pas de destinataire)";
                     const snippet =
                       draft.body_html?.replace(/<[^>]+>/g, "").slice(0, 80) || "";
                     return (
-                      <button
+                      <div
                         key={draft.id}
-                        onClick={() => openDraft(draft)}
                         className="group flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border border-dashed hover:shadow-soft hover:border-primary/30 transition-all text-left"
                       >
-                        <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
-                          <Mail className="h-5 w-5 text-amber-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-foreground truncate">
-                              à {toStr}
-                            </span>
-                            <Badge variant="outline" className="text-[10px] shrink-0">
-                              Brouillon
-                            </Badge>
+                        <button
+                          onClick={() => openDraft(draft)}
+                          className="flex items-center gap-4 flex-1 min-w-0 text-left"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center shrink-0">
+                            <Mail className="h-5 w-5 text-amber-600" />
                           </div>
-                          <div className="text-sm text-foreground truncate">
-                            {draft.subject || "(sans objet)"}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-foreground truncate">
+                                à {toStr}
+                              </span>
+                              <Badge variant="outline" className="text-[10px] shrink-0">
+                                Brouillon
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-foreground truncate">
+                              {draft.subject || "(sans objet)"}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                              {snippet}
+                              {snippet ? "…" : ""}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                            {snippet}
-                            {snippet ? "…" : ""}
+                          <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
+                            {formatDate(draft.updated_at)}
                           </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground shrink-0 hidden sm:block">
-                          {formatDate(draft.updated_at)}
-                        </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                      </button>
+                          <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem
+                              onClick={() => deleteDraftMutation.mutate(draft.id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Supprimer
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     );
                   })}
-                {filteredThreads.map((thread) => {
+                {/* Inbox tab */}
+                {activeTab === "inbox" &&
+                  filteredThreads.map((thread) => {
                   const senderName = thread.participants?.[0]?.name || thread.participants?.[0]?.email || "?";
                   const initials = senderName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
                   return (
@@ -1314,10 +1393,17 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
               </div>
             )}
 
-            {!threadsLoading && filteredThreads.length === 0 && drafts.length === 0 && (
+            {!threadsLoading && activeTab === "inbox" && filteredThreads.length === 0 && (
               <div className="text-center py-16 text-sm text-muted-foreground">
                 <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
                 {search ? "Aucun thread trouvé" : "Aucun email synchronisé"}
+              </div>
+            )}
+
+            {!threadsLoading && activeTab === "drafts" && drafts.length === 0 && (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Mail className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                Aucun brouillon
               </div>
             )}
           </div>
