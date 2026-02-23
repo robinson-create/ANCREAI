@@ -190,6 +190,9 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
       setIsStreaming(true);
       streamingMessageIdRef.current = assistantMessageId;
 
+      // Track accumulated content to avoid stale closure on `messages`
+      let accumulatedContent = "";
+
       const abort = chatApi.stream(
         selectedAssistantId,
         {
@@ -199,6 +202,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
         },
         // onToken
         (token) => {
+          accumulatedContent += token;
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -229,12 +233,9 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
             setConversationId(response.conversationId);
           }
 
-          // Optionally notify parent of content updates
-          if (onContentUpdate) {
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role === "assistant" && lastMessage.content) {
-              onContentUpdate({ content: lastMessage.content });
-            }
+          // Notify parent of content updates with the accumulated response
+          if (onContentUpdate && accumulatedContent) {
+            onContentUpdate({ content: accumulatedContent });
           }
         },
         // onError
@@ -277,7 +278,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
 
       abortControllerRef.current = abort;
     },
-    [selectedAssistantId, conversationId, isStreaming, messages]
+    [selectedAssistantId, conversationId, isStreaming]
   );
 
   return (

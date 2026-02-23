@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2, Inbox, Clock, FileEdit, Calendar, Bold, Italic, List, ListOrdered, Link as LinkIcon, Type } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2, Inbox, Clock, FileEdit, Calendar, Bold, Italic, List, ListOrdered, Link as LinkIcon, Type, MessageSquare } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -167,6 +168,7 @@ const EmailComposerContent = () => {
   const [linkUrl, setLinkUrl] = useState("");
   const [linkText, setLinkText] = useState("");
   const [linkContext, setLinkContext] = useState<'compose' | 'reply'>('compose');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const composeBodyRef = useRef<HTMLDivElement>(null);
   const replyBodyRef = useRef<HTMLDivElement>(null);
   const isUserTypingCompose = useRef(false);
@@ -2479,12 +2481,35 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
       </div>
       {/* End of main content flex-col */}
 
-      {/* AI Assistant Sidebar - shown only when composing or replying */}
+      {/* AI Assistant Sidebar - Desktop (lg+) */}
       {(composing || replying) && (
         <EmailAssistantSidebar
-          className="w-80 hidden lg:flex"
+          className="w-80 hidden lg:flex border-l border-border"
           onDraftUpdate={handleDraftUpdate}
         />
+      )}
+
+      {/* Mobile Assistant Button + Sheet */}
+      {(composing || replying) && (
+        <div className="lg:hidden">
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button
+                size="icon"
+                variant="premium"
+                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
+              >
+                <MessageSquare className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full sm:w-96 p-0">
+              <EmailAssistantSidebar
+                className="h-full flex"
+                onDraftUpdate={handleDraftUpdate}
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
       )}
     </div>
     {/* End of flex h-full container */}

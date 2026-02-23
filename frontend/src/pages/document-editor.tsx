@@ -13,8 +13,10 @@ import {
   Send,
   Archive,
   ArchiveRestore,
+  MessageSquare,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -23,6 +25,7 @@ import { useDocumentStore } from "@/hooks/use-document-store"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { useAutosave } from "@/hooks/use-autosave"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
+import { assistantsApi } from "@/api/assistants"
 import { BlockRenderer } from "@/components/documents/BlockRenderer"
 import { DocumentCopilotActions } from "@/components/documents/DocumentCopilotActions"
 import { DocumentPreview } from "@/components/documents/DocumentPreview"
@@ -79,6 +82,7 @@ function DocumentEditorContent() {
   const [isExporting, setIsExporting] = useState(false)
   const [isPreview, setIsPreview] = useState(false)
   const [isGeneratingLocal, setIsGeneratingLocal] = useState(false)
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const docGen = useDocumentGeneration()
   const isGeneratingFromContext = id ? docGen?.generatingDocIds.has(id) ?? false : false
   const isGenerating = isGeneratingFromContext || isGeneratingLocal
@@ -86,6 +90,21 @@ function DocumentEditorContent() {
   // Document assistant context (must be called before any early returns)
   const { setSelectedAssistantId } = useDocumentAssistant();
   const [localAssistantId, setLocalAssistantId] = useState<string | null>(null);
+
+  // Fetch assistants list for the sidebar
+  const { data: assistants = [] } = useQuery({
+    queryKey: ["assistants"],
+    queryFn: assistantsApi.list,
+    staleTime: 30_000,
+  });
+
+  // Auto-select first assistant so the chat input is enabled
+  useEffect(() => {
+    const first = assistants[0];
+    if (first && !localAssistantId) {
+      setLocalAssistantId(first.id);
+    }
+  }, [assistants, localAssistantId]);
 
   // Track whether current docModel comes from an API load (skip autosave)
   const isLoadingFromApi = useRef(true)
@@ -589,16 +608,105 @@ function DocumentEditorContent() {
       {/* End of main content flex-col */}
       </div>
 
-      {/* Document Assistant Sidebar - shown only in edit mode */}
+      {/* Document Assistant Sidebar - Desktop (lg+) */}
       {!isPreview && !isReadOnly && (
         <DocumentAssistantSidebar
-          className="w-80 hidden lg:flex flex-col"
+          className="w-80 hidden lg:flex flex-col border-l border-border"
           onContentUpdate={(update) => {
-            // Optional: handle content updates from assistant
-            console.log("Content update from assistant:", update);
+            if (update.blockId) {
+              // Update existing block
+              const block = docModel?.blocks.find(b => b.id === update.blockId);
+              if (block && (block.type === "rich_text" || block.type === "clause" || block.type === "terms")) {
+                // Convert string content to TipTap JSON format
+                handleBlockChange(update.blockId, {
+                  content: {
+                    type: "doc",
+                    content: [{
+                      type: "paragraph",
+                      content: [{ type: "text", text: update.content }]
+                    }]
+                  }
+                });
+              }
+            } else {
+              // Add new rich_text block with the content
+              const newBlock: DocBlock = {
+                type: "rich_text",
+                id: generateId(),
+                label: "",
+                content: {
+                  type: "doc",
+                  content: [{
+                    type: "paragraph",
+                    content: [{ type: "text", text: update.content }]
+                  }]
+                }
+              };
+              addBlock(newBlock);
+            }
           }}
           onAddBlock={(type: DocBlockKind) => handleAddBlock(type)}
         />
+      )}
+
+      {/* Mobile Assistant Button + Sheet */}
+      {!isPreview && !isReadOnly && (
+        <div className="lg:hidden">
+          <Sheet open={isMobileSidebarOpen} onOpenChange={setIsMobileSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button
+                size="icon"
+                variant="premium"
+                className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-xl z-50"
+              >
+                <MessageSquare className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="w-full sm:w-96 p-0">
+              <DocumentAssistantSidebar
+                className="h-full flex flex-col"
+                onContentUpdate={(update) => {
+                  if (update.blockId) {
+                    // Update existing block
+                    const block = docModel?.blocks.find(b => b.id === update.blockId);
+                    if (block && (block.type === "rich_text" || block.type === "clause" || block.type === "terms")) {
+                      // Convert string content to TipTap JSON format
+                      handleBlockChange(update.blockId, {
+                        content: {
+                          type: "doc",
+                          content: [{
+                            type: "paragraph",
+                            content: [{ type: "text", text: update.content }]
+                          }]
+                        }
+                      });
+                    }
+                  } else {
+                    // Add new rich_text block with the content
+                    const newBlock: DocBlock = {
+                      type: "rich_text",
+                      id: generateId(),
+                      label: "",
+                      content: {
+                        type: "doc",
+                        content: [{
+                          type: "paragraph",
+                          content: [{ type: "text", text: update.content }]
+                        }]
+                      }
+                    };
+                    addBlock(newBlock);
+                  }
+                  setIsMobileSidebarOpen(false);
+                }}
+                onAddBlock={(type: DocBlockKind) => {
+                  handleAddBlock(type);
+                  setIsMobileSidebarOpen(false);
+                }}
+              />
+            </SheetContent>
+          </Sheet>
+        </div>
       )}
     </div>
   )
