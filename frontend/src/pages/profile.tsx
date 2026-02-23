@@ -196,67 +196,71 @@ export function ProfilePage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-surface-elevated shrink-0 flex-wrap">
+      <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-background shrink-0 flex-wrap">
         <Settings className="h-4 w-4 text-primary shrink-0 hidden sm:block" />
-        <h1 className="font-display font-semibold text-foreground text-sm sm:text-base">
+        <h1 className="font-heading font-bold text-foreground text-lg sm:text-xl">
           Réglages
         </h1>
       </div>
 
-      <div className="flex-1 overflow-auto bg-surface p-3 sm:p-5">
+      <div className="flex-1 overflow-auto bg-background p-3 sm:p-5">
         <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8">
           {/* ── Informations personnelles ── */}
-          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+          <section className="bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <User className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Informations personnelles
               </h3>
             </div>
             <div className="p-4 sm:p-5 space-y-4">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-muted-foreground font-body">
                 Ces informations sont utilisées pour personnaliser vos emails et documents.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Prénom</label>
+                  <label className="text-xs font-semibold text-muted-foreground font-body">Prénom</label>
                   <Input
                     value={firstName}
                     onChange={(e) => { setFirstName(e.target.value); setInfoDirty(true); }}
                     placeholder="Jean"
+                    className="font-body"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Nom</label>
+                  <label className="text-xs font-semibold text-muted-foreground font-body">Nom</label>
                   <Input
                     value={lastName}
                     onChange={(e) => { setLastName(e.target.value); setInfoDirty(true); }}
                     placeholder="Dupont"
+                    className="font-body"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <label className="text-xs font-semibold text-muted-foreground font-body flex items-center gap-1">
                     <Building2 className="h-3 w-3" /> Société
                   </label>
                   <Input
                     value={companyName}
                     onChange={(e) => { setCompanyName(e.target.value); setInfoDirty(true); }}
                     placeholder="Mon Entreprise SAS"
+                    className="font-body"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <label className="text-xs font-semibold text-muted-foreground font-body flex items-center gap-1">
                     <Briefcase className="h-3 w-3" /> Poste
                   </label>
                   <Input
                     value={jobTitle}
                     onChange={(e) => { setJobTitle(e.target.value); setInfoDirty(true); }}
                     placeholder="Directeur commercial"
+                    className="font-body"
                   />
                 </div>
               </div>
               <div className="flex items-center gap-2 pt-1">
-                <span className="text-xs text-muted-foreground flex-1">
+                <span className="text-xs text-muted-foreground flex-1 font-body">
                   Email : {user?.primaryEmailAddress?.emailAddress}
                 </span>
                 <Button
@@ -278,10 +282,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Connexion email ── */}
-          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+          <section className="bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <Mail className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Connexion email
               </h3>
             </div>
@@ -339,10 +343,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Signature mail ── */}
-          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+          <section className="bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <PenLine className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Signature mail
               </h3>
             </div>
@@ -384,10 +388,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Connecteurs ── */}
-          <section id="integrations" className="bg-card border border-border rounded-lg shadow-soft overflow-hidden scroll-mt-4">
+          <section id="integrations" className="bg-card border border-border rounded-xl shadow-lg overflow-hidden scroll-mt-4">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <Plug className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Connecteurs
               </h3>
               {connectedProviders.size > 0 && (
@@ -451,10 +455,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Facturation ── */}
-          <section id="billing" className="bg-card border border-border rounded-lg shadow-soft overflow-hidden scroll-mt-4">
+          <section id="billing" className="bg-card border border-border rounded-xl shadow-lg overflow-hidden scroll-mt-4">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <CreditCard className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Facturation
               </h3>
             </div>
@@ -482,10 +486,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Compte & Sécurité ── */}
-          <section className="bg-card border border-border rounded-lg shadow-soft overflow-hidden">
+          <section className="bg-card border border-border rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-border">
               <Settings className="h-4 w-4 text-primary" />
-              <h3 className="font-display font-semibold text-foreground text-sm">
+              <h3 className="font-heading font-semibold text-foreground text-base">
                 Compte & Sécurité
               </h3>
             </div>
@@ -519,10 +523,10 @@ export function ProfilePage() {
           </section>
 
           {/* ── Zone de danger ── */}
-          <section className="bg-card border border-destructive/30 rounded-lg shadow-soft overflow-hidden">
+          <section className="bg-card border border-destructive/30 rounded-xl shadow-lg overflow-hidden">
             <div className="flex items-center gap-2 px-4 sm:px-5 py-4 border-b border-destructive/20">
               <AlertTriangle className="h-4 w-4 text-destructive" />
-              <h3 className="font-display font-semibold text-destructive text-sm">
+              <h3 className="font-heading font-semibold text-destructive text-base">
                 Zone de danger
               </h3>
             </div>

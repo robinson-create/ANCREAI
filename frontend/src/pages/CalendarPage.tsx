@@ -89,14 +89,14 @@ export function CalendarPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8 text-center">
         <Calendar className="w-16 h-16 text-muted-foreground mb-4" />
-        <h2 className="text-2xl font-semibold mb-2">Connecte ton calendrier</h2>
-        <p className="text-muted-foreground mb-6 max-w-md">
+        <h2 className="font-heading text-2xl font-semibold mb-2 text-foreground">Connecte ton calendrier</h2>
+        <p className="text-sm text-muted-foreground mb-6 max-w-md font-body">
           Pour utiliser le calendrier Ancre, connecte Google Calendar ou Microsoft Outlook dans
           tes paramètres.
         </p>
-        <Button asChild>
+        <Button asChild className="gap-2">
           <a href="/app/profile#integrations">
-            <LinkIcon className="w-4 h-4 mr-2" />
+            <LinkIcon className="w-4 h-4" />
             Connecter un calendrier
           </a>
         </Button>
@@ -107,10 +107,10 @@ export function CalendarPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between p-4 border-b border-border">
         <div>
-          <h1 className="text-2xl font-bold">Calendrier</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="font-heading text-2xl font-bold text-foreground">Calendrier</h1>
+          <p className="text-sm text-muted-foreground font-body">
             Vue 3 jours
             {providers?.has_google && ' · Google'}
             {providers?.has_google && providers?.has_microsoft && ' +'}
@@ -123,9 +123,9 @@ export function CalendarPage() {
             variant="outline"
             size="sm"
             onClick={() => setShowFilters(!showFilters)}
-            className={showFilters ? 'bg-accent' : ''}
+            className={showFilters ? 'bg-accent/10' : '' + ' gap-2'}
           >
-            <Filter className="w-4 h-4 mr-2" />
+            <Filter className="w-4 h-4" />
             Filtres
           </Button>
         </div>
@@ -133,13 +133,13 @@ export function CalendarPage() {
 
       {/* Filters */}
       {showFilters && (
-        <div className="flex items-center gap-4 p-4 bg-muted/50 border-b">
+        <div className="flex items-center gap-4 p-4 bg-muted/20 border-b border-border">
           <div className="flex-1">
             <Input
               placeholder="Rechercher un événement..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-sm"
+              className="max-w-sm font-body"
             />
           </div>
 

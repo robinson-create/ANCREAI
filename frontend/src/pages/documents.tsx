@@ -236,9 +236,9 @@ export function DocumentsPage() {
     <div className="container py-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
+        <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Documents</h1>
+        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
           Nouveau document
         </Button>
       </div>
@@ -248,12 +248,12 @@ export function DocumentsPage() {
         value={statusFilter || "all"}
         onValueChange={(v) => setStatusFilter(v === "all" ? undefined : v)}
       >
-        <TabsList>
-          <TabsTrigger value="all">Tous</TabsTrigger>
-          <TabsTrigger value="draft">Brouillons</TabsTrigger>
-          <TabsTrigger value="validated">Validés</TabsTrigger>
-          <TabsTrigger value="sent">Envoyés</TabsTrigger>
-          <TabsTrigger value="archived">Archivés</TabsTrigger>
+        <TabsList className="bg-muted">
+          <TabsTrigger value="all" className="font-medium font-body">Tous</TabsTrigger>
+          <TabsTrigger value="draft" className="font-medium font-body">Brouillons</TabsTrigger>
+          <TabsTrigger value="validated" className="font-medium font-body">Validés</TabsTrigger>
+          <TabsTrigger value="sent" className="font-medium font-body">Envoyés</TabsTrigger>
+          <TabsTrigger value="archived" className="font-medium font-body">Archivés</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -278,12 +278,12 @@ export function DocumentsPage() {
       {documents && documents.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FileEdit className="h-12 w-12 text-muted-foreground/50 mb-4" />
-          <p className="text-lg font-medium">Aucun document</p>
-          <p className="text-muted-foreground mb-4">
+          <p className="text-lg font-semibold font-heading text-foreground">Aucun document</p>
+          <p className="text-sm text-muted-foreground mb-4 font-body">
             Creez votre premier document pour commencer.
           </p>
-          <Button onClick={() => setIsCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
             Creer un document
           </Button>
         </div>
@@ -296,35 +296,35 @@ export function DocumentsPage() {
             return (
             <Card
               key={doc.id}
-              className="relative group cursor-pointer hover:shadow-md transition-shadow"
+              className="relative group cursor-pointer hover:shadow-lg hover:border-primary/20 transition-all rounded-xl border-border"
               onClick={() => navigate(`/app/documents/${doc.id}`)}
             >
               <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   {isGenerating ? (
-                    <Badge variant="secondary" className="gap-1.5 bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400">
+                    <Badge variant="secondary" className="gap-1.5 bg-accent/10 text-accent font-medium">
                       <Loader2 className="h-3 w-3 animate-spin" />
                       En génération
                     </Badge>
                   ) : (
-                    <Badge variant={STATUS_VARIANTS[doc.status] || "outline"}>
+                    <Badge variant={STATUS_VARIANTS[doc.status] || "outline"} className="font-medium">
                       {STATUS_LABELS[doc.status] || doc.status}
                     </Badge>
                   )}
-                  <Badge variant="outline" className="text-[10px]">
+                  <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5">
                     {DOC_TYPES.find((t) => t.value === doc.doc_type)?.label ||
                       doc.doc_type}
                   </Badge>
                 </div>
-                <CardTitle className="text-lg mt-2">{doc.title}</CardTitle>
-                <CardDescription>
+                <CardTitle className="font-heading text-lg mt-2 text-foreground">{doc.title}</CardTitle>
+                <CardDescription className="font-body text-xs">
                   v{doc.version} — Modifie le{" "}
                   {new Date(doc.updated_at).toLocaleDateString("fr-FR")}
                 </CardDescription>
               </CardHeader>
-              <CardFooter className="text-xs text-muted-foreground">
+              <CardFooter className="text-xs text-muted-foreground font-body">
                 {isGenerating ? (
-                  <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+                  <span className="flex items-center gap-1.5 text-accent">
                     <Construction className="h-3 w-3" />
                     Génération en cours…
                   </span>

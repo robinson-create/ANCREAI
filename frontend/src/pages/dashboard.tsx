@@ -358,17 +358,17 @@ export function DashboardPage() {
       <div className="flex-1 flex items-center justify-center px-6 py-16 md:py-24">
         <div className="max-w-2xl w-full space-y-10 text-center">
           <div className="space-y-3">
-            <h1 className="font-display text-3xl md:text-4xl font-bold text-white tracking-tight">
+            <h1 className="font-heading text-3xl md:text-4xl font-bold text-white tracking-tight">
               Que souhaitez-vous faire ?
             </h1>
-            <p className="text-sm text-white/90 md:text-base">
+            <p className="text-sm text-white/90 md:text-base font-body">
               Décrivez votre besoin ci-dessous ou choisissez une action rapide.
             </p>
           </div>
 
           {/* Prompt bar — primary, encourage writing */}
           <div className="space-y-2">
-            <p className="text-xs text-white/80 font-medium uppercase tracking-wider">Décrivez votre besoin</p>
+            <p className="text-xs text-white/80 font-medium uppercase tracking-wider font-body">Décrivez votre besoin</p>
             <div className="relative">
               <textarea
                 value={prompt}
@@ -381,7 +381,7 @@ export function DashboardPage() {
                 }}
                 rows={3}
                 placeholder="Ex : Rédige un email de relance pour le client TechCo concernant le devis en attente…"
-                className="w-full text-sm bg-card/95 backdrop-blur-sm border border-border rounded-[var(--radius)] px-5 py-4 pr-28 outline-none focus:ring-4 focus:ring-ring/15 focus:border-ring/35 text-foreground placeholder:text-muted-foreground shadow-soft resize-none leading-relaxed transition-colors"
+                className="w-full text-sm font-body bg-card/95 backdrop-blur-sm border border-border rounded-2xl px-5 py-4 pr-28 outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary/40 text-foreground placeholder:text-muted-foreground/60 shadow-xl resize-none leading-relaxed transition-all"
               />
               <div className="absolute right-3 bottom-3 flex items-center gap-1.5">
                 <button
@@ -412,10 +412,10 @@ export function DashboardPage() {
               <button
                 key={a.id}
                 onClick={() => navigate(a.path)}
-                className="group inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs bg-muted/50 hover:bg-accent/30 border border-transparent hover:border-primary/20 transition-all"
+                className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium font-body bg-card/80 backdrop-blur-sm hover:bg-accent/20 border border-border/50 hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all shadow-sm hover:shadow-md"
               >
-                <a.icon className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
-                <span className="text-muted-foreground group-hover:text-foreground">{a.label}</span>
+                <a.icon className="h-3.5 w-3.5 group-hover:text-primary transition-colors" />
+                <span>{a.label}</span>
               </button>
             ))}
           </div>
@@ -424,12 +424,12 @@ export function DashboardPage() {
 
       {/* Activity history section - fond blanc opaque 100 % */}
       {historyItems.length > 0 && (
-        <div className="flex-shrink-0 mt-auto px-6 py-6 md:py-8 border-t border-border bg-white">
+        <div className="flex-shrink-0 mt-auto px-6 py-6 md:py-8 border-t border-border bg-background">
           <div className="max-w-3xl mx-auto">
             {/* Section header */}
             <div className="flex items-center gap-3 mb-4">
               <div className="h-px flex-1 bg-border" />
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider font-body">
                 <Clock className="h-3.5 w-3.5" />
                 Activité récente
               </div>
@@ -437,14 +437,14 @@ export function DashboardPage() {
             </div>
 
             {/* Filter tabs */}
-            <div className="flex items-center gap-1 mb-4 bg-muted/60 backdrop-blur-sm rounded-lg p-1 w-fit mx-auto">
+            <div className="flex items-center gap-1 mb-4 bg-muted backdrop-blur-sm rounded-lg p-1 w-fit mx-auto">
               {FILTER_TABS.map((tab) => (
                 <button
                   key={tab.value}
                   onClick={() => setFilter(tab.value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium font-body transition-all ${
                     filter === tab.value
-                      ? "bg-card text-foreground shadow-sm"
+                      ? "bg-primary text-primary-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
@@ -460,25 +460,25 @@ export function DashboardPage() {
                 <button
                   key={item.id}
                   onClick={() => navigate(item.path)}
-                  className="group flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-card/95 backdrop-blur-sm border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
+                  className="group flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-card border border-border hover:shadow-lg hover:border-primary/20 transition-all text-left"
                 >
                   <div className={`w-8 h-8 rounded-lg ${typeBg(item.type)} flex items-center justify-center shrink-0`}>
                     {typeIcon(item.type)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">
+                    <div className="text-sm font-medium text-foreground truncate font-body">
                       {item.title}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div className="text-xs text-muted-foreground truncate font-body">
                       {item.subtitle}
                     </div>
                   </div>
                   {item.status && (
-                    <Badge variant="outline" className="shrink-0 text-[10px] hidden sm:inline-flex">
+                    <Badge variant="outline" className="shrink-0 text-[10px] font-medium hidden sm:inline-flex">
                       {item.status}
                     </Badge>
                   )}
-                  <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:block">
+                  <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:block font-body">
                     {item.date}
                   </span>
                   <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />

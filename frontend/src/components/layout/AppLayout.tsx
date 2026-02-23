@@ -17,7 +17,7 @@ export function NewAppLayout() {
   const [createOpen, setCreateOpen] = useState(false);
   const location = useLocation();
 
-  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname.startsWith("/app/assistant");
+  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname === "/app/contacts" || location.pathname.startsWith("/app/assistant");
 
   // Close mobile sidebar on navigation
   useEffect(() => {

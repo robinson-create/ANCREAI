@@ -111,8 +111,8 @@ export function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b bg-background">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Contacts</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="font-heading text-2xl font-bold text-foreground">Contacts</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-body">
             {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
           </p>
         </div>
@@ -122,26 +122,27 @@ export function ContactsPage() {
             variant="outline"
             size="sm"
             onClick={() => setImportOpen(true)}
+            className="gap-2"
           >
-            <Mail className="w-4 h-4 mr-2" />
+            <Mail className="w-4 h-4" />
             Importer depuis emails
           </Button>
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="w-4 h-4" />
             Nouveau contact
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-4 p-4 bg-muted/30 border-b">
+      <div className="flex items-center gap-4 p-4 bg-muted/20 border-b">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Rechercher un contact..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 font-body"
           />
         </div>
 
@@ -193,17 +194,17 @@ export function ContactsPage() {
             <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
               <Users className="w-8 h-8 text-muted-foreground" />
             </div>
-            <h2 className="text-xl font-semibold mb-2">Aucun contact</h2>
-            <p className="text-muted-foreground mb-6">
+            <h2 className="font-heading text-xl font-semibold mb-2 text-foreground">Aucun contact</h2>
+            <p className="text-sm text-muted-foreground mb-6 font-body">
               Créez votre premier contact ou importez depuis vos emails.
             </p>
             <div className="flex gap-3">
-              <Button onClick={() => setImportOpen(true)}>
-                <Mail className="w-4 h-4 mr-2" />
+              <Button onClick={() => setImportOpen(true)} className="gap-2">
+                <Mail className="w-4 h-4" />
                 Importer depuis emails
               </Button>
-              <Button variant="outline" onClick={() => setCreateOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
+              <Button variant="outline" onClick={() => setCreateOpen(true)} className="gap-2">
+                <Plus className="w-4 h-4" />
                 Nouveau contact
               </Button>
             </div>
@@ -218,24 +219,24 @@ export function ContactsPage() {
               return (
                 <Card
                   key={contact.id}
-                  className="p-4 cursor-pointer hover:shadow-md hover:border-primary/20 transition-all group"
+                  className="p-4 cursor-pointer hover:shadow-lg hover:border-primary/20 transition-all group rounded-xl border-border"
                   onClick={() => handleContactClick(contact)}
                 >
                   <div className="flex items-start gap-3">
                     {/* Avatar */}
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 font-medium text-sm text-primary">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0 font-semibold text-sm text-primary">
                       {getInitials(contact)}
                     </div>
 
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
-                        <h3 className="font-semibold text-foreground truncate">
+                        <h3 className="font-body font-semibold text-foreground truncate">
                           {fullName}
                         </h3>
                         <Badge
                           variant="outline"
-                          className={`shrink-0 ${getContactTypeColor(
+                          className={`shrink-0 font-medium text-[10px] px-2 py-0.5 ${getContactTypeColor(
                             contact.contact_type
                           )}`}
                         >
@@ -243,12 +244,12 @@ export function ContactsPage() {
                         </Badge>
                       </div>
 
-                      <p className="text-sm text-muted-foreground truncate mb-2">
+                      <p className="text-sm text-muted-foreground truncate mb-2 font-body">
                         {contact.primary_email}
                       </p>
 
                       {contact.company_name && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground font-body">
                           <Building className="w-3 h-3 shrink-0" />
                           <span className="truncate">{contact.company_name}</span>
                         </div>
