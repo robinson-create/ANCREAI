@@ -86,6 +86,45 @@ function stripHtmlToText(html: string): string {
   return div.textContent || div.innerText || "";
 }
 
+function extractRecipientEmail(input: string): string {
+  const value = input.trim();
+  if (!value) return "";
+  const angleMatch = value.match(/<([^>]+)>/);
+  if (angleMatch?.[1]) return angleMatch[1].trim();
+  return value;
+}
+
+function extractRecipientNameFromText(text: string): string | null {
+  const match = text.match(/(?:\b(?:a|à)\b)\s+([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ' -]{1,80})/i);
+  if (!match?.[1]) return null;
+  return match[1].replace(/[.,;:!?]+$/g, "").trim();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function buildForwardBody(message: MailMessage): string {
+  const originalBody = message.body_html?.trim()
+    ? message.body_html
+    : `<p>${escapeHtml(message.body_text || message.snippet || "")}</p>`;
+  const from = message.sender?.name
+    ? `${message.sender.name} &lt;${message.sender.email}&gt;`
+    : (message.sender?.email || "");
+  return `
+<p><br/></p>
+<p>---------- Message transfere ----------</p>
+<p><strong>De :</strong> ${from}</p>
+<p><strong>Date :</strong> ${message.date}</p>
+<p><strong>Objet :</strong> ${escapeHtml(message.subject || "(sans objet)")}</p>
+<p><br/></p>
+${originalBody}
+  `.trim();
+}
+
 export const EmailComposer = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -176,7 +215,8 @@ export const EmailComposer = () => {
       const accountId = accountIdRef.current;
       const draftId = draftIdRef.current;
       if (d.composing && d.sendStatus !== "sent" && accountId && (d.body.trim() || d.to.trim() || d.subject.trim())) {
-        const toRecipients = d.to.trim() ? [{ name: "", email: d.to.trim() }] : [];
+        const recipientEmail = extractRecipientEmail(d.to);
+        const toRecipients = recipientEmail ? [{ name: "", email: recipientEmail }] : [];
         mailApi.saveDraft({
           mail_account_id: accountId,
           to_recipients: toRecipients,
@@ -198,10 +238,7 @@ export const EmailComposer = () => {
       contactsApi
         .get(contactId)
         .then((contact) => {
-          const fullName = `${contact.first_name || ""} ${contact.last_name || ""}`.trim();
-          const recipient = fullName ? `${fullName} <${contact.primary_email}>` : contact.primary_email;
-
-          setComposeTo(recipient);
+          setComposeTo(contact.primary_email);
           setComposing(true);
 
           // Optional: Set instruction based on contact type for tone adaptation
@@ -389,13 +426,40 @@ export const EmailComposer = () => {
         setComposing(true);
         if (bundle.subject) setComposeSubject(bundle.subject);
         if (bundle.body_draft) setComposeBody(marked.parse(bundle.body_draft) as string);
-        if (bundle.tone) {
-          setComposeInstruction(`Ton : ${bundle.tone}`);
+        const instructionFromBundle = bundle.reason?.trim()
+          || (bundle.tone ? `Ton : ${bundle.tone}` : "");
+        if (instructionFromBundle) {
+          setComposeInstruction(instructionFromBundle);
+          if (!bundle.body_draft) {
+            pendingAutoGenerateRef.current = instructionFromBundle;
+          }
+        }
+        if (!composeTo.trim() && bundle.reason) {
+          const guessedName = extractRecipientNameFromText(bundle.reason);
+          if (guessedName) {
+            contactsApi.search(guessedName, 5).then((matches) => {
+              const exact = matches.find((c) => {
+                const fullName = `${c.first_name || ""} ${c.last_name || ""}`.trim().toLowerCase();
+                return fullName === guessedName.toLowerCase();
+              });
+              const selected = exact || matches[0];
+              if (selected?.primary_email) {
+                const fullName = `${selected.first_name || ""} ${selected.last_name || ""}`.trim();
+                const recipient = fullName
+                  ? `${fullName} <${selected.primary_email}>`
+                  : selected.primary_email;
+                setComposeTo(recipient);
+              }
+            }).catch(() => {
+              // ignore if contact search fails
+            });
+          }
         }
         console.log("[Analytics] email_bundle_loaded", { bundle_id: bundleId });
         // Clear the bundle param to avoid re-fetching
-        searchParams.delete("bundle");
-        setSearchParams(searchParams, { replace: true });
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("bundle");
+        setSearchParams(nextParams, { replace: true });
       })
       .catch((err) => {
         console.error("[Analytics] email_bundle_load_failed", { bundle_id: bundleId, error: err });
@@ -576,7 +640,8 @@ export const EmailComposer = () => {
   }, [queryClient]);
 
   const handleSendCompose = useCallback(async () => {
-    if (!selectedAccountId || !composeTo.trim() || !composeBody.trim()) return;
+    const recipientEmail = extractRecipientEmail(composeTo);
+    if (!selectedAccountId || !recipientEmail || !composeBody.trim()) return;
     const clientSendId = crypto.randomUUID();
     setSendStatus("sending");
     setSendError(null);
@@ -592,7 +657,7 @@ export const EmailComposer = () => {
         client_send_id: clientSendId,
         mail_account_id: selectedAccountId,
         mode: "new",
-        to_recipients: [{ name: "", email: composeTo.trim() }],
+        to_recipients: [{ name: "", email: recipientEmail }],
         subject: composeSubject,
         body_text: bodyText || composeBody,
         body_html: bodyHtml,
@@ -763,10 +828,11 @@ export const EmailComposer = () => {
   }, []);
 
   const handleLeaveCompose = useCallback(() => {
+    const recipientEmail = extractRecipientEmail(composeTo);
     // Auto-save draft to server if there's content and email wasn't sent
     if (sendStatus !== "sent" && selectedAccountId && (composeBody.trim() || composeTo.trim() || composeSubject.trim())) {
-      const toRecipients = composeTo.trim()
-        ? [{ name: "", email: composeTo.trim() }]
+      const toRecipients = recipientEmail
+        ? [{ name: "", email: recipientEmail }]
         : [];
       saveDraftMutation.mutate({
         to_recipients: toRecipients,
@@ -791,6 +857,23 @@ export const EmailComposer = () => {
     setSendStatus("idle");
     setSendError(null);
   }, [composeTo, composeSubject, composeBody, composeInstruction, sendStatus, currentDraftId, selectedAccountId, saveDraftMutation, stopGeneration, stopRecording]);
+
+  const handleForwardMessage = useCallback((message: MailMessage) => {
+    setComposing(true);
+    setCurrentDraftId(null);
+    setComposeTo("");
+    setComposeSubject(`Fwd: ${message.subject || "(sans objet)"}`);
+    setComposeBody(buildForwardBody(message));
+    setComposeInstruction("");
+    setComposeAttachments([]);
+    setSelectedMessage(message);
+    setReplying(false);
+    setReplyBody("");
+    setReplyInstruction("");
+    setReplyAttachments([]);
+    setSendStatus("idle");
+    setSendError(null);
+  }, []);
 
   const generateReply = useCallback(() => {
     if (!selectedMessage) return;
@@ -851,6 +934,43 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
       generateComposeEmail();
     }
   }, [composing, composeInstruction, selectedAssistantId, isGenerating, generateComposeEmail]);
+
+  // Prefill recipient from direct query params (name/email) when available
+  useEffect(() => {
+    const contactName = searchParams.get("contact_name")
+      || searchParams.get("recipient")
+      || searchParams.get("to");
+    if (!contactName || composeTo.trim()) return;
+
+    contactsApi
+      .search(contactName, 5)
+      .then((matches) => {
+        const wanted = contactName.toLowerCase().trim();
+        const exact = matches.find((c) => {
+          const fullName = `${c.first_name || ""} ${c.last_name || ""}`.trim().toLowerCase();
+          return fullName === wanted;
+        });
+        const selected = exact || matches[0];
+        if (selected?.primary_email) {
+          const fullName = `${selected.first_name || ""} ${selected.last_name || ""}`.trim();
+          const recipient = fullName
+            ? `${fullName} <${selected.primary_email}>`
+            : selected.primary_email;
+          setComposeTo(recipient);
+          setComposing(true);
+        }
+      })
+      .catch(() => {
+        // ignore if contact search fails
+      })
+      .finally(() => {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("contact_name");
+        nextParams.delete("recipient");
+        nextParams.delete("to");
+        setSearchParams(nextParams, { replace: true });
+      });
+  }, [searchParams, composeTo, setSearchParams]);
 
   // ── Reset to inbox when sidebar "Emails" is re-clicked ──
   useEffect(() => {
@@ -1567,7 +1687,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                         <Reply className="h-3.5 w-3.5" />
                         Répondre
                       </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5">
+                      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => handleForwardMessage(msg)}>
                         <Forward className="h-3.5 w-3.5" />
                         Transférer
                       </Button>
@@ -1914,7 +2034,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                   variant="premium"
                   size="sm"
                   className="gap-1.5"
-                  disabled={!composeTo.trim() || !composeBody.trim() || isGenerating || sendStatus === "sending"}
+                  disabled={!extractRecipientEmail(composeTo) || !composeBody.trim() || isGenerating || sendStatus === "sending"}
                   onClick={handleSendCompose}
                 >
                   {sendStatus === "sending" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
@@ -1930,8 +2050,9 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                     saveDraftMutation.isPending
                   }
                   onClick={() => {
-                    const toRecipients = composeTo.trim()
-                      ? [{ name: "", email: composeTo.trim() }]
+                    const recipientEmail = extractRecipientEmail(composeTo);
+                    const toRecipients = recipientEmail
+                      ? [{ name: "", email: recipientEmail }]
                       : [];
                     saveDraftMutation.mutate({
                       to_recipients: toRecipients,

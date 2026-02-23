@@ -82,9 +82,15 @@ export function ContactImportDialog({
   const handleFormSubmit = async (data: FormData) => {
     try {
       setImportError(null)
+
+      // Find selected account to get provider
+      const selectedAccount = mailAccounts.find(acc => acc.id === data.mail_account_id)
+      const source = selectedAccount?.provider || 'gmail'
+
       const result = await onSubmit({
         mail_account_id: data.mail_account_id,
         date_range_days: data.date_range_days,
+        source,
       })
       setImportResult(result)
     } catch (err) {

@@ -125,7 +125,56 @@ export function ContactDetailPage() {
       interne: "bg-gray-100 text-gray-800 border-gray-200",
       autre: "bg-gray-50 text-gray-600 border-gray-200",
     }
-    return colors[type] || colors.autre
+    return colors[type] || "bg-gray-50 text-gray-600 border-gray-200"
+  }
+
+  const formatSourceLabel = (source: string | null | undefined): string => {
+    if (!source) return "Inconnue"
+    const labels: Record<string, string> = {
+      agent: "Assistant IA",
+      manual: "Manuel",
+      email: "Email",
+      email_import: "Import email",
+      import_email: "Import email",
+      crm: "CRM",
+    }
+    return labels[source] || source.replace(/_/g, " ")
+  }
+
+  const formatUpdateTypeLabel = (updateType: string): string => {
+    const labels: Record<string, string> = {
+      create: "Création du contact",
+      created: "Création du contact",
+      update: "Mise à jour",
+      updated: "Mise à jour",
+      enrich: "Enrichissement",
+      enriched: "Enrichissement",
+      contact_create: "Création du contact",
+      contact_update: "Mise à jour du contact",
+      contact_added_dev: "Ajout du contact",
+      add_contact_dev: "Ajout du contact",
+      contact_add_dev: "Ajout du contact",
+    }
+    return labels[updateType] || updateType.replace(/_/g, " ")
+  }
+
+  const formatFieldLabel = (fieldName: string): string => {
+    const labels: Record<string, string> = {
+      first_name: "Prénom",
+      last_name: "Nom",
+      primary_email: "Email",
+      phone: "Téléphone",
+      title: "Fonction",
+      contact_type: "Type",
+      company_name: "Société",
+      language: "Langue",
+      country: "Pays",
+      city: "Ville",
+      address: "Adresse",
+      notes: "Notes",
+      tags: "Tags",
+    }
+    return labels[fieldName] || fieldName.replace(/_/g, " ")
   }
 
   return (
@@ -162,7 +211,7 @@ export function ContactDetailPage() {
                   {contact.contact_type}
                 </Badge>
                 <Badge variant="outline" className="text-xs">
-                  {contact.source}
+                  {formatSourceLabel(contact.source)}
                 </Badge>
               </div>
             </div>
@@ -331,17 +380,17 @@ export function ContactDetailPage() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
-                            {update.update_type}
+                            {formatUpdateTypeLabel(update.update_type)}
                           </span>
                           {update.field_name && (
                             <Badge variant="outline" className="text-xs">
-                              {update.field_name}
+                              {formatFieldLabel(update.field_name)}
                             </Badge>
                           )}
                         </div>
                         {update.source && (
                           <p className="text-xs text-muted-foreground">
-                            Source: {update.source}
+                            Source: {formatSourceLabel(update.source)}
                           </p>
                         )}
                         {update.confidence && (
