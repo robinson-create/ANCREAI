@@ -233,15 +233,17 @@ export function DocumentsPage() {
   }, [searchParams, setSearchParams, toast])
 
   return (
-    <div className="container py-8 space-y-6">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between p-6 border-b bg-background">
         <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Documents</h1>
         <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
           Nouveau document
         </Button>
       </div>
+
+      <div className="flex-1 overflow-auto p-6 space-y-6">
 
       {/* Status filter tabs */}
       <Tabs
@@ -465,6 +467,7 @@ export function DocumentsPage() {
         itemTitle={addToFolderTarget?.title}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
       />
+      </div>
     </div>
   )
 }

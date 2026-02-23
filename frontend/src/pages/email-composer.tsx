@@ -1270,12 +1270,12 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
       {/* Main content area */}
       <div className="flex flex-col flex-1 min-w-0">
         {/* ── Header with breadcrumb ── */}
-        <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-surface-elevated shrink-0 flex-wrap">
+        <div className="flex items-center gap-3 p-6 border-b bg-background shrink-0 flex-wrap">
         {/* Breadcrumb navigation */}
         {isThreadList && (
           <>
             <Mail className="h-4 w-4 text-primary shrink-0 hidden sm:block" />
-            <h1 className="font-display font-semibold text-foreground text-sm sm:text-base">Emails</h1>
+            <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Emails</h1>
             {hasAccount && (
               <span className="text-xs text-muted-foreground hidden lg:inline">
                 {connectedAccount?.email_address || connectedAccount?.provider} · {threads.length} threads

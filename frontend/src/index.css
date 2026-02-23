@@ -10,30 +10,30 @@
   }
 
   :root {
-    /* ── Tiptap Cloud style – Blue accent ── */
-    --background: 210 40% 98%;        /* slate-50 */
-    --foreground: 240 6% 10%;         /* zinc-900 */
-    --card: 0 0% 100%;               /* white */
-    --card-foreground: 240 6% 10%;    /* zinc-900 */
+    /* ── ANCRE Design System ── */
+    --background: 210 20% 98%;        /* Fond global gris-bleu très clair */
+    --foreground: 215 50% 12%;        /* Texte principal bleu très foncé */
+    --card: 0 0% 100%;                /* Fond des cartes/blocs blanc */
+    --card-foreground: 215 50% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --primary: 221 83% 53%;           /* blue-600 */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 240 5% 96%;          /* zinc-100 */
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 5% 96%;              /* zinc-100 */
-    --muted-foreground: 240 4% 46%;   /* zinc-500 */
-    --accent: 214 95% 93%;            /* blue-100 */
-    --accent-foreground: 221 83% 53%; /* blue-600 */
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 240 6% 90%;             /* zinc-200 */
-    --input: 240 6% 90%;
-    --ring: 217 91% 60%;              /* blue-500 */
+    --popover-foreground: 215 50% 12%;
+    --primary: 215 55% 38%;           /* Bleu marine — boutons, accents forts */
+    --primary-foreground: 0 0% 100%;  /* Blanc sur primary */
+    --secondary: 195 85% 45%;         /* Cyan vif */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 20% 94%;             /* Fond grisé léger (inputs, badges) */
+    --muted-foreground: 215 15% 50%;  /* Texte secondaire */
+    --accent: 195 85% 45%;            /* Cyan — identique à secondary */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;     /* Rouge erreur */
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 25% 88%;            /* Bordures subtiles */
+    --input: 210 25% 88%;
+    --ring: 215 55% 38%;              /* Ring = primary pour cohérence */
     --radius: 0.625rem;               /* 10px */
 
     /* Blue accent shades */
-    --accent-soft: 213 94% 68%;       /* blue-400 */
+    --accent-soft: 195 85% 55%;       /* Cyan plus clair */
 
     /* Gold accent (kept for premium badge only) */
     --gold: 38 92% 50%;
@@ -41,25 +41,25 @@
     --gold-foreground: 26 83% 14%;
 
     /* Surface */
-    --surface: 210 40% 98%;           /* matches background */
+    --surface: 210 20% 98%;           /* matches background */
     --surface-elevated: 0 0% 100%;
 
     /* Success / Info */
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-    --info: 217 91% 60%;
+    --info: 195 85% 45%;              /* Cyan comme accent */
     --info-foreground: 0 0% 100%;
 
     /* Sidebar – Light style */
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 240 6% 10%;
-    --sidebar-primary: 221 83% 53%;
+    --sidebar-foreground: 215 50% 12%;
+    --sidebar-primary: 215 55% 38%;     /* Bleu marine */
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 5% 96%;       /* zinc-100 pill bg */
-    --sidebar-accent-foreground: 240 6% 10%;
-    --sidebar-border: 240 6% 90%;
-    --sidebar-ring: 217 91% 60%;
-    --sidebar-muted: 240 4% 46%;
+    --sidebar-accent: 210 20% 94%;      /* Muted bg pour pill */
+    --sidebar-accent-foreground: 215 50% 12%;
+    --sidebar-border: 210 25% 88%;
+    --sidebar-ring: 215 55% 38%;
+    --sidebar-muted: 215 15% 50%;
 
     /* Unified shadow */
     --shadow: 0 1px 2px rgba(0,0,0,.06), 0 1px 1px rgba(0,0,0,.04);
@@ -73,28 +73,28 @@
   }
 
   .dark {
-    --background: 240 6% 7%;
-    --foreground: 210 40% 98%;
-    --card: 240 5% 11%;
-    --card-foreground: 210 40% 98%;
-    --popover: 240 5% 11%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 240 6% 7%;
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 224 76% 48%;
+    --background: 215 30% 8%;
+    --foreground: 210 20% 98%;
+    --card: 215 25% 12%;
+    --card-foreground: 210 20% 98%;
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 215 55% 50%;           /* Bleu marine légèrement plus clair en dark */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 195 85% 50%;         /* Cyan vif */
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 20% 20%;
+    --muted-foreground: 215 10% 65%;
+    --accent: 195 85% 50%;            /* Cyan */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 215 20% 25%;
+    --input: 215 20% 25%;
+    --ring: 215 55% 50%;
 
     /* Blue accent shades (dark) */
-    --accent-soft: 213 94% 68%;
+    --accent-soft: 195 85% 60%;
 
     /* Gold accent (dark) */
     --gold: 38 92% 50%;
@@ -102,25 +102,25 @@
     --gold-foreground: 43 96% 90%;
 
     /* Surface (dark) */
-    --surface: 240 6% 7%;
-    --surface-elevated: 240 5% 11%;
+    --surface: 215 30% 8%;            /* matches background */
+    --surface-elevated: 215 25% 12%;
 
     /* Success / Info (dark) */
     --success: 142 71% 45%;
     --success-foreground: 0 0% 100%;
-    --info: 217 91% 60%;
+    --info: 195 85% 50%;              /* Cyan comme accent */
     --info-foreground: 0 0% 100%;
 
     /* Sidebar (dark) */
-    --sidebar-background: 240 6% 7%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 217 91% 60%;
-    --sidebar-primary-foreground: 240 6% 7%;
-    --sidebar-accent: 240 4% 16%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 240 4% 16%;
-    --sidebar-ring: 224 76% 48%;
-    --sidebar-muted: 240 5% 55%;
+    --sidebar-background: 215 30% 8%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 215 55% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 215 20% 20%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 215 20% 25%;
+    --sidebar-ring: 215 55% 50%;
+    --sidebar-muted: 215 10% 65%;
 
     --shadow: 0 1px 3px rgba(0,0,0,.2), 0 1px 2px rgba(0,0,0,.15);
 

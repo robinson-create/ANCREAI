@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom"
-import { SignIn, SignUp } from "@clerk/clerk-react"
+import { SignIn } from "@clerk/clerk-react"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as Sonner } from "@/components/ui/sonner"
 import { AuthTokenProvider } from "@/hooks/use-auth-token"
@@ -19,7 +19,6 @@ import { CGVPage } from "@/pages/cgv"
 import PublicOnboarding from "@/pages/public-onboarding"
 
 // Protected pages
-import { DashboardPage } from "@/pages/dashboard"
 import { AssistantsPage } from "@/pages/assistants"
 import { DocumentsPage } from "@/pages/documents"
 import { DocumentEditorPage } from "@/pages/document-editor"

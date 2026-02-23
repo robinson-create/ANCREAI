@@ -111,7 +111,7 @@ export function ContactsPage() {
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b bg-background">
         <div>
-          <h1 className="font-heading text-2xl font-bold text-foreground">Contacts</h1>
+          <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Contacts</h1>
           <p className="text-sm text-muted-foreground mt-1 font-body">
             {contacts.length} contact{contacts.length !== 1 ? "s" : ""}
           </p>
