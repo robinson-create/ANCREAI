@@ -120,7 +120,7 @@ export function PricingPage() {
                   variant={plan.popular ? "default" : "outline"}
                   asChild
                 >
-                  <Link to={`/signup?plan=${plan.id}`}>
+                  <Link to={`/onboarding?plan=${plan.id}`}>
                     {plan.price === 0 ? "Commencer gratuitement" : "Choisir ce plan"}
                   </Link>
                 </Button>

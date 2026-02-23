@@ -13,9 +13,10 @@ import { NewAppLayout } from "@/components/layout/AppLayout"
 import { ProtectedRoute } from "@/components/auth/protected-route"
 
 // Public pages
-import { HomePage } from "@/pages/home"
+import HomePage from "@/pages/home"
 import { PricingPage } from "@/pages/pricing"
 import { CGVPage } from "@/pages/cgv"
+import PublicOnboarding from "@/pages/public-onboarding"
 
 // Protected pages
 import { DashboardPage } from "@/pages/dashboard"
@@ -28,7 +29,9 @@ import { AssistantPage } from "@/pages/assistant-page"
 import { EmailComposer } from "@/pages/email-composer"
 import { DocumentWorkspace } from "@/pages/document-workspace"
 import { SearchPage } from "@/pages/search"
-import { OnboardingPage } from "@/pages/onboarding"
+import OnboardingV2 from "@/pages/onboarding-v2"
+import OnboardingTransition from "@/pages/onboarding/transition"
+import OnboardingSetup from "@/pages/onboarding/setup"
 import { CalendarPage } from "@/pages/CalendarPage"
 import { ContactsPage } from "@/pages/ContactsPage"
 import { ContactDetailPage } from "@/pages/ContactDetailPage"
@@ -37,9 +40,11 @@ function App() {
   return (
     <AuthTokenProvider>
       <Routes>
+        {/* Home page - standalone (has its own navbar/footer) */}
+        <Route path="/" element={<HomePage />} />
+
         {/* Public routes */}
         <Route element={<PublicLayout />}>
-          <Route path="/" element={<HomePage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/cgv" element={<CGVPage />} />
           <Route
@@ -49,33 +54,39 @@ function App() {
                 <SignIn
                   routing="path"
                   path="/login"
-                  signUpUrl="/signup"
-                  afterSignInUrl="/app/search"
-                />
-              </div>
-            }
-          />
-          <Route
-            path="/signup/*"
-            element={
-              <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center py-12">
-                <SignUp
-                  routing="path"
-                  path="/signup"
-                  signInUrl="/login"
-                  afterSignUpUrl="/app/search"
+                  signUpUrl="/onboarding"
+                  afterSignInUrl="/app/onboarding"
                 />
               </div>
             }
           />
         </Route>
 
+        {/* Public onboarding - full screen, no header/footer */}
+        <Route path="/onboarding/*" element={<PublicOnboarding />} />
+
         {/* Onboarding — full screen, no sidebar */}
         <Route
           path="/app/onboarding"
           element={
             <ProtectedRoute skipOnboardingCheck>
-              <OnboardingPage />
+              <OnboardingV2 />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/onboarding/transition"
+          element={
+            <ProtectedRoute skipOnboardingCheck>
+              <OnboardingTransition />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/app/onboarding/setup"
+          element={
+            <ProtectedRoute skipOnboardingCheck>
+              <OnboardingSetup />
             </ProtectedRoute>
           }
         />

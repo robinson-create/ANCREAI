@@ -55,7 +55,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between">
+      <div className="container max-w-6xl flex h-14 items-center justify-between px-4">
         {/* Logo */}
         <Link to={isSignedIn ? "/app/assistants" : "/"} className="flex items-center space-x-2">
           <Anchor className="h-8 w-8 text-primary" />
@@ -153,7 +153,7 @@ export function Header() {
                 <Link to="/login">Se connecter</Link>
               </Button>
               <Button asChild>
-                <Link to="/signup">Créer un compte</Link>
+                <Link to="/onboarding">Créer un compte</Link>
               </Button>
             </>
           )}

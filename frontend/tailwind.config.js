@@ -21,6 +21,8 @@ export default {
       fontFamily: {
         sans: ["DM Sans", "system-ui", "-apple-system", "sans-serif"],
         display: ["Source Serif 4", "Georgia", "serif"],
+        heading: ['"Space Grotesk"', 'sans-serif'],
+        body: ['"Plus Jakarta Sans"', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -85,6 +87,17 @@ export default {
           ring: "hsl(var(--sidebar-ring))",
           muted: "hsl(var(--sidebar-muted))",
         },
+        sand: {
+          DEFAULT: "hsl(var(--sand))",
+          foreground: "hsl(var(--sand-foreground))",
+        },
+        ocean: {
+          deep: "hsl(var(--ocean-deep))",
+          light: "hsl(var(--ocean-light))",
+        },
+        cyan: {
+          glow: "hsl(var(--cyan-glow))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -124,6 +137,10 @@ export default {
           "0%, 100%": { boxShadow: "0 0 0 0 hsl(var(--primary) / 0.3)" },
           "50%": { boxShadow: "0 0 0 6px hsl(var(--primary) / 0)" },
         },
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(30px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -135,6 +152,7 @@ export default {
         "slide-in-left": "slide-in-left 0.2s ease-out",
         "pulse-gold": "pulse-gold 2s ease-in-out infinite",
         "pulse-blue": "pulse-blue 2s ease-in-out infinite",
+        "fade-up": "fade-up 0.8s ease-out forwards",
       },
     },
   },
