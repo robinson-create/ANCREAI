@@ -24,6 +24,7 @@ from app.models.mail import (
     MailMessage,
     MailSendRequest,
     MailSyncState,
+    ScheduledEmail,
 )
 from app.schemas.mail import (
     EmailDraftBundleRead,
@@ -39,6 +40,8 @@ from app.schemas.mail import (
     MailSendStatusRead,
     MailThreadRead,
     MailThreadSummary,
+    ScheduledEmailCreate,
+    ScheduledEmailRead,
 )
 from app.workers.settings import redis_settings
 
@@ -864,3 +867,109 @@ async def get_email_bundle(
             detail="Email draft bundle not found",
         )
     return bundle
+
+
+# ── Scheduled Emails ─────────────────────────────────────────────────
+
+
+@router.post("/scheduled", response_model=ScheduledEmailRead, status_code=status.HTTP_201_CREATED)
+async def schedule_email(
+    data: ScheduledEmailCreate,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Schedule an email to be sent at a specific time."""
+    tenant_id = user.tenant_id
+
+    # Verify account ownership
+    account = await _get_account_for_tenant(db, data.mail_account_id, tenant_id)
+
+    # Validate scheduled_at is in the future
+    from datetime import datetime, timezone as tz
+    if data.scheduled_at <= datetime.now(tz.utc):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="scheduled_at must be in the future",
+        )
+
+    # Create scheduled email
+    scheduled_email = ScheduledEmail(
+        tenant_id=tenant_id,
+        mail_account_id=data.mail_account_id,
+        mode=data.mode,
+        to_recipients=data.to_recipients,
+        cc_recipients=data.cc_recipients,
+        bcc_recipients=data.bcc_recipients,
+        subject=data.subject,
+        body_text=data.body_text,
+        body_html=data.body_html,
+        in_reply_to_message_id=data.in_reply_to_message_id,
+        provider_thread_id=data.provider_thread_id,
+        scheduled_at=data.scheduled_at,
+        status="pending",
+    )
+    db.add(scheduled_email)
+    await db.commit()
+    await db.refresh(scheduled_email)
+
+    logger.info(f"Scheduled email {scheduled_email.id} for {data.scheduled_at}")
+    return scheduled_email
+
+
+@router.get("/scheduled", response_model=list[ScheduledEmailRead])
+async def list_scheduled_emails(
+    user: CurrentUser,
+    db: DbSession,
+    account_id: UUID = Query(...),
+):
+    """List all scheduled emails for a mail account."""
+    tenant_id = user.tenant_id
+
+    # Verify account ownership
+    await _get_account_for_tenant(db, account_id, tenant_id)
+
+    result = await db.execute(
+        select(ScheduledEmail)
+        .where(
+            ScheduledEmail.tenant_id == tenant_id,
+            ScheduledEmail.mail_account_id == account_id,
+            ScheduledEmail.status.in_(["pending"]),
+        )
+        .order_by(ScheduledEmail.scheduled_at.asc())
+    )
+    return list(result.scalars().all())
+
+
+@router.delete("/scheduled/{scheduled_email_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_scheduled_email(
+    scheduled_email_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+):
+    """Cancel a scheduled email."""
+    tenant_id = user.tenant_id
+
+    result = await db.execute(
+        select(ScheduledEmail).where(
+            ScheduledEmail.id == scheduled_email_id,
+            ScheduledEmail.tenant_id == tenant_id,
+        )
+    )
+    scheduled_email = result.scalar_one_or_none()
+    if not scheduled_email:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scheduled email not found",
+        )
+
+    if scheduled_email.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel email with status: {scheduled_email.status}",
+        )
+
+    scheduled_email.status = "cancelled"
+    await db.commit()
+
+    logger.info(f"Cancelled scheduled email {scheduled_email_id}")
+    return None

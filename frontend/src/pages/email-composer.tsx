@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2 } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2, Inbox, Clock, FileEdit, Calendar, Bold, Italic, List, ListOrdered, Link as LinkIcon, Type } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
@@ -159,6 +159,16 @@ export const EmailComposer = () => {
   const [showDocPicker, setShowDocPicker] = useState(false);
   const [docPickerTarget, setDocPickerTarget] = useState<"compose" | "reply">("compose");
   const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+  const [scheduleDate, setScheduleDate] = useState<string | null>(null);
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkText, setLinkText] = useState("");
+  const [linkContext, setLinkContext] = useState<'compose' | 'reply'>('compose');
+  const composeBodyRef = useRef<HTMLDivElement>(null);
+  const replyBodyRef = useRef<HTMLDivElement>(null);
+  const isUserTypingCompose = useRef(false);
+  const isUserTypingReply = useRef(false);
 
   // ── SMTP connect ──
   const [showSmtpDialog, setShowSmtpDialog] = useState(false);
@@ -180,7 +190,7 @@ export const EmailComposer = () => {
   const [sendError, setSendError] = useState<string | null>(null);
 
   // ── Tabs ──
-  const [activeTab, setActiveTab] = useState<"inbox" | "drafts">("inbox");
+  const [activeTab, setActiveTab] = useState<"inbox" | "sent" | "scheduled" | "drafts" | "deleted">("inbox");
 
   // ── Navigation level (contacts → threads → detail) ──
   const [viewLevel, setViewLevel] = useState<"contacts" | "threads" | "detail">("contacts");
@@ -302,7 +312,7 @@ export const EmailComposer = () => {
       limit: 50,
       contact_email: selectedContact?.email || undefined,
     }),
-    enabled: !!selectedAccountId && viewLevel === "threads",
+    enabled: !!selectedAccountId && activeTab === "inbox" && viewLevel === "threads",
     staleTime: 15_000,
   });
 
@@ -317,6 +327,13 @@ export const EmailComposer = () => {
     queryKey: ["mail-drafts", selectedAccountId],
     queryFn: () => mailApi.listDrafts(selectedAccountId!),
     enabled: !!selectedAccountId,
+    staleTime: 10_000,
+  });
+
+  const { data: scheduledEmails = [] } = useQuery({
+    queryKey: ["mail-scheduled", selectedAccountId],
+    queryFn: () => mailApi.listScheduledEmails(selectedAccountId!),
+    enabled: !!selectedAccountId && activeTab === "scheduled",
     staleTime: 10_000,
   });
 
@@ -361,6 +378,40 @@ export const EmailComposer = () => {
         variant: "destructive",
         title: "Erreur",
         description: "Impossible de supprimer le brouillon.",
+      });
+    },
+  });
+
+  const scheduleEmailMutation = useMutation({
+    mutationFn: mailApi.scheduleEmail,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mail-scheduled"] });
+      toast({
+        title: "Email programmé",
+        description: "Votre email sera envoyé à l'heure prévue"
+      });
+      handleCloseCompose();
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible de programmer l'email.",
+      });
+    },
+  });
+
+  const cancelScheduledEmailMutation = useMutation({
+    mutationFn: (scheduledEmailId: string) => mailApi.cancelScheduledEmail(scheduledEmailId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mail-scheduled"] });
+      toast({ title: "Email annulé" });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible d'annuler l'email programmé.",
       });
     },
   });
@@ -1094,6 +1145,93 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
     }
   };
 
+  // Sync external changes to compose body (e.g., from AI generation)
+  useEffect(() => {
+    if (!isUserTypingCompose.current && composeBodyRef.current) {
+      if (composeBodyRef.current.innerHTML !== composeBody) {
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+        composeBodyRef.current.innerHTML = composeBody || "";
+
+        // Restore cursor position if possible
+        if (range && composeBodyRef.current.contains(range.startContainer)) {
+          try {
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+    }
+  }, [composeBody]);
+
+  // Sync external changes to reply body
+  useEffect(() => {
+    if (!isUserTypingReply.current && replyBodyRef.current) {
+      if (replyBodyRef.current.innerHTML !== replyBody) {
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+        replyBodyRef.current.innerHTML = replyBody || "";
+
+        // Restore cursor position if possible
+        if (range && replyBodyRef.current.contains(range.startContainer)) {
+          try {
+            selection?.removeAllRanges();
+            selection?.addRange(range);
+          } catch (e) {
+            // Ignore errors
+          }
+        }
+      }
+    }
+  }, [replyBody]);
+
+  // Text formatting functions
+  const formatText = (command: string, value?: string, isReply = false) => {
+    document.execCommand(command, false, value);
+    if (isReply) {
+      replyBodyRef.current?.focus();
+    } else {
+      composeBodyRef.current?.focus();
+    }
+  };
+
+  const insertLink = (isReply = false) => {
+    const selection = window.getSelection();
+    if (selection && selection.toString()) {
+      setLinkText(selection.toString());
+    }
+    setLinkContext(isReply ? 'reply' : 'compose');
+    setShowLinkDialog(true);
+  };
+
+  const applyLink = () => {
+    if (!linkUrl) return;
+
+    const url = linkUrl.startsWith('http') ? linkUrl : `https://${linkUrl}`;
+
+    if (linkText) {
+      // Insert new link
+      document.execCommand('insertHTML', false, `<a href="${url}" target="_blank">${linkText}</a>`);
+    } else {
+      // Wrap selection in link
+      document.execCommand('createLink', false, url);
+    }
+
+    setShowLinkDialog(false);
+    setLinkUrl("");
+    setLinkText("");
+
+    if (linkContext === 'reply') {
+      replyBodyRef.current?.focus();
+    } else {
+      composeBodyRef.current?.focus();
+    }
+  };
+
   return (
     <>
     <div className="flex flex-col h-full">
@@ -1458,18 +1596,41 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
             </div>
 
             {/* Tabs */}
-            <div className="flex items-center gap-1 border-b border-border mb-4">
+            <div className="flex items-center gap-1 border-b border-border mb-4 overflow-x-auto">
               <button
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "inbox" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "inbox" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 onClick={() => setActiveTab("inbox")}
               >
+                <Inbox className="h-4 w-4" />
                 Boîte de réception ({filteredThreads.length})
               </button>
               <button
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === "drafts" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "sent" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("sent")}
+              >
+                <Send className="h-4 w-4" />
+                Envoyés
+              </button>
+              <button
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "scheduled" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("scheduled")}
+              >
+                <Calendar className="h-4 w-4" />
+                Programmés ({scheduledEmails.length})
+              </button>
+              <button
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "drafts" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
                 onClick={() => setActiveTab("drafts")}
               >
+                <FileEdit className="h-4 w-4" />
                 Brouillons ({drafts.length})
+              </button>
+              <button
+                className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "deleted" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setActiveTab("deleted")}
+              >
+                <Trash2 className="h-4 w-4" />
+                Supprimés
               </button>
             </div>
 
@@ -1639,6 +1800,85 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                 Aucun brouillon
               </div>
             )}
+
+            {activeTab === "sent" && (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Send className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                <div className="font-medium mb-1">Emails envoyés</div>
+                <div className="text-xs">Cette fonctionnalité sera bientôt disponible</div>
+              </div>
+            )}
+
+            {activeTab === "scheduled" && scheduledEmails.length > 0 && (
+              <>
+                {scheduledEmails.map((scheduled) => {
+                  const toStr = scheduled.to_recipients?.[0]?.email || "(pas de destinataire)";
+                  const scheduledDate = new Date(scheduled.scheduled_at);
+
+                  return (
+                    <button
+                      key={scheduled.id}
+                      className="flex items-center gap-4 w-full px-4 py-4 rounded-lg bg-card border border-border hover:shadow-soft hover:border-primary/20 transition-all text-left"
+                    >
+                      <div className="flex-1 min-w-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">
+                            <Calendar className="h-3 w-3 mr-1" />
+                            {scheduledDate.toLocaleString("fr-FR", {
+                              day: "2-digit",
+                              month: "short",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </Badge>
+                        </div>
+                        <div className="text-sm font-medium text-foreground truncate">
+                          {scheduled.subject || "(sans objet)"}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                          À : {toStr}
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="p-2 hover:bg-accent rounded-md"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreVertical className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => cancelScheduledEmailMutation.mutate(scheduled.id)}
+                            className="text-destructive"
+                          >
+                            <X className="h-4 w-4 mr-2" />
+                            Annuler l'envoi
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {activeTab === "scheduled" && scheduledEmails.length === 0 && (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Calendar className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                <div className="font-medium mb-1">Aucun email programmé</div>
+                <div className="text-xs">Programmez un envoi depuis le composeur</div>
+              </div>
+            )}
+
+            {activeTab === "deleted" && (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Trash2 className="h-10 w-10 mx-auto mb-3 text-muted-foreground/40" />
+                <div className="font-medium mb-1">Emails supprimés</div>
+                <div className="text-xs">Cette fonctionnalité sera bientôt disponible</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1709,13 +1949,90 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
                 {/* Main email body field - single HTML block, copyable (Gmail-ready) */}
                 <div className="relative border-b border-border/50">
+                  {/* Formatting Toolbar */}
+                  <div className="flex items-center gap-1 px-2 py-2 border-b border-border/30 bg-muted/20">
+                    <button
+                      type="button"
+                      onClick={() => formatText('bold', undefined, true)}
+                      className="p-2 hover:bg-accent rounded-md transition-colors"
+                      title="Gras (Ctrl+B)"
+                    >
+                      <Bold className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => formatText('italic', undefined, true)}
+                      className="p-2 hover:bg-accent rounded-md transition-colors"
+                      title="Italique (Ctrl+I)"
+                    >
+                      <Italic className="h-4 w-4" />
+                    </button>
+                    <div className="w-px h-6 bg-border mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => formatText('insertUnorderedList', undefined, true)}
+                      className="p-2 hover:bg-accent rounded-md transition-colors"
+                      title="Liste à puces"
+                    >
+                      <List className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => formatText('insertOrderedList', undefined, true)}
+                      className="p-2 hover:bg-accent rounded-md transition-colors"
+                      title="Liste numérotée"
+                    >
+                      <ListOrdered className="h-4 w-4" />
+                    </button>
+                    <div className="w-px h-6 bg-border mx-1" />
+                    <button
+                      type="button"
+                      onClick={() => insertLink(true)}
+                      className="p-2 hover:bg-accent rounded-md transition-colors"
+                      title="Insérer un lien"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="p-2 hover:bg-accent rounded-md transition-colors"
+                          title="Taille du texte"
+                        >
+                          <Type className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => formatText('fontSize', '1', true)}>
+                          <span className="text-xs">Petit</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => formatText('fontSize', '3', true)}>
+                          <span className="text-sm">Normal</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => formatText('fontSize', '5', true)}>
+                          <span className="text-base">Grand</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => formatText('fontSize', '7', true)}>
+                          <span className="text-lg">Très grand</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
                   <div
+                    ref={replyBodyRef}
                     contentEditable={!isGenerating}
                     suppressContentEditableWarning
                     className="w-full min-h-[160px] sm:min-h-[200px] p-4 pr-14 text-sm leading-relaxed outline-none text-foreground prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline"
                     data-placeholder="Rédigez ou collez votre réponse. L'IA génère du HTML prêt pour Gmail."
-                    dangerouslySetInnerHTML={{ __html: replyBody || "" }}
-                    onInput={(e) => setReplyBody(e.currentTarget.innerHTML)}
+                    onInput={(e) => {
+                      isUserTypingReply.current = true;
+                      setReplyBody(e.currentTarget.innerHTML);
+                      setTimeout(() => { isUserTypingReply.current = false; }, 100);
+                    }}
+                    onFocus={() => { isUserTypingReply.current = true; }}
+                    onBlur={() => { isUserTypingReply.current = false; }}
                   />
                   <button
                     onClick={() => toggleRecordingFor(setReplyBody)}
@@ -1907,13 +2224,90 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
               {/* Body - single HTML block, directly copyable (Gmail-ready) */}
               <div className="relative border-b border-border/50">
+                {/* Formatting Toolbar */}
+                <div className="flex items-center gap-1 px-2 py-2 border-b border-border/30 bg-muted/20">
+                  <button
+                    type="button"
+                    onClick={() => formatText('bold')}
+                    className="p-2 hover:bg-accent rounded-md transition-colors"
+                    title="Gras (Ctrl+B)"
+                  >
+                    <Bold className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => formatText('italic')}
+                    className="p-2 hover:bg-accent rounded-md transition-colors"
+                    title="Italique (Ctrl+I)"
+                  >
+                    <Italic className="h-4 w-4" />
+                  </button>
+                  <div className="w-px h-6 bg-border mx-1" />
+                  <button
+                    type="button"
+                    onClick={() => formatText('insertUnorderedList')}
+                    className="p-2 hover:bg-accent rounded-md transition-colors"
+                    title="Liste à puces"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => formatText('insertOrderedList')}
+                    className="p-2 hover:bg-accent rounded-md transition-colors"
+                    title="Liste numérotée"
+                  >
+                    <ListOrdered className="h-4 w-4" />
+                  </button>
+                  <div className="w-px h-6 bg-border mx-1" />
+                  <button
+                    type="button"
+                    onClick={insertLink}
+                    className="p-2 hover:bg-accent rounded-md transition-colors"
+                    title="Insérer un lien"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="p-2 hover:bg-accent rounded-md transition-colors"
+                        title="Taille du texte"
+                      >
+                        <Type className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuItem onClick={() => formatText('fontSize', '1')}>
+                        <span className="text-xs">Petit</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => formatText('fontSize', '3')}>
+                        <span className="text-sm">Normal</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => formatText('fontSize', '5')}>
+                        <span className="text-base">Grand</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => formatText('fontSize', '7')}>
+                        <span className="text-lg">Très grand</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
                 <div
+                  ref={composeBodyRef}
                   contentEditable={!isGenerating}
                   suppressContentEditableWarning
                   className="w-full min-h-[220px] lg:min-h-[280px] p-4 pr-14 text-sm leading-relaxed outline-none text-foreground prose prose-sm dark:prose-invert max-w-none [&_a]:text-primary [&_a]:underline"
                   data-placeholder="Rédigez ou collez votre email ici. L'IA génère du HTML prêt pour Gmail."
-                  dangerouslySetInnerHTML={{ __html: composeBody || "" }}
-                  onInput={(e) => setComposeBody(e.currentTarget.innerHTML)}
+                  onInput={(e) => {
+                    isUserTypingCompose.current = true;
+                    setComposeBody(e.currentTarget.innerHTML);
+                    setTimeout(() => { isUserTypingCompose.current = false; }, 100);
+                  }}
+                  onFocus={() => { isUserTypingCompose.current = true; }}
+                  onBlur={() => { isUserTypingCompose.current = false; }}
                 />
                 <button
                   onClick={() => toggleRecordingFor(setComposeBody)}
@@ -2030,16 +2424,36 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
 
               {/* Actions bar */}
               <div className="px-4 py-3 border-t border-border flex items-center gap-2 bg-muted/20 flex-wrap">
-                <Button
-                  variant="premium"
-                  size="sm"
-                  className="gap-1.5"
-                  disabled={!extractRecipientEmail(composeTo) || !composeBody.trim() || isGenerating || sendStatus === "sending"}
-                  onClick={handleSendCompose}
-                >
-                  {sendStatus === "sending" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                  Envoyer
-                </Button>
+                <div className="flex items-center gap-0">
+                  <Button
+                    variant="premium"
+                    size="sm"
+                    className="gap-1.5 rounded-r-none"
+                    disabled={!extractRecipientEmail(composeTo) || !composeBody.trim() || isGenerating || sendStatus === "sending"}
+                    onClick={handleSendCompose}
+                  >
+                    {sendStatus === "sending" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    Envoyer
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="premium"
+                        size="sm"
+                        className="px-2 rounded-l-none border-l border-white/20"
+                        disabled={!extractRecipientEmail(composeTo) || !composeBody.trim() || isGenerating || sendStatus === "sending"}
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 rotate-90" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setShowSchedulePicker(true)}>
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Programmer l'envoi
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -2159,6 +2573,135 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
       itemTitle={addToFolderTarget?.subject}
       onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
     />
+
+    {/* Schedule Email Dialog */}
+    <Dialog open={showSchedulePicker} onOpenChange={setShowSchedulePicker}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Programmer l'envoi</DialogTitle>
+          <DialogDescription>
+            Choisissez quand vous souhaitez envoyer cet email
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="schedule-datetime">Date et heure</Label>
+            <Input
+              id="schedule-datetime"
+              type="datetime-local"
+              value={scheduleDate || ""}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSchedulePicker(false);
+                setScheduleDate(null);
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="premium"
+              disabled={!scheduleDate || !selectedAccountId || scheduleEmailMutation.isPending}
+              onClick={() => {
+                if (!scheduleDate || !selectedAccountId) return;
+
+                const recipientEmail = extractRecipientEmail(composeTo);
+                if (!recipientEmail || !composeBody.trim()) {
+                  toast({
+                    variant: "destructive",
+                    title: "Erreur",
+                    description: "Veuillez remplir le destinataire et le corps de l'email",
+                  });
+                  return;
+                }
+
+                scheduleEmailMutation.mutate({
+                  mail_account_id: selectedAccountId,
+                  mode: "new",
+                  to_recipients: [{ name: "", email: recipientEmail }],
+                  subject: composeSubject || "(sans objet)",
+                  body_html: composeBody,
+                  scheduled_at: new Date(scheduleDate).toISOString(),
+                });
+
+                setShowSchedulePicker(false);
+                setScheduleDate(null);
+              }}
+            >
+              {scheduleEmailMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Calendar className="h-4 w-4 mr-2" />
+              )}
+              Programmer
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* Insert Link Dialog */}
+    <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Insérer un lien</DialogTitle>
+          <DialogDescription>
+            Ajoutez un lien hypertexte à votre texte
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label htmlFor="link-text">Texte du lien</Label>
+            <Input
+              id="link-text"
+              placeholder="Texte à afficher"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="link-url">URL</Label>
+            <Input
+              id="link-url"
+              type="url"
+              placeholder="https://exemple.com"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && linkUrl) {
+                  applyLink();
+                }
+              }}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowLinkDialog(false);
+                setLinkUrl("");
+                setLinkText("");
+              }}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="premium"
+              disabled={!linkUrl}
+              onClick={applyLink}
+            >
+              <LinkIcon className="h-4 w-4 mr-2" />
+              Insérer
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   </>
   );
 };

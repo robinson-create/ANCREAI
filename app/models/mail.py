@@ -371,3 +371,69 @@ class EmailDraftBundle(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class ScheduledEmail(Base):
+    """Scheduled emails to be sent at a specific time."""
+
+    __tablename__ = "scheduled_emails"
+    __table_args__ = (
+        Index("ix_scheduled_emails_scheduled_at_status", "scheduled_at", "status"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mail_account_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("mail_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="new | reply | forward"
+    )
+    to_recipients: Mapped[list] = mapped_column(
+        JSONB, nullable=False, default=list
+    )  # [{"name": "", "email": "..."}]
+    cc_recipients: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    bcc_recipients: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    subject: Mapped[str] = mapped_column(String(1000), nullable=False)
+    body_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    in_reply_to_message_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Internet-Message-ID for threading"
+    )
+    provider_thread_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="Provider-specific thread ID"
+    )
+    scheduled_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True,
+        comment="When to send this email"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+        comment="pending | sent | failed | cancelled",
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship("Tenant")
+    mail_account: Mapped["MailAccount"] = relationship("MailAccount")

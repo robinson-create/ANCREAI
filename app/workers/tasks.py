@@ -16,7 +16,7 @@ from app.models.chunk import Chunk
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.document_page import DocumentPage
-from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncState
+from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncState, ScheduledEmail
 from app.services.embedding import embedding_service
 from app.services.mail.base import SendPayload
 from app.services.mail.factory import get_mail_provider
@@ -823,6 +823,78 @@ async def shutdown(ctx: dict) -> None:
     await engine.dispose()
 
 
+async def send_scheduled_emails(ctx: dict) -> dict:
+    """
+    Cron job: Send all emails that are scheduled to be sent now or in the past.
+    Runs every minute.
+    """
+    async with async_session_maker() as db:
+        now = datetime.now(timezone.utc)
+
+        # Find all pending scheduled emails that should be sent
+        result = await db.execute(
+            select(ScheduledEmail)
+            .where(
+                ScheduledEmail.status == "pending",
+                ScheduledEmail.scheduled_at <= now,
+            )
+            .order_by(ScheduledEmail.scheduled_at.asc())
+            .limit(100)  # Process max 100 per run
+        )
+        scheduled_emails = list(result.scalars().all())
+
+        if not scheduled_emails:
+            return {"sent": 0, "failed": 0}
+
+        logger.info(f"Found {len(scheduled_emails)} scheduled emails to send")
+
+        sent_count = 0
+        failed_count = 0
+
+        for scheduled_email in scheduled_emails:
+            try:
+                # Create MailSendRequest
+                send_request = MailSendRequest(
+                    tenant_id=scheduled_email.tenant_id,
+                    mail_account_id=scheduled_email.mail_account_id,
+                    client_send_id=scheduled_email.id,  # Use scheduled email ID as idempotency key
+                    mode=scheduled_email.mode,
+                    to_recipients=scheduled_email.to_recipients,
+                    cc_recipients=scheduled_email.cc_recipients,
+                    bcc_recipients=scheduled_email.bcc_recipients,
+                    subject=scheduled_email.subject,
+                    body_text=scheduled_email.body_text,
+                    body_html=scheduled_email.body_html,
+                    in_reply_to_message_id=scheduled_email.in_reply_to_message_id,
+                    provider_thread_id=scheduled_email.provider_thread_id,
+                    status="pending",
+                )
+                db.add(send_request)
+                await db.flush()
+
+                # Enqueue send_email task
+                redis_pool: ArqRedis = ctx["redis"]
+                await redis_pool.enqueue_job("send_email", str(send_request.id))
+
+                # Mark as sent (actual sending happens in send_email task)
+                scheduled_email.status = "sent"
+                scheduled_email.sent_at = now
+                sent_count += 1
+
+                logger.info(f"Enqueued scheduled email {scheduled_email.id} for sending")
+
+            except Exception as e:
+                logger.error(f"Failed to send scheduled email {scheduled_email.id}: {e}")
+                scheduled_email.status = "failed"
+                scheduled_email.error = str(e)
+                failed_count += 1
+
+        await db.commit()
+
+        logger.info(f"Scheduled emails: sent={sent_count}, failed={failed_count}")
+        return {"sent": sent_count, "failed": failed_count}
+
+
 class WorkerSettings:
     """Arq worker settings."""
 
@@ -838,6 +910,10 @@ class WorkerSettings:
             watchdog_stuck_runs,
             minute={0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30,
                     32, 34, 36, 38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58},
+        ),
+        cron(
+            send_scheduled_emails,
+            minute=None,  # Run every minute
         ),
     ]
     on_startup = startup

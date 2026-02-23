@@ -135,6 +135,41 @@ export interface EmailDraftBundle {
   created_at: string
 }
 
+export interface ScheduledEmail {
+  id: string
+  tenant_id: string
+  mail_account_id: string
+  mode: "new" | "reply" | "forward"
+  to_recipients: MailRecipient[]
+  cc_recipients?: MailRecipient[] | null
+  bcc_recipients?: MailRecipient[] | null
+  subject: string
+  body_text?: string | null
+  body_html?: string | null
+  in_reply_to_message_id?: string | null
+  provider_thread_id?: string | null
+  scheduled_at: string
+  status: "pending" | "sent" | "failed" | "cancelled"
+  error?: string | null
+  sent_at?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ScheduledEmailCreate {
+  mail_account_id: string
+  mode: "new" | "reply" | "forward"
+  to_recipients: MailRecipient[]
+  cc_recipients?: MailRecipient[] | null
+  bcc_recipients?: MailRecipient[] | null
+  subject: string
+  body_text?: string | null
+  body_html?: string | null
+  in_reply_to_message_id?: string | null
+  provider_thread_id?: string | null
+  scheduled_at: string
+}
+
 // ── API ──
 
 export const mailApi = {
@@ -261,5 +296,22 @@ export const mailApi = {
       `/mail/bundles/${bundleId}`
     )
     return response.data
+  },
+
+  // Scheduled Emails
+  scheduleEmail: async (data: ScheduledEmailCreate): Promise<ScheduledEmail> => {
+    const response = await apiClient.post<ScheduledEmail>("/mail/scheduled", data)
+    return response.data
+  },
+
+  listScheduledEmails: async (accountId: string): Promise<ScheduledEmail[]> => {
+    const response = await apiClient.get<ScheduledEmail[]>("/mail/scheduled", {
+      params: { account_id: accountId },
+    })
+    return response.data
+  },
+
+  cancelScheduledEmail: async (scheduledEmailId: string): Promise<void> => {
+    await apiClient.delete(`/mail/scheduled/${scheduledEmailId}`)
   },
 }

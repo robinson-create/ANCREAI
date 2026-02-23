@@ -199,3 +199,47 @@ class EmailDraftBundleRead(BaseModel):
     reason: str | None = None
     citations: list[dict] | None = None
     created_at: datetime
+
+
+# ── Scheduled Emails ──
+
+
+class ScheduledEmailCreate(BaseModel):
+    """Request to schedule an email for later sending."""
+
+    mail_account_id: UUID
+    mode: str  # "new" | "reply" | "forward"
+    to_recipients: list[dict]  # [{"name": "", "email": "..."}]
+    cc_recipients: list[dict] | None = None
+    bcc_recipients: list[dict] | None = None
+    subject: str
+    body_text: str | None = None
+    body_html: str | None = None
+    in_reply_to_message_id: str | None = None
+    provider_thread_id: str | None = None
+    scheduled_at: datetime  # ISO 8601 datetime when to send
+
+
+class ScheduledEmailRead(BaseModel):
+    """Scheduled email response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    tenant_id: UUID
+    mail_account_id: UUID
+    mode: str
+    to_recipients: list[dict]
+    cc_recipients: list[dict] | None = None
+    bcc_recipients: list[dict] | None = None
+    subject: str
+    body_text: str | None = None
+    body_html: str | None = None
+    in_reply_to_message_id: str | None = None
+    provider_thread_id: str | None = None
+    scheduled_at: datetime
+    status: str
+    error: str | None = None
+    sent_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
