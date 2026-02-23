@@ -19,6 +19,7 @@ import type { Block, Message } from "@/types";
 
 export interface LocalMessage extends Message {
   isStreaming?: boolean;
+  wasInterrupted?: boolean;
 }
 
 interface SearchStreamContextType {
@@ -81,6 +82,13 @@ export function SearchStreamProvider({ children }: { children: ReactNode }) {
       abortRef.current = null;
     }
     setIsSearching(false);
+
+    // Mark the streaming message as interrupted
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.isStreaming ? { ...msg, isStreaming: false, wasInterrupted: true } : msg
+      )
+    );
   }, []);
 
   const resetConversation = useCallback(() => {

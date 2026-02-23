@@ -7,6 +7,7 @@ export interface LocalMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  wasInterrupted?: boolean;
   blocks?: Block[];
   citations?: Citation[];
 }
@@ -61,12 +62,12 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
     }
     setIsStreaming(false);
 
-    // Mark the streaming message as complete
+    // Mark the streaming message as complete and interrupted
     if (streamingMessageIdRef.current) {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingMessageIdRef.current
-            ? { ...msg, isStreaming: false }
+            ? { ...msg, isStreaming: false, wasInterrupted: true }
             : msg
         )
       );

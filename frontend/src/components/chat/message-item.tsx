@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Anchor, ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { User, Anchor, ChevronDown, ChevronUp, FileText, AlertCircle } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,14 @@ export function MessageItem({ message, className }: MessageItemProps) {
             <p className="whitespace-pre-wrap text-sm">{message.content}</p>
           )}
         </div>
+
+        {/* Interrupted indicator */}
+        {message.wasInterrupted && (
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Génération interrompue. Vous pouvez continuer la conversation.</span>
+          </div>
+        )}
 
         {/* Generative UI Blocks */}
         {message.blocks && message.blocks.length > 0 && (

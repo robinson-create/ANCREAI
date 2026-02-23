@@ -24,6 +24,8 @@ import {
   Folder,
   Plus,
   MoreVertical,
+  Square,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -129,6 +131,7 @@ export function SearchPage() {
     loadConversation,
     resetConversation,
     conversationId,
+    abortStream,
   } = useSearchStream();
   const searchViewCtx = useSearchView();
   const setSearchHome = searchViewCtx?.setSearchHome;
@@ -578,19 +581,27 @@ export function SearchPage() {
                         <Mic className="h-4 w-4" />
                       )}
                     </button>
-                    <Button
-                      variant="premium"
-                      size="icon"
-                      className="h-10 w-10 rounded-full"
-                      disabled={!query.trim() || isSearching || !selectedAssistantId}
-                      onClick={handleSearch}
-                    >
-                      {isSearching ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
+                    {isSearching ? (
+                      <Button
+                        variant="premium"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        onClick={abortStream}
+                        title="Arrêter la génération"
+                      >
+                        <Square className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="premium"
+                        size="icon"
+                        className="h-10 w-10 rounded-full"
+                        disabled={!query.trim() || !selectedAssistantId}
+                        onClick={handleSearch}
+                      >
                         <SendHorizontal className="h-4 w-4" />
-                      )}
-                    </Button>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -812,6 +823,14 @@ export function SearchPage() {
                       )}
                     </div>
 
+                    {/* Interrupted indicator */}
+                    {message.wasInterrupted && (
+                      <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                        <AlertCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                        <span>Génération interrompue. Vous pouvez continuer la conversation.</span>
+                      </div>
+                    )}
+
                     {/* Generative UI Blocks */}
                     {message.blocks && message.blocks.length > 0 && (
                       <div className="mt-3 space-y-3">
@@ -920,19 +939,27 @@ export function SearchPage() {
                       <Mic className="h-4 w-4" />
                     )}
                   </button>
-                  <Button
-                    variant="premium"
-                    size="icon"
-                    className="h-8 w-8 rounded-full"
-                    onClick={handleSearch}
-                    disabled={!query.trim() || isSearching || !selectedAssistantId}
-                  >
-                    {isSearching ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
+                  {isSearching ? (
+                    <Button
+                      variant="premium"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={abortStream}
+                      title="Arrêter la génération"
+                    >
+                      <Square className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="premium"
+                      size="icon"
+                      className="h-8 w-8 rounded-full"
+                      onClick={handleSearch}
+                      disabled={!query.trim() || !selectedAssistantId}
+                    >
                       <Send className="h-4 w-4" />
-                    )}
-                  </Button>
+                    </Button>
+                  )}
                 </div>
               </div>
               <p className="mt-2 text-center text-xs text-muted-foreground">

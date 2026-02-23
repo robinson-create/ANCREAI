@@ -7,6 +7,7 @@ export interface LocalMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  wasInterrupted?: boolean;
   blocks?: Block[];
   citations?: Citation[];
 }
@@ -126,7 +127,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingMessageIdRef.current
-            ? { ...msg, isStreaming: false }
+            ? { ...msg, isStreaming: false, wasInterrupted: true }
             : msg
         )
       );
