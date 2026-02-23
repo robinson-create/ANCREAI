@@ -25,7 +25,6 @@ import { useAutosave } from "@/hooks/use-autosave"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
 import { BlockRenderer } from "@/components/documents/BlockRenderer"
 import { DocumentCopilotActions } from "@/components/documents/DocumentCopilotActions"
-import { DocumentPromptBar } from "@/components/documents/DocumentPromptBar"
 import { DocumentPreview } from "@/components/documents/DocumentPreview"
 import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
 import { DocumentAssistantProvider, useDocumentAssistant } from "@/contexts/document-assistant-stream"
@@ -84,6 +83,10 @@ function DocumentEditorContent() {
   const isGeneratingFromContext = id ? docGen?.generatingDocIds.has(id) ?? false : false
   const isGenerating = isGeneratingFromContext || isGeneratingLocal
 
+  // Document assistant context (must be called before any early returns)
+  const { setSelectedAssistantId } = useDocumentAssistant();
+  const [localAssistantId, setLocalAssistantId] = useState<string | null>(null);
+
   // Track whether current docModel comes from an API load (skip autosave)
   const isLoadingFromApi = useRef(true)
 
@@ -121,6 +124,13 @@ function DocumentEditorContent() {
       setTitle(doc.title)
     }
   }, [doc, setDocModel])
+
+  // Sync assistant with sidebar
+  useEffect(() => {
+    if (localAssistantId) {
+      setSelectedAssistantId(localAssistantId);
+    }
+  }, [localAssistantId, setSelectedAssistantId]);
 
   // Autosave on docModel changes — skip saves triggered by API loads
   useEffect(() => {
@@ -308,17 +318,6 @@ function DocumentEditorContent() {
 
   const blocksEmpty = !docModel?.blocks || docModel.blocks.length === 0
   const isReadOnly = doc.status === "sent" || doc.status === "archived"
-
-  // Document assistant context
-  const { setSelectedAssistantId } = useDocumentAssistant();
-  const [localAssistantId, setLocalAssistantId] = useState<string | null>(null);
-
-  // Sync assistant with sidebar
-  useEffect(() => {
-    if (localAssistantId) {
-      setSelectedAssistantId(localAssistantId);
-    }
-  }, [localAssistantId, setSelectedAssistantId]);
 
   return (
     <div className="flex h-full">
@@ -584,17 +583,6 @@ function DocumentEditorContent() {
                 </div>
               )}
             </div>
-
-            {/* AI Prompt Bar — always visible at bottom in edit mode */}
-            <DocumentPromptBar
-              docId={id!}
-              docType={doc.doc_type}
-              collectionIds={collectionIds}
-              onAddBlock={(type: DocBlockKind) => handleAddBlock(type)}
-              isEmpty={blocksEmpty}
-              onGeneratingChange={setIsGeneratingLocal}
-              initialPrompt={initialPrompt}
-            />
           </div>
         )}
       </div>
@@ -604,11 +592,12 @@ function DocumentEditorContent() {
       {/* Document Assistant Sidebar - shown only in edit mode */}
       {!isPreview && !isReadOnly && (
         <DocumentAssistantSidebar
-          className="w-80 hidden lg:flex"
+          className="w-80 hidden lg:flex flex-col"
           onContentUpdate={(update) => {
             // Optional: handle content updates from assistant
             console.log("Content update from assistant:", update);
           }}
+          onAddBlock={(type: DocBlockKind) => handleAddBlock(type)}
         />
       )}
     </div>

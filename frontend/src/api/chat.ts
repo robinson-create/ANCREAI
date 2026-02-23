@@ -1,4 +1,4 @@
-import apiClient from "./client"
+import apiClient, { getCurrentAuthToken } from "./client"
 import type { Block, ChatRequest, ChatResponse, Message } from "@/types"
 
 export const chatApi = {
@@ -27,24 +27,29 @@ export const chatApi = {
     onConversationId?: (conversationId: string) => void,
     onBlock?: (block: Block) => void
   ): (() => void) => {
-    const tenantId = localStorage.getItem("tenant_id")
-    const token = localStorage.getItem("access_token")
-
     const url = new URL(`/api/v1/chat/${assistantId}/stream`, window.location.origin)
-    
-    // Create EventSource with fetch for POST request
+
+    // Create AbortController for cancellation
     const controller = new AbortController()
 
-    fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Tenant-ID": tenantId || "",
-        Authorization: token ? `Bearer ${token}` : "",
-      },
-      body: JSON.stringify(data),
-      signal: controller.signal,
-    })
+    // Start the fetch with auth token from Clerk
+    ;(async () => {
+      const token = await getCurrentAuthToken()
+
+      if (!token) {
+        onError("Authentication token not available")
+        return
+      }
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`)
@@ -159,6 +164,7 @@ export const chatApi = {
           onError(err.message)
         }
       })
+    })() // End of async IIFE
 
     // Return abort function
     return () => controller.abort()

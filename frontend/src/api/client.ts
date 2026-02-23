@@ -17,6 +17,19 @@ export function setAuthTokenGetter(getter: () => Promise<string | null>) {
   getAuthToken = getter
 }
 
+export async function getCurrentAuthToken(): Promise<string | null> {
+  if (!getAuthToken) {
+    console.warn("getAuthToken is not set - cannot get current token")
+    return null
+  }
+  try {
+    return await getAuthToken()
+  } catch (error) {
+    console.error("Failed to get current auth token:", error)
+    return null
+  }
+}
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   async (config) => {

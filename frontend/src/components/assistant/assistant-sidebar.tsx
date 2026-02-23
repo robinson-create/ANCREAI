@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, Loader2, Send, Square, Trash2, Sparkles, Mic } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,6 +19,7 @@ interface AssistantSidebarProps {
   placeholder?: string;
   emptyStateTitle?: string;
   emptyStateDescription?: string;
+  additionalActions?: React.ReactNode;
 }
 
 export function AssistantSidebar({
@@ -32,6 +33,7 @@ export function AssistantSidebar({
   placeholder = "Demandez à l'assistant...",
   emptyStateTitle = "Assistant IA",
   emptyStateDescription = "Posez une question ou demandez de l'aide",
+  additionalActions,
 }: AssistantSidebarProps) {
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -173,35 +175,8 @@ export function AssistantSidebar({
         className
       )}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-            <Bot className="h-4 w-4 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold">Assistant IA</h3>
-            <p className="text-xs text-muted-foreground">
-              {selectedAssistantId ? "Actif" : "Non configuré"}
-            </p>
-          </div>
-        </div>
-
-        {messages.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onResetConversation}
-            className="h-8 w-8"
-            title="Nouvelle conversation"
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        )}
-      </div>
-
       {/* Messages area */}
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-4 pt-6" ref={scrollAreaRef}>
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3">
@@ -220,6 +195,9 @@ export function AssistantSidebar({
           </div>
         )}
       </ScrollArea>
+
+      {/* Additional actions (e.g., block types for document editor) */}
+      {additionalActions}
 
       <Separator />
 
