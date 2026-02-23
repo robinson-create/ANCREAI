@@ -32,6 +32,8 @@ import { contactsApi } from "@/api/contacts";
 import type { MailThreadSummary, MailMessage, MailDraft, MailContactSummary } from "@/api/mail";
 import type { Assistant } from "@/types";
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
+import { EmailAssistantProvider, useEmailAssistant, type EmailDraftUpdate } from "@/contexts/email-assistant-stream";
+import { EmailAssistantSidebar } from "@/components/email/email-assistant-sidebar";
 
 interface EmailAttachment {
   id: string;
@@ -125,7 +127,7 @@ ${originalBody}
   `.trim();
 }
 
-export const EmailComposer = () => {
+const EmailComposerContent = () => {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
@@ -390,7 +392,7 @@ export const EmailComposer = () => {
         title: "Email programmé",
         description: "Votre email sera envoyé à l'heure prévue"
       });
-      handleCloseCompose();
+      handleLeaveCompose();
     },
     onError: () => {
       toast({
@@ -1232,11 +1234,41 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
     }
   };
 
+  // Get email assistant context
+  const { setSelectedAssistantId: setAssistantForSidebar } = useEmailAssistant();
+
+  // Sync selected assistant with sidebar
+  useEffect(() => {
+    setAssistantForSidebar(selectedAssistantId);
+  }, [selectedAssistantId, setAssistantForSidebar]);
+
+  // Handle draft updates from AI assistant
+  const handleDraftUpdate = useCallback((update: EmailDraftUpdate) => {
+    switch (update.field) {
+      case "to":
+        setComposeTo(update.value);
+        break;
+      case "subject":
+        setComposeSubject(update.value);
+        break;
+      case "body":
+        setComposeBody(update.value);
+        break;
+    }
+
+    toast({
+      title: "Email mis à jour",
+      description: `Le champ "${update.field === "to" ? "destinataire" : update.field === "subject" ? "objet" : "corps"}" a été mis à jour par l'assistant`,
+    });
+  }, [toast]);
+
   return (
     <>
-    <div className="flex flex-col h-full">
-      {/* ── Header with breadcrumb ── */}
-      <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-surface-elevated shrink-0 flex-wrap">
+    <div className="flex h-full">
+      {/* Main content area */}
+      <div className="flex flex-col flex-1 min-w-0">
+        {/* ── Header with breadcrumb ── */}
+        <div className="flex items-center gap-2 sm:gap-3 h-auto min-h-[3.5rem] px-3 sm:px-5 py-2 border-b border-border bg-surface-elevated shrink-0 flex-wrap">
         {/* Breadcrumb navigation */}
         {isThreadList && (
           <>
@@ -2081,63 +2113,6 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                   </div>
                 )}
 
-                {/* AI instruction field */}
-                <div className="border-t border-border bg-muted/20">
-                  <div className="px-4 pt-3 pb-1">
-                    <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="h-3 w-3 text-primary" />
-                      Consigne IA
-                    </label>
-                  </div>
-                  <div className="relative px-4 pb-2">
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <input
-                          type="text"
-                          value={replyInstruction}
-                          onChange={(e) => setReplyInstruction(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter" && replyInstruction.trim() && !isGenerating) generateReply(); }}
-                          className="w-full h-9 px-3 pr-10 text-sm bg-background border border-border rounded-md outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground"
-                          placeholder="Ex : Confirmer la réception et proposer un rendez-vous…"
-                          disabled={isGenerating}
-                        />
-                        <button
-                          onClick={() => toggleRecordingFor(setReplyInstruction)}
-                          className={`absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                            isRecording && dictationTargetRef.current === setReplyInstruction
-                              ? "bg-destructive text-destructive-foreground animate-pulse"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                          title="Dicter la consigne"
-                        >
-                          <Mic className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                      <Button
-                        variant="premium"
-                        size="sm"
-                        className="gap-1.5 shrink-0 h-9"
-                        onClick={generateReply}
-                        disabled={!replyInstruction.trim() || isGenerating || !selectedAssistantId}
-                      >
-                        {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                        Générer
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Recording indicator */}
-                {isRecording && (
-                  <div className="flex items-center justify-center gap-2 px-4 py-2 text-xs text-destructive border-t border-border/50 bg-destructive/5">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive" />
-                    </span>
-                    Écoute en cours… Parlez pour dicter
-                  </div>
-                )}
-
                 {/* Send status */}
                 <SendStatusBanner />
 
@@ -2262,7 +2237,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                   <div className="w-px h-6 bg-border mx-1" />
                   <button
                     type="button"
-                    onClick={insertLink}
+                    onClick={() => insertLink(false)}
                     className="p-2 hover:bg-accent rounded-md transition-colors"
                     title="Insérer un lien"
                   >
@@ -2353,69 +2328,6 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                       </button>
                     </span>
                   ))}
-                </div>
-              )}
-
-              {/* AI instruction field */}
-              <div className="border-t border-border bg-muted/20">
-                <div className="px-4 pt-3 pb-1 flex items-center gap-2 flex-wrap">
-                  <label className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    Consigne IA
-                  </label>
-                  {(assistants.find((a) => a.id === selectedAssistantId)?.collection_ids?.length ||
-                    assistants.find((a) => a.id === selectedAssistantId)?.integration_ids?.length) ? (
-                    <span className="text-[10px] text-muted-foreground" title="L'IA utilisera les documents et connexions de l'assistant">
-                      + contexte RAG
-                    </span>
-                  ) : null}
-                </div>
-                <div className="relative px-4 pb-2">
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={composeInstruction}
-                        onChange={(e) => setComposeInstruction(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter" && composeInstruction.trim() && !isGenerating) generateComposeEmail(); }}
-                        className="w-full h-9 px-3 pr-10 text-sm bg-background border border-border rounded-md outline-none focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground"
-                        placeholder="Ex : Email de relance suite au devis envoyé la semaine dernière…"
-                        disabled={isGenerating}
-                      />
-                      <button
-                        onClick={() => toggleRecordingFor(setComposeInstruction)}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full flex items-center justify-center transition-all ${
-                          isRecording && dictationTargetRef.current === setComposeInstruction
-                            ? "bg-destructive text-destructive-foreground animate-pulse"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                        title="Dicter la consigne"
-                      >
-                        <Mic className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    <Button
-                      variant="premium"
-                      size="sm"
-                      className="gap-1.5 shrink-0 h-9"
-                      onClick={generateComposeEmail}
-                      disabled={!composeInstruction.trim() || isGenerating || !selectedAssistantId}
-                    >
-                      {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                      Générer
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Recording indicator */}
-              {isRecording && (
-                <div className="flex items-center justify-center gap-2 px-4 py-2 text-xs text-destructive border-t border-border/50 bg-destructive/5">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-destructive" />
-                  </span>
-                  Écoute en cours… Parlez pour dicter
                 </div>
               )}
 
@@ -2563,7 +2475,19 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
           </DialogContent>
         </Dialog>
       </div>
+      {/* End of flex-1 overflow-auto */}
+      </div>
+      {/* End of main content flex-col */}
+
+      {/* AI Assistant Sidebar - shown only when composing or replying */}
+      {(composing || replying) && (
+        <EmailAssistantSidebar
+          className="w-80 hidden lg:flex"
+          onDraftUpdate={handleDraftUpdate}
+        />
+      )}
     </div>
+    {/* End of flex h-full container */}
 
     <AddToFolderDialog
       open={!!addToFolderTarget}
@@ -2706,5 +2630,15 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
   );
 };
 
+/**
+ * EmailComposer with AI Assistant Provider
+ */
+export const EmailComposer = () => {
+  return (
+    <EmailAssistantProvider>
+      <EmailComposerContent />
+    </EmailAssistantProvider>
+  );
+};
 
 export default EmailComposer;
