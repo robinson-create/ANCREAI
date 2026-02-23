@@ -28,6 +28,8 @@ import { DocumentCopilotActions } from "@/components/documents/DocumentCopilotAc
 import { DocumentPromptBar } from "@/components/documents/DocumentPromptBar"
 import { DocumentPreview } from "@/components/documents/DocumentPreview"
 import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
+import { DocumentAssistantProvider, useDocumentAssistant } from "@/contexts/document-assistant-stream"
+import { DocumentAssistantSidebar } from "@/components/documents/document-assistant-sidebar"
 import type { DocBlock, DocBlockKind, DocModel } from "@/types"
 
 const STATUS_LABELS: Record<string, string> = {
@@ -56,7 +58,7 @@ function generateId() {
   return crypto.randomUUID()
 }
 
-export function DocumentEditorPage() {
+function DocumentEditorContent() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const location = useLocation()
@@ -307,8 +309,21 @@ export function DocumentEditorPage() {
   const blocksEmpty = !docModel?.blocks || docModel.blocks.length === 0
   const isReadOnly = doc.status === "sent" || doc.status === "archived"
 
+  // Document assistant context
+  const { setSelectedAssistantId } = useDocumentAssistant();
+  const [localAssistantId, setLocalAssistantId] = useState<string | null>(null);
+
+  // Sync assistant with sidebar
+  useEffect(() => {
+    if (localAssistantId) {
+      setSelectedAssistantId(localAssistantId);
+    }
+  }, [localAssistantId, setSelectedAssistantId]);
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full">
+      {/* Main content */}
+      <div className="flex flex-col flex-1 min-w-0">
       {/* CopilotKit actions (invisible — registers hooks) */}
       <DocumentCopilotActions
         docId={id!}
@@ -583,6 +598,32 @@ export function DocumentEditorPage() {
           </div>
         )}
       </div>
+      {/* End of main content flex-col */}
+      </div>
+
+      {/* Document Assistant Sidebar - shown only in edit mode */}
+      {!isPreview && !isReadOnly && (
+        <DocumentAssistantSidebar
+          className="w-80 hidden lg:flex"
+          onContentUpdate={(update) => {
+            // Optional: handle content updates from assistant
+            console.log("Content update from assistant:", update);
+          }}
+        />
+      )}
     </div>
   )
+}
+
+/**
+ * DocumentEditorPage with Assistant Provider
+ */
+export function DocumentEditorPage() {
+  const { id } = useParams<{ id: string }>();
+
+  return (
+    <DocumentAssistantProvider documentId={id}>
+      <DocumentEditorContent />
+    </DocumentAssistantProvider>
+  );
 }

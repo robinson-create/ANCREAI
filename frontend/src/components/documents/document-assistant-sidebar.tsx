@@ -1,16 +1,16 @@
 import { useCallback } from "react";
-import { useEmailAssistant, type EmailDraftUpdate } from "@/contexts/email-assistant-stream";
+import { useDocumentAssistant, type DocumentDraftUpdate } from "@/contexts/document-assistant-stream";
 import { AssistantSidebar } from "@/components/assistant/assistant-sidebar";
 
-interface EmailAssistantSidebarProps {
+interface DocumentAssistantSidebarProps {
   className?: string;
-  onDraftUpdate?: (update: EmailDraftUpdate) => void;
+  onContentUpdate?: (update: DocumentDraftUpdate) => void;
 }
 
-export function EmailAssistantSidebar({
+export function DocumentAssistantSidebar({
   className,
-  onDraftUpdate,
-}: EmailAssistantSidebarProps) {
+  onContentUpdate,
+}: DocumentAssistantSidebarProps) {
   const {
     messages,
     isStreaming,
@@ -18,15 +18,15 @@ export function EmailAssistantSidebar({
     sendMessage,
     resetConversation,
     abortStream,
-  } = useEmailAssistant();
+  } = useDocumentAssistant();
 
   const handleSendMessage = useCallback((text: string) => {
     sendMessage(text, (update) => {
-      if (onDraftUpdate) {
-        onDraftUpdate(update);
+      if (onContentUpdate) {
+        onContentUpdate(update);
       }
     });
-  }, [sendMessage, onDraftUpdate]);
+  }, [sendMessage, onContentUpdate]);
 
   return (
     <AssistantSidebar
@@ -39,7 +39,7 @@ export function EmailAssistantSidebar({
       onAbortStream={abortStream}
       placeholder="Demandez à l'assistant..."
       emptyStateTitle="Assistant IA"
-      emptyStateDescription="Posez une question ou demandez de l'aide pour rédiger"
+      emptyStateDescription="Posez une question ou demandez de l'aide pour éditer"
     />
   );
 }
