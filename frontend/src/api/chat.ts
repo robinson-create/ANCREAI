@@ -27,7 +27,8 @@ export const chatApi = {
     onConversationId?: (conversationId: string) => void,
     onBlock?: (block: Block) => void
   ): (() => void) => {
-    const url = new URL(`/api/v1/chat/${assistantId}/stream`, window.location.origin)
+    const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
+    const url = new URL(`/api/v1/chat/${assistantId}/stream`, base)
 
     // Create AbortController for cancellation
     const controller = new AbortController()

@@ -16,13 +16,26 @@ import { CopilotKit } from "@copilotkit/react-core"
 import type { ReactNode } from "react"
 
 const COPILOTKIT_RUNTIME_URL =
-  import.meta.env.VITE_COPILOTKIT_RUNTIME_URL || "/copilotkit"
+  import.meta.env.VITE_COPILOTKIT_RUNTIME_URL || ""
 
 interface CopilotProviderProps {
   children: ReactNode
 }
 
+/**
+ * Wraps children with CopilotKit only when a valid runtime URL is configured.
+ * In production (Vercel), the default "/copilotkit" path won't work since
+ * there's no Vite proxy — so we skip CopilotKit unless an absolute URL is set.
+ */
 export function CopilotProvider({ children }: CopilotProviderProps) {
+  // Skip CopilotKit if no runtime URL or if it's a relative path in production
+  const isRelative = COPILOTKIT_RUNTIME_URL.startsWith("/") || !COPILOTKIT_RUNTIME_URL
+  const isProduction = import.meta.env.PROD
+
+  if (!COPILOTKIT_RUNTIME_URL || (isRelative && isProduction)) {
+    return <>{children}</>
+  }
+
   return (
     <CopilotKit runtimeUrl={COPILOTKIT_RUNTIME_URL}>
       {children}

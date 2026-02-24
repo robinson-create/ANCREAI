@@ -20,6 +20,11 @@ const CLERK_PUBLISHABLE_KEY =
     ? rawKey
     : undefined
 
+// CopilotKit is only available when a valid (absolute) runtime URL is set
+const copilotUrl = import.meta.env.VITE_COPILOTKIT_RUNTIME_URL || ""
+const COPILOTKIT_ENABLED =
+  !!copilotUrl && (!copilotUrl.startsWith("/") || !import.meta.env.PROD)
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -33,11 +38,11 @@ const queryClient = new QueryClient({
 const AppWithProviders = () => (
   <QueryClientProvider client={queryClient}>
     <CopilotProvider>
-      <CopilotActions />
+      {COPILOTKIT_ENABLED && <CopilotActions />}
       <BrowserRouter>
         <App />
       </BrowserRouter>
-      <CopilotChatPopup />
+      {COPILOTKIT_ENABLED && <CopilotChatPopup />}
     </CopilotProvider>
   </QueryClientProvider>
 )
