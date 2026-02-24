@@ -28,7 +28,7 @@ export function AssistantSidebar({
   isStreaming,
   selectedAssistantId,
   onSendMessage,
-  onResetConversation,
+  onResetConversation: _onResetConversation,
   onAbortStream,
   placeholder = "Demandez à l'assistant...",
   emptyStateTitle = "Assistant IA",

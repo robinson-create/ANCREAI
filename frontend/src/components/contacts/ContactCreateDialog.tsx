@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { ContactCreate } from "@/api/contacts"
+import type { ContactCreateData } from "@/api/contacts"
 
 const schema = z.object({
   primary_email: z.string().email("Email invalide").min(1, "L'email est requis"),
@@ -48,7 +48,7 @@ type FormData = z.infer<typeof schema>
 interface ContactCreateDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: ContactCreate) => Promise<void>
+  onSubmit: (data: ContactCreateData) => Promise<void>
 }
 
 export function ContactCreateDialog({
@@ -97,8 +97,6 @@ export function ContactCreateDialog({
       contact_type: data.contact_type,
       notes: data.notes || undefined,
       source: "manual",
-      confidence_score: 1.0,
-      // Company will be handled by backend via company_name
     })
     onOpenChange(false)
   }

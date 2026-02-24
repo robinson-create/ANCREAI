@@ -440,7 +440,7 @@ export function ContactDetailPage() {
       <ContactEditDialog
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
-        onSubmit={(data) => updateMutation.mutateAsync(data)}
+        onSubmit={async (data) => { await updateMutation.mutateAsync(data) }}
         contact={contact}
       />
     </div>

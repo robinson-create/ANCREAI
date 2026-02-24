@@ -22,7 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import type { Contact, ContactUpdate } from "@/api/contacts"
+import type { Contact, ContactUpdateData } from "@/api/contacts"
 
 const schema = z.object({
   first_name: z.string().optional(),
@@ -50,7 +50,7 @@ type FormData = z.infer<typeof schema>
 interface ContactEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (data: ContactUpdate) => Promise<void>
+  onSubmit: (data: ContactUpdateData) => Promise<void>
   contact: Contact | null
 }
 
@@ -80,7 +80,7 @@ export function ContactEditDialog({
         last_name: contact.last_name || "",
         phone: contact.phone || "",
         title: contact.title || "",
-        contact_type: contact.contact_type,
+        contact_type: contact.contact_type as FormData["contact_type"],
         language: contact.language || "",
         timezone: contact.timezone || "",
         country: contact.country || "",

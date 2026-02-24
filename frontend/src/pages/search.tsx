@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronRight,
-  Loader2,
   Send,
   SendHorizontal,
   Anchor,
@@ -123,14 +122,14 @@ export function SearchPage() {
   // ── Stream state from persistent context (survives navigation) ──
   const {
     messages,
-    conversationTitle,
+    conversationTitle: _conversationTitle,
     isSearching,
     selectedAssistantId,
     setSelectedAssistantId,
     sendMessage,
     loadConversation,
     resetConversation,
-    conversationId,
+    conversationId: _conversationId,
     abortStream,
   } = useSearchStream();
   const searchViewCtx = useSearchView();
@@ -519,12 +518,6 @@ export function SearchPage() {
       ? `Assistant: ${selectedAssistant.name} (model: ${selectedAssistant.model})`
       : "No assistant selected",
   });
-
-  // Get assistant settings helper
-  const getAssistantEmoji = (a: Assistant) => {
-    const settings = (a.settings || {}) as Record<string, unknown>;
-    return (settings.emoji as string) || "";
-  };
 
   return (
     <div className="flex flex-col h-full">

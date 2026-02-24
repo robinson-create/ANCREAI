@@ -60,7 +60,7 @@ export function ContactsPage() {
       interne: "bg-gray-100 text-gray-800 border-gray-200",
       autre: "bg-gray-50 text-gray-600 border-gray-200",
     }
-    return colors[type] || colors.autre
+    return colors[type] || "bg-gray-50 text-gray-600 border-gray-200"
   }
 
   const getInitials = (contact: ContactBrief): string => {
@@ -69,7 +69,7 @@ export function ContactsPage() {
     if (first || last) {
       return (first + last).toUpperCase()
     }
-    return contact.primary_email[0].toUpperCase()
+    return contact.primary_email.charAt(0).toUpperCase()
   }
 
   const createMutation = useMutation({
@@ -270,7 +270,7 @@ export function ContactsPage() {
       <ContactCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onSubmit={(data) => createMutation.mutateAsync(data)}
+        onSubmit={async (data) => { await createMutation.mutateAsync(data) }}
       />
       <ContactImportDialog
         open={importOpen}

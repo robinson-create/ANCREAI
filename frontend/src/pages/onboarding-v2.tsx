@@ -8,8 +8,6 @@ import {
   Users,
   Send,
   Check,
-  Sparkles,
-  Zap,
   Calendar,
   FolderOpen,
   Mic,
@@ -96,44 +94,6 @@ const MailVisual = () => (
       <span>Relance devis</span>
       <span className="text-accent">Brouillon</span>
     </motion.div>
-  </div>
-);
-
-const DocGenVisual = () => (
-  <div className="space-y-2">
-    {[
-      { name: "Contrat_Prestation.docx", status: "Généré" },
-      { name: "Compte_Rendu_RDV.pdf", status: "Prêt" },
-      { name: "Devis_Formation.xlsx", status: "En cours…" },
-    ].map((d, i) => (
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ delay: 0.2 + i * 0.12 }}
-        className="p-3 rounded-lg bg-muted border border-border flex items-center justify-between"
-      >
-        <span className="text-sm text-foreground">{d.name}</span>
-        <span className="text-xs text-accent">{d.status}</span>
-      </motion.div>
-    ))}
-  </div>
-);
-
-const CrmVisual = () => (
-  <div className="grid grid-cols-2 gap-2">
-    {["Pipedrive", "HubSpot", "Odoo", "Notion"].map((tool, i) => (
-      <motion.div
-        key={i}
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: 0.2 + i * 0.1 }}
-        className="p-3 rounded-lg bg-muted border border-border text-center"
-      >
-        <div className="font-medium text-sm text-foreground">{tool}</div>
-        <div className="text-xs text-success">Connecté ✓</div>
-      </motion.div>
-    ))}
   </div>
 );
 

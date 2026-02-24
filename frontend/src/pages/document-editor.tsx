@@ -68,7 +68,7 @@ function DocumentEditorContent() {
   const { toast } = useToast()
 
   // Extract initial prompt from navigation state (from dashboard)
-  const [initialPrompt] = useState(() => {
+  useState(() => {
     const p = (location.state as { prompt?: string } | null)?.prompt
     if (p) window.history.replaceState({}, "")
     return p
@@ -81,7 +81,7 @@ function DocumentEditorContent() {
   const [title, setTitle] = useState("")
   const [isExporting, setIsExporting] = useState(false)
   const [isPreview, setIsPreview] = useState(false)
-  const [isGeneratingLocal, setIsGeneratingLocal] = useState(false)
+  const [isGeneratingLocal] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const docGen = useDocumentGeneration()
   const isGeneratingFromContext = id ? docGen?.generatingDocIds.has(id) ?? false : false
@@ -335,7 +335,6 @@ function DocumentEditorContent() {
     )
   }
 
-  const blocksEmpty = !docModel?.blocks || docModel.blocks.length === 0
   const isReadOnly = doc.status === "sent" || doc.status === "archived"
 
   return (

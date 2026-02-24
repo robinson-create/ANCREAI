@@ -13,7 +13,6 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { useToast } from "@/hooks/use-toast"
 import { assistantsApi } from "@/api/assistants"
 import { documentsApi } from "@/api/documents"
 import { billingApi } from "@/api/billing"
@@ -73,7 +72,6 @@ function AssistantSyncBadge({ collectionId }: { collectionId?: string }) {
 
 export function AssistantsPage() {
   const navigate = useNavigate()
-  const { toast } = useToast()
 
   const [isModalOpen, setIsModalOpen] = useState(false)
 

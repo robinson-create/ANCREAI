@@ -37,7 +37,7 @@ interface AssistantModalProps {
 export function AssistantModal({
   open,
   onOpenChange,
-  assistant,
+  assistant: _assistant,
   onCreated,
 }: AssistantModalProps) {
   const queryClient = useQueryClient()

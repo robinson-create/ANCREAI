@@ -1,18 +1,8 @@
-import { useState } from "react";
-import { Menu } from "lucide-react";
 import { Link } from "react-router-dom";
 import anchorLogo from "@/assets/ancre-logo.png";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 
 const Navbar = () => {
-  const [open, setOpen] = useState(false);
-  const links = [
-    { href: "#pourquoi", label: "Pourquoi Ancre ?" },
-    { href: "#comment", label: "Comment ça marche" },
-    { href: "#technologie", label: "Technologie" },
-    { href: "#faq", label: "FAQ" },
-  ];
 
   return (
     <nav className="fixed top-2 md:top-3 left-1/2 -translate-x-1/2 z-50 w-[96%] md:w-[95%] max-w-4xl">

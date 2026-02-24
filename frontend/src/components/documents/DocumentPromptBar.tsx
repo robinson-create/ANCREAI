@@ -36,9 +36,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { assistantsApi } from "@/api/assistants"
-import { useDocumentStore } from "@/hooks/use-document-store"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
-import type { Assistant, DocBlock, DocBlockKind } from "@/types"
+import type { Assistant, DocBlockKind } from "@/types"
 
 // ── Prompt history ──
 
@@ -115,7 +114,6 @@ export function DocumentPromptBar({
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const wantsRecordingRef = useRef(false)
 
-  const { updateBlock, addBlock } = useDocumentStore()
   const docGen = useDocumentGeneration()
 
   // Fetch assistants for selector

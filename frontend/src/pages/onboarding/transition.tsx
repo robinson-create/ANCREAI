@@ -32,8 +32,9 @@ const OnboardingTransition = () => {
       await onboardingApi.complete({
         first_name: state.firstName || "",
         last_name: state.lastName || "",
-        company: state.company || "",
-        role: state.role || "",
+        company_name: state.company || "",
+        memories: "",
+        website_urls: [],
       });
 
       // Rediriger vers l'app

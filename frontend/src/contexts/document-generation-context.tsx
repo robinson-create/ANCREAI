@@ -79,7 +79,7 @@ function normalizeDocModelForBackend(model: DocModel): DocModel {
       ...base,
       type: (block.type as DocBlock["type"]) ?? "rich_text",
       content: block.content && typeof block.content === "object" ? block.content : {},
-      clause_ref: block.clause_ref ?? null,
+      clause_ref: block.clause_ref ?? undefined,
     }
   })
 

@@ -1,4 +1,4 @@
-import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, FolderPlus, MoreVertical, Trash2, Inbox, Clock, FileEdit, Calendar, Bold, Italic, List, ListOrdered, Link as LinkIcon, Type, MessageSquare } from "lucide-react";
+import { Mail, Search, Send, ChevronRight, Reply, Forward, Mic, Plus, Sparkles, Bot, Loader2, Square, Paperclip, X, FileText, RefreshCw, AlertCircle, Check, Server, MoreVertical, Trash2, Inbox, FileEdit, Calendar, Bold, Italic, List, ListOrdered, Link as LinkIcon, Type, MessageSquare } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
@@ -66,13 +66,6 @@ function loadDraft(): EmailDraft | null {
   }
 }
 
-function saveDraft(draft: EmailDraft) {
-  try {
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...draft, savedAt: new Date().toISOString() }));
-  } catch {
-    // ignore
-  }
-}
 
 function clearDraft() {
   try {
@@ -150,7 +143,7 @@ const EmailComposerContent = () => {
   const [search, setSearch] = useState("");
   const [replying, setReplying] = useState(false);
   const [replyBody, setReplyBody] = useState("");
-  const [replyInstruction, setReplyInstruction] = useState("");
+  const [, setReplyInstruction] = useState("");
 
   // ── Compose new email state ──
   const [composing, setComposing] = useState(false);
@@ -929,31 +922,6 @@ const EmailComposerContent = () => {
     setSendStatus("idle");
     setSendError(null);
   }, []);
-
-  const generateReply = useCallback(() => {
-    if (!selectedMessage) return;
-    if (!replyInstruction.trim()) return;
-    const senderName = selectedMessage.sender?.name || selectedMessage.sender?.email || "";
-    const prompt = `Tu es un assistant de rédaction d'emails professionnels. Rédige une réponse à l'email suivant.
-
-Email original de ${senderName} :
-Objet : ${selectedMessage.subject || "(sans objet)"}
----
-${selectedMessage.body_text || selectedMessage.snippet || ""}
----
-
-Consigne de l'utilisateur : ${replyInstruction.trim()}
-
-IMPORTANT : Si du contexte documentaire est fourni, utilise-le UNIQUEMENT s'il est directement lié à la consigne ci-dessus. N'invente pas de contenu à partir de documents sans rapport avec la demande. En cas de doute, ignore le contexte et rédige une réponse simple basée uniquement sur la consigne.
-Génère le corps en HTML compatible Gmail, sans Markdown.
-Utilise uniquement : <p>, <br>, <strong>, <em>, <ul>, <ol>, <li>, <a href="...">.
-Pas de CSS, scripts ou attributs style.
-N'écris AUCUNE phrase d'introduction (pas de "Voici une proposition", "Voici le mail", etc.).
-Ne rédige PAS de signature (formule de politesse finale, nom, coordonnées). La signature est ajoutée automatiquement.
-Commence directement par la formule de salutation.`;
-
-    generateWithAI(prompt, setReplyBody);
-  }, [selectedMessage, replyInstruction, generateWithAI]);
 
   const generateComposeEmail = useCallback(() => {
     if (!composeInstruction.trim()) return;
