@@ -122,6 +122,7 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
           message: userText,
           conversation_id: conversationId || undefined,
           include_history: true,
+          context_hint: "email",
         },
         // onToken
         (token) => {

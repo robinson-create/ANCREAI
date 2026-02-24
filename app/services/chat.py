@@ -265,6 +265,7 @@ class ChatService:
         context: str,
         integrations: list[dict] | None = None,
         contact_context: str = "",
+        context_hint: str | None = None,
     ) -> str:
         """Build system prompt with context and integration instructions."""
         base_prompt = custom_prompt or (
@@ -293,6 +294,38 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
             prompt += contact_context
 
         prompt += BLOCK_INSTRUCTIONS
+
+        # Add email-specific instructions when user is in email context
+        if context_hint == "email":
+            prompt += (
+                "\nCONTEXTE EMAIL :\n"
+                "L'utilisateur est en train de rédiger ou lire un email. "
+                "Quand ta réponse contient du contenu utile pour l'email (texte, "
+                "instructions, synthèse, proposition…), utilise TOUJOURS l'outil "
+                "`suggestEmail` pour proposer d'insérer ce contenu dans l'email. "
+                "Réponds d'abord en texte clair, puis appelle `suggestEmail`.\n"
+            )
+
+        # Add document-specific instructions when user is in document editor
+        if context_hint == "document":
+            prompt += (
+                "\nCONTEXTE ÉDITEUR DE DOCUMENTS :\n"
+                "L'utilisateur édite un document professionnel. Ta réponse sera insérée "
+                "directement dans un éditeur rich-text.\n"
+                "RÈGLES IMPÉRATIVES :\n"
+                "- Écris du contenu RÉEL, prêt à l'emploi et professionnel\n"
+                "- N'utilise JAMAIS de placeholders comme [Nom], [Date], [à compléter]\n"
+                "- Utilise du markdown pour le formatage : ## pour les titres de section, "
+                "**gras**, *italique*, listes à puces (- ou *), listes numérotées (1. 2. 3.)\n"
+                "- Structure ton contenu avec des titres ## ou ### pour créer des sections "
+                "séparées et modifiables dans l'éditeur\n"
+                "- N'inclus JAMAIS de blocs de code (``` ou json)\n"
+                "- N'inclus JAMAIS de méta-commentaires sur le formatage ou les outils\n"
+                "- N'utilise PAS les outils renderSteps, renderTable etc. Écris directement "
+                "le contenu en markdown qui sera converti en rich-text\n"
+                "- Écris directement le contenu demandé, sans préambule inutile\n"
+            )
+
         prompt += CALENDAR_SYSTEM_PROMPT_ADDITION
         prompt += _build_integration_instructions(integrations or [])
 
@@ -412,6 +445,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         integrations: list[dict] | None = None,
         db: AsyncSession | None = None,
         conversation_id: UUID | None = None,
+        context_hint: str | None = None,
     ) -> tuple[str, list[Citation], list[dict], int, int]:
         """
         Non-streaming chat with tool-calling loop.
@@ -439,7 +473,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         messages = []
         messages.append({
             "role": "system",
-            "content": self._build_system_prompt(system_prompt, context, integrations),
+            "content": self._build_system_prompt(system_prompt, context, integrations, context_hint=context_hint),
         })
 
         if conversation_history:
@@ -615,6 +649,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         integrations: list[dict] | None = None,
         db: AsyncSession | None = None,
         conversation_id: UUID | None = None,
+        context_hint: str | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         """
         Streaming chat with SSE events and tool-calling loop.
@@ -656,7 +691,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         messages = []
         messages.append({
             "role": "system",
-            "content": self._build_system_prompt(system_prompt, context, integrations, contact_context),
+            "content": self._build_system_prompt(system_prompt, context, integrations, contact_context, context_hint=context_hint),
         })
 
         if conversation_history:

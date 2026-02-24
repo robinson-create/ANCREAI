@@ -49,6 +49,7 @@ async def _run_llm_producer(
     assistant_id: UUID,
     conversation_id: UUID,
     user_message_id: UUID,
+    context_hint: str | None = None,
 ):
     """Consume chat_service.chat_stream(), push events to queue, and save to DB.
 
@@ -73,6 +74,7 @@ async def _run_llm_producer(
                 integrations=integrations_data,
                 db=retrieval_db,
                 conversation_id=conversation_id,
+                context_hint=context_hint,
             ):
                 if event.event == "token":
                     full_response += event.data
@@ -352,6 +354,7 @@ async def chat_stream(
             assistant_id=assistant_id,
             conversation_id=conversation_id,
             user_message_id=user_message_id,
+            context_hint=request.context_hint,
         )
     )
     # Suppress "Task exception was never retrieved" warnings

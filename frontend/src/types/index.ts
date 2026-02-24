@@ -94,6 +94,7 @@ export interface ChatRequest {
   conversation_id?: string
   include_history?: boolean
   max_history_messages?: number
+  context_hint?: string
 }
 
 export interface ChatResponse {

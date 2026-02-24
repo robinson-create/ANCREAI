@@ -33,6 +33,7 @@ import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
 import { DocumentAssistantProvider, useDocumentAssistant } from "@/contexts/document-assistant-stream"
 import { DocumentAssistantSidebar } from "@/components/documents/document-assistant-sidebar"
 import type { DocBlock, DocBlockKind, DocModel } from "@/types"
+import { markdownToProseMirrorDoc, splitMarkdownIntoSections } from "@/lib/markdown-to-prosemirror"
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
@@ -613,35 +614,24 @@ function DocumentEditorContent() {
           className="w-80 hidden lg:flex flex-col border-l border-border"
           onContentUpdate={(update) => {
             if (update.blockId) {
-              // Update existing block
+              // Update existing block with parsed markdown
               const block = docModel?.blocks.find(b => b.id === update.blockId);
               if (block && (block.type === "rich_text" || block.type === "clause" || block.type === "terms")) {
-                // Convert string content to TipTap JSON format
                 handleBlockChange(update.blockId, {
-                  content: {
-                    type: "doc",
-                    content: [{
-                      type: "paragraph",
-                      content: [{ type: "text", text: update.content }]
-                    }]
-                  }
+                  content: markdownToProseMirrorDoc(update.content),
                 });
               }
             } else {
-              // Add new rich_text block with the content
-              const newBlock: DocBlock = {
-                type: "rich_text",
-                id: generateId(),
-                label: "",
-                content: {
-                  type: "doc",
-                  content: [{
-                    type: "paragraph",
-                    content: [{ type: "text", text: update.content }]
-                  }]
-                }
-              };
-              addBlock(newBlock);
+              // Split markdown into sections → one block per section
+              const sections = splitMarkdownIntoSections(update.content);
+              for (const section of sections) {
+                addBlock({
+                  type: "rich_text",
+                  id: generateId(),
+                  label: section.label,
+                  content: section.doc,
+                });
+              }
             }
           }}
           onAddBlock={(type: DocBlockKind) => handleAddBlock(type)}
@@ -666,35 +656,24 @@ function DocumentEditorContent() {
                 className="h-full flex flex-col"
                 onContentUpdate={(update) => {
                   if (update.blockId) {
-                    // Update existing block
+                    // Update existing block with parsed markdown
                     const block = docModel?.blocks.find(b => b.id === update.blockId);
                     if (block && (block.type === "rich_text" || block.type === "clause" || block.type === "terms")) {
-                      // Convert string content to TipTap JSON format
                       handleBlockChange(update.blockId, {
-                        content: {
-                          type: "doc",
-                          content: [{
-                            type: "paragraph",
-                            content: [{ type: "text", text: update.content }]
-                          }]
-                        }
+                        content: markdownToProseMirrorDoc(update.content),
                       });
                     }
                   } else {
-                    // Add new rich_text block with the content
-                    const newBlock: DocBlock = {
-                      type: "rich_text",
-                      id: generateId(),
-                      label: "",
-                      content: {
-                        type: "doc",
-                        content: [{
-                          type: "paragraph",
-                          content: [{ type: "text", text: update.content }]
-                        }]
-                      }
-                    };
-                    addBlock(newBlock);
+                    // Split markdown into sections → one block per section
+                    const sections = splitMarkdownIntoSections(update.content);
+                    for (const section of sections) {
+                      addBlock({
+                        type: "rich_text",
+                        id: generateId(),
+                        label: section.label,
+                        content: section.doc,
+                      });
+                    }
                   }
                   setIsMobileSidebarOpen(false);
                 }}

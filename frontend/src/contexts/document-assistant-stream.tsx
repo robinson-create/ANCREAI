@@ -199,6 +199,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
           message: userText,
           conversation_id: conversationId || undefined,
           include_history: true,
+          context_hint: "document",
         },
         // onToken
         (token) => {

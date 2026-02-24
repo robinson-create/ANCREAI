@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
     conversation_id: UUID | None = None
     include_history: bool = True
     max_history_messages: int = 10
+    context_hint: str | None = None  # Optional hint about the UI context (e.g. "email")
 
 
 class BlockData(BaseModel):

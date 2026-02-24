@@ -5,7 +5,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LocalMessage } from "@/contexts/email-assistant-stream";
-import type { Block } from "@/types";
+import { BlockRenderer } from "@/components/blocks/BlockRenderer";
 
 interface MessageItemProps {
   message: LocalMessage;
@@ -35,9 +35,9 @@ export function MessageItem({ message, className }: MessageItemProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 space-y-2">
+      <div className="flex-1 min-w-0 overflow-hidden space-y-2">
         {/* Message text */}
-        <div className="prose prose-sm max-w-none break-words dark:prose-invert">
+        <div className="prose prose-sm max-w-none break-words overflow-x-auto dark:prose-invert">
           {message.role === "assistant" ? (
             <>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -113,16 +113,3 @@ export function MessageItem({ message, className }: MessageItemProps) {
   );
 }
 
-/**
- * Renders generative UI blocks from the AI response
- */
-function BlockRenderer({ block }: { block: Block }) {
-  // Basic block rendering - can be extended based on block types
-  return (
-    <div className="rounded-lg border bg-card p-4">
-      <pre className="text-xs overflow-auto">
-        {JSON.stringify(block, null, 2)}
-      </pre>
-    </div>
-  );
-}
