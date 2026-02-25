@@ -12,6 +12,8 @@ import type {
   OutlineItem,
   ExportRequest,
   ExportRead,
+  ThemeRead,
+  ThemeCreate,
 } from "@/types"
 
 export const presentationsApi = {
@@ -134,6 +136,25 @@ export const presentationsApi = {
 
   listExports: async (presId: string): Promise<ExportRead[]> => {
     const { data } = await apiClient.get<ExportRead[]>(`/presentations/${presId}/exports`)
+    return data
+  },
+
+  // ── Themes ──
+
+  listThemes: async (): Promise<ThemeRead[]> => {
+    const { data } = await apiClient.get<ThemeRead[]>("/presentations/themes")
+    return data
+  },
+
+  createTheme: async (body: ThemeCreate): Promise<ThemeRead> => {
+    const { data } = await apiClient.post<ThemeRead>("/presentations/themes", body)
+    return data
+  },
+
+  applyTheme: async (presId: string, themeId: string): Promise<PresentationFull> => {
+    const { data } = await apiClient.patch<PresentationFull>(`/presentations/${presId}`, {
+      theme_id: themeId,
+    })
     return data
   },
 }

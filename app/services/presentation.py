@@ -164,7 +164,10 @@ class PresentationService:
             Presentation.tenant_id == tenant_id,
         )
         if with_slides:
-            q = q.options(selectinload(Presentation.slides))
+            q = q.options(
+                selectinload(Presentation.slides),
+                selectinload(Presentation.theme),
+            )
         result = await db.execute(q)
         return result.scalar_one_or_none()
 

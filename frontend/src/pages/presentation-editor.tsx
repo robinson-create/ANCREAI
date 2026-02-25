@@ -6,6 +6,8 @@ import {
   Loader2,
   AlertCircle,
   Download,
+  Plus,
+  Palette,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,6 +27,8 @@ import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
 import { OutlineEditor } from "@/components/presentation/OutlineEditor"
 import { SlidePanel } from "@/components/presentation/SlidePanel"
 import { SlideEditor } from "@/components/presentation/SlideEditor"
+import { AddElementsPanel } from "@/components/presentation/AddElementsPanel"
+import { ThemePanel } from "@/components/presentation/ThemePanel"
 import type {
   PresentationFull,
   PresentationStatus,
@@ -93,6 +97,8 @@ export function PresentationEditorPage() {
   const [exportProgress, setExportProgress] = useState<number | undefined>()
   const [regeneratingSlideId, setRegeneratingSlideId] = useState<string | null>(null)
   const [slideGenProgress, setSlideGenProgress] = useState<{ current: number; total: number } | null>(null)
+  const [showAddPanel, setShowAddPanel] = useState(false)
+  const [showThemePanel, setShowThemePanel] = useState(false)
   const titleInitialized = useRef(false)
 
   // Sync title from server on first load + when status transitions to ready
@@ -198,19 +204,25 @@ export function PresentationEditorPage() {
   })
 
   const regenerateSlideMutation = useMutation({
-    mutationFn: (slideId: string) =>
-      presentationsApi.regenerateSlide(id!, slideId, {}),
+    mutationFn: async (slideId: string) => {
+      console.log("[Regenerate] Starting for slide:", slideId, "presentation:", id)
+      return presentationsApi.regenerateSlide(id!, slideId, {})
+    },
     onMutate: (slideId) => setRegeneratingSlideId(slideId),
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log("[Regenerate] Success:", data)
       setRegeneratingSlideId(null)
       queryClient.invalidateQueries({ queryKey: ["presentation", id] })
       toast({ title: "Slide régénéré" })
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("[Regenerate] Error:", error)
       setRegeneratingSlideId(null)
+      const msg =
+        error instanceof Error ? error.message : "Impossible de régénérer le slide."
       toast({
-        title: "Erreur",
-        description: "Impossible de régénérer le slide.",
+        title: "Erreur de régénération",
+        description: msg,
         variant: "destructive",
       })
     },
@@ -296,6 +308,19 @@ export function PresentationEditorPage() {
     if (!presentation || !selectedSlideId) return null
     return presentation.slides.find((s) => s.id === selectedSlideId) || null
   }, [presentation, selectedSlideId])
+
+  const handleInsertElements = useCallback(
+    (nodes: import("@/types").SlideNode[]) => {
+      if (!selectedSlide || !presentation) return
+      const existingNodes = (
+        selectedSlide.content_json?.content_json ||
+        (Array.isArray(selectedSlide.content_json) ? selectedSlide.content_json : [])
+      ) as import("@/types").SlideNode[]
+      const newContentJson = { ...selectedSlide.content_json, content_json: [...existingNodes, ...nodes] }
+      slideUpdateMutation.mutate({ slideId: selectedSlide.id, update: { content_json: newContentJson } })
+    },
+    [selectedSlide, presentation, slideUpdateMutation],
+  )
 
   // ── Loading / Error ──
 
@@ -405,6 +430,19 @@ export function PresentationEditorPage() {
                 </div>
               )}
             </div>
+            {showAddPanel && (
+              <AddElementsPanel
+                onInsertElements={handleInsertElements}
+                onClose={() => setShowAddPanel(false)}
+              />
+            )}
+            {showThemePanel && (
+              <ThemePanel
+                presentationId={pres.id}
+                currentThemeId={pres.theme_id}
+                onClose={() => setShowThemePanel(false)}
+              />
+            )}
           </div>
         )
 
@@ -429,7 +467,7 @@ export function PresentationEditorPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b bg-card shrink-0">
+      <div className="flex items-center gap-2 px-4 py-2 border-b bg-card shrink-0 flex-nowrap overflow-x-auto">
         <Button
           variant="ghost"
           size="sm"
@@ -451,6 +489,30 @@ export function PresentationEditorPage() {
         </Badge>
 
         <div className="flex-1" />
+
+        {/* Action buttons (only when ready) — all on same line */}
+        {presentation.status === "ready" && (
+          <>
+            <Button
+              variant={showAddPanel ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => { setShowAddPanel(!showAddPanel); setShowThemePanel(false) }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Éléments
+            </Button>
+            <Button
+              variant={showThemePanel ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => { setShowThemePanel(!showThemePanel); setShowAddPanel(false) }}
+            >
+              <Palette className="h-3.5 w-3.5" />
+              Thème
+            </Button>
+          </>
+        )}
 
         {/* Export button (only when ready) */}
         {presentation.status === "ready" && (

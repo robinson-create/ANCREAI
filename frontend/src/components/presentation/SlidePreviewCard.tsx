@@ -22,9 +22,27 @@ function extractText(nodes: (SlideNode | TextLeaf)[]): string {
     .join("")
 }
 
+function MiniGroupRenderer({ node, symbol = "•" }: { node: SlideNode; symbol?: string }) {
+  return (
+    <div className="space-y-0.5">
+      {(node.children as SlideNode[])
+        ?.filter((c) => !isTextLeaf(c))
+        .slice(0, 4)
+        .map((child, i) => (
+          <div key={i} className="flex items-start gap-0.5">
+            <span className="text-[3px] mt-[1px]">{symbol}</span>
+            <span className="text-[4px] leading-tight truncate">
+              {extractText((child as SlideNode).children || [])}
+            </span>
+          </div>
+        ))}
+    </div>
+  )
+}
+
 function MiniNodeRenderer({ node }: { node: SlideNode }) {
   const text = extractText(node.children || [])
-  if (!text && node.type !== "img") return null
+  if (!text && node.type !== "img" && !node.type.startsWith("chart-")) return null
 
   switch (node.type) {
     case "h1":
@@ -38,22 +56,102 @@ function MiniNodeRenderer({ node }: { node: SlideNode }) {
       return <div className="text-[4.5px] font-medium leading-tight truncate">{text}</div>
     case "p":
       return <div className="text-[4px] leading-tight truncate text-muted-foreground">{text}</div>
+
+    // Lists
     case "bullet_group":
+      return <MiniGroupRenderer node={node} symbol="•" />
+    case "icon_list":
+      return <MiniGroupRenderer node={node} symbol="◆" />
+
+    // Boxes / Cards
+    case "box_group":
+    case "stats_group":
       return (
-        <div className="space-y-0.5">
+        <div className="flex gap-0.5">
           {(node.children as SlideNode[])
             ?.filter((c) => !isTextLeaf(c))
-            .slice(0, 4)
+            .slice(0, 3)
             .map((child, i) => (
-              <div key={i} className="flex items-start gap-0.5">
-                <span className="text-[3px] mt-[1px]">•</span>
-                <span className="text-[4px] leading-tight truncate">
+              <div key={i} className="flex-1 rounded-[1px] border border-muted/40 p-0.5">
+                <span className="text-[3.5px] leading-tight truncate block">
                   {extractText((child as SlideNode).children || [])}
                 </span>
               </div>
             ))}
         </div>
       )
+
+    // Comparison (2-col)
+    case "compare_group":
+    case "before_after_group":
+    case "pros_cons_group":
+      return (
+        <div className="flex gap-0.5">
+          {(node.children as SlideNode[])
+            ?.filter((c) => !isTextLeaf(c))
+            .slice(0, 2)
+            .map((child, i) => (
+              <div key={i} className="flex-1 rounded-[1px] border border-muted/40 p-0.5">
+                <span className="text-[3.5px] leading-tight truncate block">
+                  {extractText((child as SlideNode).children || [])}
+                </span>
+              </div>
+            ))}
+        </div>
+      )
+
+    // Process elements
+    case "timeline_group":
+      return <MiniGroupRenderer node={node} symbol="○" />
+    case "cycle_group":
+    case "arrow_list":
+    case "sequence_arrow_group":
+      return <MiniGroupRenderer node={node} symbol="→" />
+    case "staircase_group":
+      return <MiniGroupRenderer node={node} symbol="▸" />
+    case "pyramid_group":
+      return <MiniGroupRenderer node={node} symbol="△" />
+
+    // Content
+    case "quote":
+      return <div className="text-[4px] italic leading-tight truncate border-l border-muted pl-0.5">"{text}"</div>
+    case "image_gallery_group":
+      return (
+        <div className="flex gap-0.5">
+          {(node.children as SlideNode[])
+            ?.filter((c) => !isTextLeaf(c))
+            .slice(0, 3)
+            .map((_, i) => (
+              <div key={i} className="flex-1 bg-muted/30 rounded-[1px] h-3 flex items-center justify-center">
+                <span className="text-[2.5px] text-muted-foreground">IMG</span>
+              </div>
+            ))}
+        </div>
+      )
+
+    // Charts
+    case "chart-bar":
+    case "chart-line":
+    case "chart-pie":
+    case "chart-donut":
+    case "chart-area":
+    case "chart-radar":
+    case "chart-scatter":
+    case "chart-funnel":
+    case "chart-treemap":
+    case "chart-radial-bar":
+    case "chart-waterfall":
+    case "chart-nightingale":
+    case "chart-gauge":
+    case "chart-sunburst":
+    case "chart-heatmap":
+      return (
+        <div className="bg-muted/30 rounded-[2px] h-4 flex items-center justify-center">
+          <span className="text-[3px] text-muted-foreground">📊</span>
+        </div>
+      )
+
+    // Image
     case "img":
       return (
         <div className="bg-muted/50 rounded-[2px] h-4 flex items-center justify-center">
@@ -61,7 +159,7 @@ function MiniNodeRenderer({ node }: { node: SlideNode }) {
         </div>
       )
     default:
-      return <div className="text-[4px] truncate">{text}</div>
+      return text ? <div className="text-[4px] truncate">{text}</div> : null
   }
 }
 

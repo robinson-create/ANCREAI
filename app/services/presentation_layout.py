@@ -43,6 +43,21 @@ NODE_FONT_SIZES: dict[str, int] = {
     "h6": 14,
     "p": 16,
     "bullet_item": 16,
+    "box_item": 16,
+    "timeline_item": 16,
+    "cycle_item": 16,
+    "arrow_list_item": 16,
+    "sequence_arrow_item": 16,
+    "stair_item": 16,
+    "pyramid_item": 16,
+    "compare_side": 16,
+    "before_after_side": 16,
+    "pros_item": 16,
+    "cons_item": 16,
+    "stats_item": 16,
+    "icon_list_item": 16,
+    "image_gallery_item": 14,
+    "quote": 18,
 }
 
 MIN_FONT_SIZE = 10
@@ -164,13 +179,23 @@ def _classify_node(node: dict) -> str:
         return "text"
     if t == "img":
         return "image"
-    if t.endswith("_chart"):
+    if t.startswith("chart-") or t.endswith("_chart"):
         return "chart"
-    if t in ("bullet_group", "bullet_item", "timeline_group", "pyramid_group",
-             "staircase_group", "cycle_group", "arrow_list", "box_group",
-             "compare_group", "before_after_group", "pros_cons_group",
-             "sequence_arrow_group", "icon_list"):
-        return "text"  # Complex layouts rendered as text in MVP
+    if t in ("bullet_group", "bullet_item", "timeline_group", "timeline_item",
+             "pyramid_group", "pyramid_item",
+             "staircase_group", "stair_item",
+             "cycle_group", "cycle_item",
+             "arrow_list", "arrow_list_item",
+             "sequence_arrow_group", "sequence_arrow_item",
+             "box_group", "box_item",
+             "compare_group", "compare_side",
+             "before_after_group", "before_after_side",
+             "pros_cons_group", "pros_item", "cons_item",
+             "icon_list", "icon_list_item", "icon",
+             "quote",
+             "stats_group", "stats_item",
+             "image_gallery_group", "image_gallery_item"):
+        return "text"  # Complex layouts rendered as text in export
     return "text"
 
 
@@ -179,15 +204,26 @@ def _node_font_size(node: dict) -> int:
     return NODE_FONT_SIZES.get(node.get("type", "p"), 16)
 
 
+def _is_group_element(t: str) -> bool:
+    """Check if a node type is a group container with children items."""
+    return t in (
+        "bullet_group", "box_group", "icon_list",
+        "timeline_group", "cycle_group", "arrow_list",
+        "sequence_arrow_group", "staircase_group", "pyramid_group",
+        "compare_group", "before_after_group", "pros_cons_group",
+        "stats_group", "image_gallery_group",
+    )
+
+
 def _estimate_node_height(node: dict, available_width: float) -> float:
     """Estimate the height of a single node in inches."""
     t = node.get("type", "p")
     text = _extract_text(node)
 
-    if t.endswith("_chart"):
+    if t.startswith("chart-") or t.endswith("_chart"):
         return 2.5  # Fixed chart height
 
-    if t == "bullet_group":
+    if _is_group_element(t):
         children = node.get("children", [])
         total = 0.0
         for child in children:
@@ -197,6 +233,9 @@ def _estimate_node_height(node: dict, available_width: float) -> float:
 
     if t == "img":
         return 2.0  # Default inline image height
+
+    if t == "quote":
+        return estimate_text_height(text, 18, available_width) + 0.2
 
     font_size = _node_font_size(node)
     return estimate_text_height(text, font_size, available_width)
@@ -222,6 +261,18 @@ def _compute_zones(
     elif layout_type == "right":
         txt = (m, m, cw * 0.55, ch)
         img = (m + cw * 0.58, m, cw * 0.42, ch)
+    elif layout_type == "left-fit":
+        # Image takes full left half (edge to edge vertically)
+        img = (0, 0, page.width * 0.5, page.height)
+        txt = (page.width * 0.5 + m, m, page.width * 0.5 - 2 * m, ch)
+    elif layout_type == "right-fit":
+        # Image takes full right half (edge to edge vertically)
+        txt = (m, m, page.width * 0.5 - 2 * m, ch)
+        img = (page.width * 0.5, 0, page.width * 0.5, page.height)
+    elif layout_type == "accent-top":
+        # No image, accent bar at top (thin colored band)
+        img = None
+        txt = (m, m + 0.2, cw, ch - 0.2)  # Slight offset for accent bar
     elif layout_type == "background":
         img = (0, 0, page.width, page.height)
         txt = (m * 1.5, m * 1.5, cw * 0.7, ch * 0.7)  # Smaller text area on bg
@@ -268,6 +319,14 @@ def resolve_layout(
             x=0, y=0, w=page.width, h=page.height,
             node_type="shape",
             content={"fill": bg_color},
+        ))
+
+    # Accent-top bar (colored stripe at top)
+    if layout_type == "accent-top":
+        boxes.append(ResolvedBox(
+            x=0, y=0, w=page.width, h=0.15,
+            node_type="shape",
+            content={"fill": theme.get("colors", {}).get("primary", "#6C63FF")},
         ))
 
     # Root image box

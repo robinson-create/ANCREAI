@@ -27,13 +27,19 @@ class TextLeaf(BaseModel):
 class SlideNode(BaseModel):
     """Recursive Plate-style node for slide content."""
 
-    type: str  # h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item|...
+    type: str  # h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item|box_group|box_item|...
     children: list[SlideNode | TextLeaf] = Field(default_factory=list)
     # Optional props depending on type
     url: str | None = None
     asset_id: str | None = None
     data: list[dict[str, Any]] | None = None  # chart data
     align: str | None = None
+    # Variant for styled elements (boxes, bullets, timeline, pyramid, quote, stats, gallery)
+    variant: str | None = None
+    # Value for stats items
+    value: str | None = None
+    # Image query for gallery items
+    query: str | None = None
 
 
 class CropSettings(BaseModel):
@@ -57,7 +63,9 @@ class SlideContent(BaseModel):
     """Validated slide content — used at save time."""
 
     content_json: list[SlideNode] = Field(default_factory=list)
-    layout_type: str = "vertical"
+    layout_type: Literal[
+        "vertical", "left", "right", "left-fit", "right-fit", "accent-top", "background"
+    ] = "vertical"
     root_image: RootImage | None = None
     bg_color: str | None = None
 
@@ -164,6 +172,7 @@ class PresentationRead(BaseModel):
     slide_order: list
     version: int
     theme_id: UUID | None = None
+    theme: ThemeRead | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

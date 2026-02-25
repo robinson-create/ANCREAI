@@ -355,12 +355,18 @@ export interface TextLeaf {
 }
 
 export interface SlideNode {
-  type: string // h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item
+  type: string // h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item|box_group|box_item|...
   children: (SlideNode | TextLeaf)[]
   url?: string
   asset_id?: string
   data?: Record<string, unknown>[]
   align?: string
+  // Variant for styled elements (boxes, bullets, timeline, pyramid, quote, stats, gallery)
+  variant?: string
+  // Value for stats items
+  value?: string
+  // Image query for gallery items
+  query?: string
 }
 
 export interface RootImage {
@@ -439,6 +445,41 @@ export interface GenerateSlidesRequest {
 export interface RegenerateSlideRequest {
   instruction?: string
   collection_ids?: string[]
+}
+
+export interface ThemeColors {
+  primary: string
+  secondary: string
+  accent: string
+  background: string
+  text: string
+  heading: string
+  muted: string
+}
+
+export interface ThemeFonts {
+  heading: string
+  body: string
+}
+
+export interface ThemeData {
+  colors: ThemeColors
+  fonts: ThemeFonts
+  border_radius: string
+}
+
+export interface ThemeRead {
+  id: string
+  tenant_id: string | null
+  name: string
+  is_builtin: boolean
+  theme_data: ThemeData
+  created_at: string
+}
+
+export interface ThemeCreate {
+  name: string
+  theme_data: ThemeData
 }
 
 export interface ExportRequest {

@@ -40,28 +40,87 @@ RÈGLES :
 - Ajoute des exemples concrets, des chiffres, des insights.
 - Utilise la langue : {language}.
 - Style : {style}.
+- Varie les éléments visuels : n'utilise PAS que des bullet_group, mixe avec des boxes, stats, quotes, charts, timeline, etc.
 
 TYPES D'ÉLÉMENTS DISPONIBLES :
-- "h1", "h2", "h3" : titres (children: [{{text: "..."}}])
-- "p" : paragraphe (children: [{{text: "..."}}])
-- "bullet_group" : liste à puces (children: [bullet_item, ...])
-- "bullet_item" : puce (children: [h3 titre, p description])
-- "img" : image inline (url: null, asset_id: null)
-- "bar_chart", "pie_chart", "line_chart" : graphique (data: [{{label, value}}])
+
+1. Titres et texte :
+   - "h1", "h2", "h3" : titres (children: [{{"text": "..."}}])
+   - "p" : paragraphe (children: [{{"text": "..."}}])
+
+2. Listes :
+   - "bullet_group" : liste à puces (variant: "numbered"|"small"|"arrow", children: [bullet_item, ...])
+   - "bullet_item" : puce (children: [h3 titre, p description])
+   - "icon_list" : liste avec icônes (children: [icon_list_item, ...])
+   - "icon_list_item" : item avec icône (children: [{{type: "icon", query: "nom_icone"}}, h3, p])
+
+3. Boîtes/Cards :
+   - "box_group" : grille de boîtes (variant: "solid"|"outline"|"sideline"|"joined"|"icons"|"leaf", children: [box_item, ...])
+   - "box_item" : boîte (children: [h3 titre, p description])
+
+4. Comparaison :
+   - "compare_group" : comparaison côte à côte (children: [compare_side, compare_side])
+   - "compare_side" : côté de comparaison (children: [h3 titre, p contenu])
+   - "before_after_group" : avant/après (children: [before_after_side, before_after_side])
+   - "before_after_side" : côté avant/après (children: [h3 "Avant"/"Après", p description])
+   - "pros_cons_group" : pour/contre (children: [pros_item, cons_item])
+   - "pros_item" / "cons_item" : avantage/inconvénient (children: [h3, p])
+
+5. Processus :
+   - "timeline_group" : chronologie (variant: "default"|"minimal"|"minimal-boxes"|"pills"|"slanted", children: [timeline_item, ...])
+   - "timeline_item" : étape (children: [h3 titre, p description])
+   - "cycle_group" : cycle (children: [cycle_item, ...])
+   - "cycle_item" : phase du cycle (children: [h3, p])
+   - "arrow_list" : liste fléchée (children: [arrow_list_item, ...])
+   - "arrow_list_item" : item fléché (children: [h3, p])
+   - "sequence_arrow_group" : séquence verticale (children: [sequence_arrow_item, ...])
+   - "sequence_arrow_item" : étape de séquence (children: [h3, p])
+   - "staircase_group" : escalier progressif (children: [stair_item, ...])
+   - "stair_item" : marche (children: [h3, p])
+   - "pyramid_group" : pyramide/funnel (variant: "pyramid"|"funnel", children: [pyramid_item, ...])
+   - "pyramid_item" : niveau (children: [h3, p])
+
+6. Contenu enrichi :
+   - "quote" : citation (variant: "large"|"side-icon"|"simple-side", children: [p texte, p "— Attribution"])
+   - "stats_group" : métriques clés (variant: "default"|"circle"|"bar"|"star-rating"|"dot-grid", children: [stats_item, ...])
+   - "stats_item" : métrique (value: "85%", children: [h3 label, p description])
+   - "image_gallery_group" : galerie d'images (variant: "2-col"|"3-col"|"4-col"|"with-text"|"team", children: [image_gallery_item, ...])
+   - "image_gallery_item" : item galerie (query: "description image", children: [p caption])
+   - "img" : image inline (url: null, asset_id: null)
+
+7. Graphiques (data: [{{label, value}}]) :
+   - "chart-bar" : barres verticales
+   - "chart-line" : courbe
+   - "chart-pie" : camembert
+   - "chart-donut" : donut (camembert creux)
+   - "chart-area" : aire
+   - "chart-radar" : radar
+   - "chart-scatter" : nuage de points (data: [{{label, x, y}}])
+   - "chart-funnel" : entonnoir
+   - "chart-treemap" : treemap
+   - "chart-radial-bar" : barres radiales
+   - "chart-waterfall" : cascade
+   - "chart-nightingale" : nightingale (rose de Florence)
+   - "chart-gauge" : jauge (data: [{{label, value, min, max}}])
+   - "chart-sunburst" : sunburst (data: [{{name, value, children?}}])
+   - "chart-heatmap" : carte de chaleur (data: [{{x, y, value}}])
 
 LAYOUTS DISPONIBLES :
 - "vertical" : contenu empilé, image en haut
 - "left" : image à gauche, contenu à droite
 - "right" : image à droite, contenu à gauche
+- "left-fit" : image à gauche (50% hauteur pleine), contenu à droite
+- "right-fit" : image à droite (50% hauteur pleine), contenu à gauche
+- "accent-top" : bande colorée en haut, sans image principale
 - "background" : image en fond, contenu centré
 
 FORMAT DE SORTIE (JSON strict) :
 {{
-  "layout_type": "left|right|vertical|background",
+  "layout_type": "left|right|vertical|left-fit|right-fit|accent-top|background",
   "bg_color": null,
   "root_image": {{
     "query": "description détaillée en 10+ mots pour recherche d'image",
-    "layout_type": "left|right|vertical|background"
+    "layout_type": "left|right|vertical|left-fit|right-fit|background"
   }},
   "content_json": [
     {{
@@ -74,9 +133,11 @@ FORMAT DE SORTIE (JSON strict) :
 
 CONSIGNES IMPORTANTES :
 - Varie les layouts (pas deux slides consécutifs avec le même layout).
+- Varie les éléments (utilise des boxes, stats, quotes, charts, timeline — pas que des bullet_group).
 - La query d'image doit être descriptive et spécifique (10+ mots).
-- Pour les bullet_group : 2-4 items max.
+- Pour les listes : 2-4 items max.
 - Le contenu texte ne doit PAS dépasser 80 mots par slide.
+- Pour les graphiques, fournis des données réalistes et cohérentes.
 
 Contexte additionnel (sources RAG) :
 {rag_context}
