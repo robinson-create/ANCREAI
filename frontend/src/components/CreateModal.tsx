@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { FileText, Mail, Search } from "lucide-react";
+import { FileText, Mail, Search, Presentation } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,12 @@ const createActions = [
     label: "Rédiger un document",
     description: "Contrat, devis, NDA, compte-rendu",
     icon: FileText,
+    path: "/app/documents",
+  },
+  {
+    label: "Créer une présentation",
+    description: "Slides et diaporamas",
+    icon: Presentation,
     path: "/app/documents",
   },
   {

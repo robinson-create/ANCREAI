@@ -34,6 +34,7 @@ import OnboardingSetup from "@/pages/onboarding/setup"
 import { CalendarPage } from "@/pages/CalendarPage"
 import { ContactsPage } from "@/pages/ContactsPage"
 import { ContactDetailPage } from "@/pages/ContactDetailPage"
+import { PresentationEditorPage } from "@/pages/presentation-editor"
 
 function App() {
   return (
@@ -110,6 +111,7 @@ function App() {
           <Route path="/app/assistants/:id" element={<Navigate to="/app/assistants" replace />} />
           <Route path="/app/documents" element={<DocumentsPage />} />
           <Route path="/app/documents/:id" element={<DocumentEditorPage />} />
+          <Route path="/app/presentations/:id" element={<PresentationEditorPage />} />
           <Route path="/app/profile" element={<ProfilePage />} />
           <Route path="/app/billing" element={<BillingPage />} />
           <Route path="/app/assistant/:id" element={<AssistantPage />} />

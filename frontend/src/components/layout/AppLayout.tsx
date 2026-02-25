@@ -11,13 +11,12 @@ import merFond from "@/assets/mer-fond.png";
 
 export function NewAppLayout() {
   const isMobile = useIsMobile();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const location = useLocation();
 
-  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname === "/app/contacts" || location.pathname.startsWith("/app/assistant");
+  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname.startsWith("/app/presentations/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname === "/app/contacts" || location.pathname.startsWith("/app/assistant");
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -56,13 +55,10 @@ export function NewAppLayout() {
               mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
             }`}
           >
-            <AppSidebar collapsed={false} onToggle={() => setMobileSidebarOpen(false)} />
+            <AppSidebar />
           </div>
         ) : (
-          <AppSidebar
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed((v) => !v)}
-          />
+          <AppSidebar />
         )}
 
         <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">

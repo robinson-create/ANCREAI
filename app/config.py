@@ -131,6 +131,9 @@ class Settings(BaseSettings):
     web_search_timeout_seconds: int = 8
     web_cache_ttl_hours: int = 24  # TTL for cached web results
 
+    # --- Presentations ---
+    pptx_exporter_url: str = "http://localhost:4100"
+
     # --- Agent runtime ---
     agent_stream_ttl: int = 600  # Redis stream TTL in seconds
     agent_stream_maxlen: int = 2000  # XTRIM approximate maxlen

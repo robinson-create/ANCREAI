@@ -307,3 +307,167 @@ export interface FolderItemAdd {
   item_type: "conversation" | "document" | "email_thread"
   item_id: string
 }
+
+// ── Presentations ──
+
+export type PresentationStatus =
+  | "draft"
+  | "generating_outline"
+  | "outline_ready"
+  | "generating_slides"
+  | "ready"
+  | "exporting"
+  | "error"
+
+export interface PresentationListItem {
+  id: string
+  tenant_id: string
+  title: string
+  status: PresentationStatus
+  slide_order: string[]
+  version: number
+  theme_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface PresentationCreate {
+  title?: string
+  prompt?: string
+  theme_id?: string
+  settings?: {
+    language?: string
+    style?: string
+    slide_count?: number
+  }
+}
+
+// ── Presentation Full Types ──
+
+export interface TextLeaf {
+  text: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  color?: string
+  font_size?: string
+  font_family?: string
+}
+
+export interface SlideNode {
+  type: string // h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item
+  children: (SlideNode | TextLeaf)[]
+  url?: string
+  asset_id?: string
+  data?: Record<string, unknown>[]
+  align?: string
+}
+
+export interface RootImage {
+  asset_id?: string
+  query?: string
+  layout_type?: string
+}
+
+export interface Slide {
+  id: string
+  position: number
+  layout_type: string
+  content_json: Record<string, unknown>
+  root_image?: RootImage | null
+  bg_color?: string | null
+  speaker_notes?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface OutlineItem {
+  title: string
+  bullets: string[]
+}
+
+export interface PresentationSettings {
+  language?: string
+  style?: string
+  slide_count?: number
+}
+
+export interface PresentationFull {
+  id: string
+  tenant_id: string
+  title: string
+  prompt?: string | null
+  status: PresentationStatus
+  outline: OutlineItem[]
+  settings: PresentationSettings
+  slide_order: string[]
+  version: number
+  theme_id?: string | null
+  error_message?: string | null
+  created_at: string
+  updated_at: string
+  slides: Slide[]
+}
+
+export interface PresentationUpdate {
+  title?: string
+  prompt?: string
+  settings?: PresentationSettings
+  theme_id?: string | null
+}
+
+export interface SlideUpdate {
+  content_json?: Record<string, unknown>
+  layout_type?: string
+  root_image?: Record<string, unknown> | null
+  bg_color?: string | null
+  speaker_notes?: string | null
+}
+
+export interface GenerateOutlineRequest {
+  prompt: string
+  slide_count?: number
+  language?: string
+  style?: string
+  collection_ids?: string[]
+}
+
+export interface GenerateSlidesRequest {
+  collection_ids?: string[]
+}
+
+export interface RegenerateSlideRequest {
+  instruction?: string
+  collection_ids?: string[]
+}
+
+export interface ExportRequest {
+  format: "pptx" | "pdf"
+}
+
+export interface ExportRead {
+  id: string
+  format: string
+  status: string
+  s3_key?: string | null
+  file_size?: number | null
+  presentation_version: number
+  slide_count: number
+  error_message?: string | null
+  created_at: string
+}
+
+export type PresentationSSEEventType =
+  | "outline_ready"
+  | "slide_generated"
+  | "slide_error"
+  | "asset_ready"
+  | "generation_complete"
+  | "export_progress"
+  | "export_ready"
+  | "error"
+
+export interface PresentationSSEEvent {
+  type: PresentationSSEEventType
+  payload: Record<string, unknown>
+}

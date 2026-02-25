@@ -17,6 +17,7 @@ from app.api.v1 import (
     integrations,
     mail,
     onboarding,
+    presentations,
     settings,
     stats,
     tenants,
@@ -47,3 +48,4 @@ api_router.include_router(calendar.router, prefix="/calendar", tags=["calendar"]
 api_router.include_router(folders.router, prefix="/folders", tags=["folders"])
 api_router.include_router(agent_chat.router, prefix="/chat", tags=["agent-chat"])
 api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
+api_router.include_router(presentations.router, prefix="/presentations", tags=["presentations"])

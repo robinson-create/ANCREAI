@@ -24,6 +24,18 @@ from app.models.assistant_memory import AssistantMemory
 from app.models.conversation_context import ConversationContext
 from app.models.audit_log import AuditLog
 from app.models.llm_trace import LLMTrace
+from app.models.presentation import (
+    Presentation,
+    PresentationAsset,
+    PresentationExport,
+    PresentationGenerationRun,
+    PresentationSlide,
+    PresentationStatus,
+    PresentationTheme,
+    AssetKind,
+    AssetStatus,
+    RunPurpose,
+)
 
 __all__ = [
     "Tenant",
@@ -64,4 +76,14 @@ __all__ = [
     "ConversationContext",
     "AuditLog",
     "LLMTrace",
+    "Presentation",
+    "PresentationAsset",
+    "PresentationExport",
+    "PresentationGenerationRun",
+    "PresentationSlide",
+    "PresentationStatus",
+    "PresentationTheme",
+    "AssetKind",
+    "AssetStatus",
+    "RunPurpose",
 ]

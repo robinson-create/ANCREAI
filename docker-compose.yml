@@ -124,6 +124,31 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- PPTX Exporter (Node microservice) ---
+  pptx-exporter:
+    build:
+      context: ./pptx-exporter
+      dockerfile: Dockerfile
+    container_name: mecano-pptx-exporter
+    environment:
+      PORT: "4100"
+      S3_ENDPOINT: http://minio:9000
+      S3_FORCE_PATH_STYLE: "true"
+      S3_BUCKET: mecano-documents
+      AWS_ACCESS_KEY_ID: minioadmin
+      AWS_SECRET_ACCESS_KEY: minioadmin
+      AWS_REGION: us-east-1
+    ports:
+      - "4100:4100"
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4100/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # --- CopilotKit Runtime ---
   copilot-runtime:
     build:
