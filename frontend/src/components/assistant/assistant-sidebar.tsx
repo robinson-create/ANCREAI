@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Loader2, Send, Square, Sparkles, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// NOTE: Radix ScrollArea removed — its internal setRef causes "Maximum update
+// depth exceeded" when message content updates rapidly during streaming.
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { MessageItem } from "@/components/chat/message-item";
@@ -37,7 +38,7 @@ export function AssistantSidebar({
 }: AssistantSidebarProps) {
   const [input, setInput] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<any>(null);
   const wantsRecordingRef = useRef(false);
@@ -128,12 +129,7 @@ export function AssistantSidebar({
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]");
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, [messages]);
 
   const handleSubmit = (e?: React.FormEvent) => {
@@ -176,7 +172,7 @@ export function AssistantSidebar({
       )}
     >
       {/* Messages area */}
-      <ScrollArea className="flex-1 p-4 pt-6" ref={scrollAreaRef}>
+      <div className="flex-1 overflow-y-auto p-4 pt-6">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 mb-3">
@@ -192,9 +188,10 @@ export function AssistantSidebar({
             {messages.map((message) => (
               <MessageItem key={message.id} message={message} />
             ))}
+            <div ref={messagesEndRef} />
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Additional actions (e.g., block types for document editor) */}
       {additionalActions}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Anchor, ChevronDown, ChevronUp, FileText, AlertCircle, Pencil } from "lucide-react";
+import { User, Anchor, ChevronDown, ChevronUp, FileText, AlertCircle, Pencil, CheckCircle2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,16 @@ export function MessageItem({ message, className }: MessageItemProps) {
               <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0ms" }} />
               <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "150ms" }} />
               <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </span>
+          </div>
+        )}
+
+        {/* Document inserted confirmation — shown after content was added to editor */}
+        {message.documentInserted && !message.isDrafting && (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              Contenu inséré dans l'éditeur
             </span>
           </div>
         )}

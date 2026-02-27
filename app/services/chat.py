@@ -181,7 +181,46 @@ BLOCK_TOOL_EMAIL_SUGGESTION = {
     },
 }
 
-BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT, BLOCK_TOOL_EMAIL_SUGGESTION]
+BLOCK_TOOL_WRITE_TO_DOCUMENT = {
+    "type": "function",
+    "function": {
+        "name": "writeToDocument",
+        "strict": True,
+        "description": (
+            "Insère du contenu directement dans l'éditeur de document. "
+            "Utilise cet outil quand l'utilisateur demande de rédiger, ajouter, "
+            "compléter ou modifier du contenu dans le document en cours d'édition. "
+            "Mets le contenu complet en markdown dans le champ `markdown_content`. "
+            "Ne reproduis PAS le contenu du document dans ta réponse textuelle."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "markdown_content": {
+                    "type": "string",
+                    "description": (
+                        "Contenu à insérer dans l'éditeur en markdown. "
+                        "Utilise ## et ### pour les titres de section, "
+                        "**gras**, *italique*, listes (- ou 1.), blockquotes (>). "
+                        "Pas de blocs de code. Écris du contenu professionnel "
+                        "prêt à l'emploi, sans placeholders."
+                    ),
+                },
+                "summary": {
+                    "type": "string",
+                    "description": (
+                        "Résumé court (1 phrase) de ce qui a été ajouté au document, "
+                        "affiché dans le chat comme confirmation."
+                    ),
+                },
+            },
+            "required": ["markdown_content", "summary"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT, BLOCK_TOOL_EMAIL_SUGGESTION, BLOCK_TOOL_WRITE_TO_DOCUMENT]
 
 # Map tool function name → block type for the frontend
 _TOOL_NAME_TO_BLOCK_TYPE = {
@@ -202,16 +241,17 @@ _CALENDAR_TOOL_TO_BLOCK_TYPE = {
 
 BLOCK_INSTRUCTIONS = """
 INSTRUCTIONS POUR LES BLOCS VISUELS :
-Tu disposes de 5 outils pour afficher des blocs structurés dans le chat :
+Tu disposes de 6 outils pour afficher des blocs structurés dans le chat :
 - `renderKpiCards` → quand ta réponse contient des KPIs, métriques ou chiffres comparatifs
 - `renderSteps` → quand ta réponse décrit un plan, une procédure ou des étapes séquentielles
 - `renderTable` → quand ta réponse compare des options ou présente des données tabulaires
 - `renderCallout` → quand tu dois alerter, avertir ou mettre en avant un point important
 - `suggestEmail` → quand l'utilisateur demande d'écrire, rédiger ou envoyer un email. Appelle DIRECTEMENT l'outil avec le contenu complet de l'email dans `body_draft`. Ne reproduis PAS le texte de l'email dans le chat ; dis simplement une phrase courte comme "Je rédige votre email..." avant d'appeler l'outil. L'email sera ouvert dans l'éditeur dédié.
+- `writeToDocument` → quand l'utilisateur est dans l'éditeur de documents et demande de rédiger/ajouter du contenu. Appelle DIRECTEMENT l'outil avec le contenu en markdown dans `markdown_content`. Ne reproduis PAS le contenu dans le chat ; dis simplement une phrase courte puis appelle l'outil. Le contenu sera inséré dans l'éditeur.
 Garde le texte concis et complémentaire ; mets la structure dans les blocs.
 Ne pas inventer de données manquantes ; si une valeur n'est pas disponible, indique "N/A".
 Tu peux combiner texte et plusieurs blocs dans une même réponse.
-IMPORTANT : N'utilise JAMAIS de syntaxe markdown (**, *, #, etc.) dans les arguments des outils. Les blocs sont rendus en texte brut, pas en markdown.
+IMPORTANT : N'utilise JAMAIS de syntaxe markdown (**, *, #, etc.) dans les arguments des outils renderKpiCards, renderSteps, renderTable, renderCallout. Ces blocs sont rendus en texte brut, pas en markdown. EXCEPTION : writeToDocument attend du markdown.
 """
 
 
@@ -311,20 +351,22 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         if context_hint == "document":
             prompt += (
                 "\nCONTEXTE ÉDITEUR DE DOCUMENTS :\n"
-                "L'utilisateur édite un document professionnel. Ta réponse sera insérée "
-                "directement dans un éditeur rich-text.\n"
-                "RÈGLES IMPÉRATIVES :\n"
+                "L'utilisateur édite un document professionnel dans un éditeur rich-text.\n"
+                "Quand l'utilisateur demande de rédiger, ajouter, compléter ou modifier "
+                "du contenu dans le document, utilise TOUJOURS l'outil `writeToDocument` "
+                "pour insérer le contenu directement dans l'éditeur.\n"
+                "NE REPRODUIS PAS le contenu du document dans le chat. "
+                "Dis simplement une phrase courte (ex: 'Je rédige le contenu.') "
+                "puis appelle `writeToDocument` avec le contenu complet en markdown.\n"
+                "RÈGLES pour le contenu markdown dans writeToDocument :\n"
                 "- Écris du contenu RÉEL, prêt à l'emploi et professionnel\n"
                 "- N'utilise JAMAIS de placeholders comme [Nom], [Date], [à compléter]\n"
-                "- Utilise du markdown pour le formatage : ## pour les titres de section, "
-                "**gras**, *italique*, listes à puces (- ou *), listes numérotées (1. 2. 3.)\n"
-                "- Structure ton contenu avec des titres ## ou ### pour créer des sections "
-                "séparées et modifiables dans l'éditeur\n"
+                "- Utilise ## et ### pour les titres de section\n"
+                "- Utilise **gras**, *italique*, listes (- ou 1.), blockquotes (>)\n"
                 "- N'inclus JAMAIS de blocs de code (``` ou json)\n"
-                "- N'inclus JAMAIS de méta-commentaires sur le formatage ou les outils\n"
-                "- N'utilise PAS les outils renderSteps, renderTable etc. Écris directement "
-                "le contenu en markdown qui sera converti en rich-text\n"
-                "- Écris directement le contenu demandé, sans préambule inutile\n"
+                "- Sois concis et pertinent, maximum 500 mots par appel\n"
+                "Si l'utilisateur pose une question (sans demander de rédiger), "
+                "réponds normalement dans le chat SANS utiliser writeToDocument.\n"
             )
 
         prompt += CALENDAR_SYSTEM_PROMPT_ADDITION
@@ -532,6 +574,13 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
                         "role": "tool",
                         "tool_call_id": tc.id,
                         "content": "OK",
+                    })
+                elif tc.function.name == "writeToDocument":
+                    # Document editor: just acknowledge, content sent via SSE in streaming
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": "OK – contenu inséré dans l'éditeur.",
                     })
                 elif tc.function.name in _TOOL_NAME_TO_BLOCK_TYPE:
                     # Block tools: parse as UI blocks, send dummy response
@@ -805,6 +854,23 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
                             "role": "tool",
                             "tool_call_id": tc_data["id"],
                             "content": "OK",
+                        })
+                    elif tc_data["name"] == "writeToDocument":
+                        # Document editor: emit document_update for live editor insertion
+                        try:
+                            args = json.loads(tc_data["arguments"])
+                        except json.JSONDecodeError:
+                            args = {}
+
+                        yield ChatStreamEvent(event="document_update", data={
+                            "markdown_content": args.get("markdown_content", ""),
+                            "summary": args.get("summary", ""),
+                        })
+
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_data["id"],
+                            "content": "OK – contenu inséré dans l'éditeur.",
                         })
                     elif tc_data["name"] in _TOOL_NAME_TO_BLOCK_TYPE:
                         # Block/UI tool: emit as block

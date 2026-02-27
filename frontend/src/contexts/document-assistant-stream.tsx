@@ -7,6 +7,8 @@ export interface LocalMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  isDrafting?: boolean;
+  documentInserted?: boolean;
   wasInterrupted?: boolean;
   blocks?: Block[];
   citations?: Citation[];
@@ -127,7 +129,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingMessageIdRef.current
-            ? { ...msg, isStreaming: false, wasInterrupted: true }
+            ? { ...msg, isStreaming: false, isDrafting: false, wasInterrupted: true }
             : msg
         )
       );
@@ -190,9 +192,6 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
       setIsStreaming(true);
       streamingMessageIdRef.current = assistantMessageId;
 
-      // Track accumulated content to avoid stale closure on `messages`
-      let accumulatedContent = "";
-
       const abort = chatApi.stream(
         selectedAssistantId,
         {
@@ -201,9 +200,8 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
           include_history: true,
           context_hint: "document",
         },
-        // onToken
+        // onToken — shows the LLM's short chat response (not the document content)
         (token) => {
-          accumulatedContent += token;
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId
@@ -224,6 +222,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
                 ? {
                     ...msg,
                     isStreaming: false,
+                    isDrafting: false,
                     citations: response.citations || [],
                   }
                 : msg
@@ -232,11 +231,6 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
 
           if (response.conversationId) {
             setConversationId(response.conversationId);
-          }
-
-          // Notify parent of content updates with the accumulated response
-          if (onContentUpdate && accumulatedContent) {
-            onContentUpdate({ content: accumulatedContent });
           }
         },
         // onError
@@ -253,6 +247,7 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
                     ...msg,
                     content: msg.content || `Erreur: ${error}`,
                     isStreaming: false,
+                    isDrafting: false,
                   }
                 : msg
             )
@@ -270,6 +265,29 @@ export function DocumentAssistantProvider({ children, documentId }: DocumentAssi
                 ? {
                     ...msg,
                     blocks: [...(msg.blocks || []), block],
+                  }
+                : msg
+            )
+          );
+        },
+        // onDraftUpdate (unused for documents)
+        undefined,
+        // onDocumentUpdate — inserts content directly into the editor
+        (docData) => {
+          if (onContentUpdate && docData.markdown_content) {
+            onContentUpdate({ content: docData.markdown_content });
+          }
+
+          // Set confirmation message + isDrafting indicator
+          const summary = docData.summary || "Contenu ajouté à l'éditeur.";
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                    ...msg,
+                    content: msg.content || summary,
+                    isDrafting: true,
+                    documentInserted: true,
                   }
                 : msg
             )

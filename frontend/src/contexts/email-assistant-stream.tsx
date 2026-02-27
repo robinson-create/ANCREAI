@@ -8,6 +8,7 @@ export interface LocalMessage {
   content: string;
   isStreaming?: boolean;
   isDrafting?: boolean;
+  documentInserted?: boolean;
   wasInterrupted?: boolean;
   blocks?: Block[];
   citations?: Citation[];

@@ -1,7 +1,7 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Placeholder from "@tiptap/extension-placeholder"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { normalizeProseMirror } from "@/lib/prosemirror"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,6 +31,8 @@ export function TiptapCanvas({
   placeholder = "Commencez a ecrire...",
 }: TiptapCanvasProps) {
   const normalizedContent = normalizeProseMirror(content)
+  // Guard to prevent onUpdate from firing during programmatic setContent
+  const isSyncingRef = useRef(false)
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -39,6 +41,7 @@ export function TiptapCanvas({
     content: normalizedContent as Record<string, unknown>,
     editable,
     onUpdate: ({ editor }) => {
+      if (isSyncingRef.current) return
       onChange(editor.getJSON() as Record<string, unknown>)
     },
   })
@@ -50,7 +53,9 @@ export function TiptapCanvas({
       const currentJSON = JSON.stringify(editor.getJSON())
       const newJSON = JSON.stringify(normalized)
       if (currentJSON !== newJSON) {
+        isSyncingRef.current = true
         editor.commands.setContent(normalized as Record<string, unknown>)
+        isSyncingRef.current = false
       }
     }
   }, [content]) // eslint-disable-line react-hooks/exhaustive-deps

@@ -26,7 +26,8 @@ export const chatApi = {
     onError: (error: string) => void,
     onConversationId?: (conversationId: string) => void,
     onBlock?: (block: Block) => void,
-    onDraftUpdate?: (data: { subject: string; body_draft: string; tone: string; reason: string }) => void
+    onDraftUpdate?: (data: { subject: string; body_draft: string; tone: string; reason: string }) => void,
+    onDocumentUpdate?: (data: { markdown_content: string; summary: string }) => void
   ): (() => void) => {
     const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
     const url = new URL(`/api/v1/chat/${assistantId}/stream`, base)
@@ -115,6 +116,16 @@ export const chatApi = {
                 try {
                   const draftData = JSON.parse(eventData)
                   onDraftUpdate(draftData)
+                } catch {
+                  // Ignore parse errors
+                }
+              }
+              break
+            case "document_update":
+              if (onDocumentUpdate) {
+                try {
+                  const docData = JSON.parse(eventData)
+                  onDocumentUpdate(docData)
                 } catch {
                   // Ignore parse errors
                 }

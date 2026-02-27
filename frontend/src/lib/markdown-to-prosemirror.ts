@@ -256,8 +256,14 @@ export function splitMarkdownIntoSections(
 
   return sections.map((section) => {
     const nodes = blockTokensToNodes(section.tokens);
+    // Strip inline markdown formatting from label (e.g. **bold** → bold)
+    const plainLabel = section.label
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .replace(/\*(.*?)\*/g, "$1")
+      .replace(/`(.*?)`/g, "$1")
+      .trim();
     return {
-      label: section.label,
+      label: plainLabel,
       doc: {
         type: "doc" as const,
         content: nodes.length > 0 ? nodes : [{ type: "paragraph" }],
