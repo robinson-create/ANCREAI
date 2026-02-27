@@ -16,7 +16,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -651,7 +651,8 @@ function DocumentEditorContent() {
                 <MessageSquare className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full sm:w-96 p-0">
+            <SheetContent side="right" className="w-full sm:w-96 p-0" aria-describedby={undefined}>
+              <SheetTitle className="sr-only">Assistant IA</SheetTitle>
               <DocumentAssistantSidebar
                 className="h-full flex flex-col"
                 onContentUpdate={(update) => {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { User, Anchor, ChevronDown, ChevronUp, FileText, AlertCircle } from "lucide-react";
+import { User, Anchor, ChevronDown, ChevronUp, FileText, AlertCircle, Pencil } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,21 @@ export function MessageItem({ message, className }: MessageItemProps) {
             <p className="whitespace-pre-wrap text-sm">{message.content}</p>
           )}
         </div>
+
+        {/* Drafting indicator — shown when assistant is writing to editor */}
+        {message.isDrafting && (
+          <div className="mt-2 flex items-center gap-2 rounded-lg border border-blue-500/30 bg-blue-50/50 dark:bg-blue-950/20 px-3 py-2.5">
+            <Pencil className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400 animate-pulse shrink-0" />
+            <span className="text-xs font-medium text-blue-700 dark:text-blue-300">
+              Rédaction en cours...
+            </span>
+            <span className="flex gap-0.5 ml-1">
+              <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "0ms" }} />
+              <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "150ms" }} />
+              <span className="h-1 w-1 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: "300ms" }} />
+            </span>
+          </div>
+        )}
 
         {/* Interrupted indicator */}
         {message.wasInterrupted && (

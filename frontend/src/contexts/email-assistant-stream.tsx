@@ -7,6 +7,7 @@ export interface LocalMessage {
   role: "user" | "assistant";
   content: string;
   isStreaming?: boolean;
+  isDrafting?: boolean;
   wasInterrupted?: boolean;
   blocks?: Block[];
   citations?: Citation[];
@@ -67,7 +68,7 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === streamingMessageIdRef.current
-            ? { ...msg, isStreaming: false, wasInterrupted: true }
+            ? { ...msg, isStreaming: false, isDrafting: false, wasInterrupted: true }
             : msg
         )
       );
@@ -146,6 +147,7 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
                 ? {
                     ...msg,
                     isStreaming: false,
+                    isDrafting: false,
                     citations: response.citations || [],
                   }
                 : msg
@@ -154,14 +156,6 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
 
           if (response.conversationId) {
             setConversationId(response.conversationId);
-          }
-
-          // Parse response for draft updates if callback provided
-          if (onDraftUpdate) {
-            const lastMessage = messages[messages.length - 1];
-            if (lastMessage?.role === "assistant") {
-              parseDraftUpdates(lastMessage.content, onDraftUpdate);
-            }
           }
         },
         // onError
@@ -178,6 +172,7 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
                     ...msg,
                     content: msg.content || `Erreur: ${error}`,
                     isStreaming: false,
+                    isDrafting: false,
                   }
                 : msg
             )
@@ -199,12 +194,32 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
                 : msg
             )
           );
+        },
+        // onDraftUpdate — fills the email editor directly
+        (draftData) => {
+          if (onDraftUpdate) {
+            if (draftData.subject) {
+              onDraftUpdate({ field: "subject", value: draftData.subject });
+            }
+            if (draftData.body_draft) {
+              onDraftUpdate({ field: "body", value: draftData.body_draft });
+            }
+          }
+
+          // Mark message as drafting (shows "Rédaction en cours..." indicator)
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, isDrafting: true }
+                : msg
+            )
+          );
         }
       );
 
       abortControllerRef.current = abort;
     },
-    [selectedAssistantId, conversationId, isStreaming, messages]
+    [selectedAssistantId, conversationId, isStreaming]
   );
 
   return (
@@ -223,34 +238,4 @@ export function EmailAssistantProvider({ children }: EmailAssistantProviderProps
       {children}
     </EmailAssistantContext.Provider>
   );
-}
-
-/**
- * Parse AI response for email draft updates
- * Looks for structured patterns like:
- * - TO: email@example.com
- * - SUBJECT: subject text
- * - BODY: body content
- */
-function parseDraftUpdates(
-  content: string,
-  onDraftUpdate: (update: EmailDraftUpdate) => void
-) {
-  // Look for TO: pattern
-  const toMatch = content.match(/(?:^|\n)TO:\s*(.+?)(?:\n|$)/i);
-  if (toMatch?.[1]) {
-    onDraftUpdate({ field: "to", value: toMatch[1].trim() });
-  }
-
-  // Look for SUBJECT: pattern
-  const subjectMatch = content.match(/(?:^|\n)SUBJECT:\s*(.+?)(?:\n|$)/i);
-  if (subjectMatch?.[1]) {
-    onDraftUpdate({ field: "subject", value: subjectMatch[1].trim() });
-  }
-
-  // Look for BODY: pattern (multi-line)
-  const bodyMatch = content.match(/(?:^|\n)BODY:\s*\n([\s\S]+?)(?:\n---|\n\n|$)/i);
-  if (bodyMatch?.[1]) {
-    onDraftUpdate({ field: "body", value: bodyMatch[1].trim() });
-  }
 }

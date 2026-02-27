@@ -149,11 +149,10 @@ BLOCK_TOOL_EMAIL_SUGGESTION = {
         "name": "suggestEmail",
         "strict": True,
         "description": (
-            "Suggère la création d'un email à partir de ta réponse. "
-            "Utilise cet outil quand ta réponse contient un contenu actionable "
-            "que l'utilisateur pourrait vouloir envoyer par email : suivi, "
-            "synthèse, relance, proposition commerciale, compte-rendu, "
-            "ou quand l'utilisateur demande explicitement d'écrire/envoyer un email."
+            "Crée un brouillon d'email directement dans l'éditeur de mail. "
+            "Utilise cet outil quand l'utilisateur demande d'écrire, rédiger ou "
+            "envoyer un email. Mets le contenu complet dans body_draft. "
+            "Ne reproduis PAS le contenu de l'email dans ta réponse textuelle."
         ),
         "parameters": {
             "type": "object",
@@ -208,7 +207,7 @@ Tu disposes de 5 outils pour afficher des blocs structurés dans le chat :
 - `renderSteps` → quand ta réponse décrit un plan, une procédure ou des étapes séquentielles
 - `renderTable` → quand ta réponse compare des options ou présente des données tabulaires
 - `renderCallout` → quand tu dois alerter, avertir ou mettre en avant un point important
-- `suggestEmail` → quand ta réponse contient un contenu actionable que l'utilisateur pourrait envoyer par email (synthèse, suivi, relance, proposition, compte-rendu). Propose uniquement quand le contenu se prête clairement à un envoi par email. Ne suggère PAS pour des réponses purement informatives ou des questions.
+- `suggestEmail` → quand l'utilisateur demande d'écrire, rédiger ou envoyer un email. Appelle DIRECTEMENT l'outil avec le contenu complet de l'email dans `body_draft`. Ne reproduis PAS le texte de l'email dans le chat ; dis simplement une phrase courte comme "Je rédige votre email..." avant d'appeler l'outil. L'email sera ouvert dans l'éditeur dédié.
 Garde le texte concis et complémentaire ; mets la structure dans les blocs.
 Ne pas inventer de données manquantes ; si une valeur n'est pas disponible, indique "N/A".
 Tu peux combiner texte et plusieurs blocs dans une même réponse.
@@ -302,8 +301,10 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
                 "L'utilisateur est en train de rédiger ou lire un email. "
                 "Quand ta réponse contient du contenu utile pour l'email (texte, "
                 "instructions, synthèse, proposition…), utilise TOUJOURS l'outil "
-                "`suggestEmail` pour proposer d'insérer ce contenu dans l'email. "
-                "Réponds d'abord en texte clair, puis appelle `suggestEmail`.\n"
+                "`suggestEmail` pour créer l'email dans l'éditeur. "
+                "NE REPRODUIS PAS le contenu de l'email dans le chat. "
+                "Dis simplement une phrase courte (ex: 'Je rédige votre email.') "
+                "puis appelle `suggestEmail` avec le contenu complet.\n"
             )
 
         # Add document-specific instructions when user is in document editor
@@ -774,11 +775,22 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
 
                 for tc_data in tool_calls_acc.values():
                     if tc_data["name"] == "suggestEmail":
-                        # Email suggestion: create bundle in DB, emit block with bundle_id
+                        # Email suggestion: emit draft_update for live editor fill,
+                        # then create bundle in DB for history, then emit block.
                         try:
                             args = json.loads(tc_data["arguments"])
                         except json.JSONDecodeError:
                             args = {}
+
+                        # Emit draft_update so the frontend fills the editor immediately
+                        yield ChatStreamEvent(event="draft_update", data={
+                            "subject": args.get("subject", ""),
+                            "body_draft": args.get("body_draft", ""),
+                            "tone": args.get("tone", "neutral"),
+                            "reason": args.get("reason", ""),
+                        })
+
+                        # Still create bundle in DB for conversation history
                         try:
                             block = await self._handle_suggest_email(
                                 args=args,
@@ -788,11 +800,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
                             yield ChatStreamEvent(event="block", data=block)
                         except Exception as e:
                             logger.warning("Failed to create email bundle: %s", e)
-                            yield ChatStreamEvent(event="block", data={
-                                "id": str(uuid4()),
-                                "type": "error",
-                                "payload": {"message": f"Email suggestion failed: {e}"},
-                            })
+
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc_data["id"],

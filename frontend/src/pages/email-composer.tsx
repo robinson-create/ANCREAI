@@ -18,7 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -1212,8 +1212,13 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
     setAssistantForSidebar(selectedAssistantId);
   }, [selectedAssistantId, setAssistantForSidebar]);
 
-  // Handle draft updates from AI assistant
+  // Handle draft updates from AI assistant (called when draft_update SSE event arrives)
   const handleDraftUpdate = useCallback((update: EmailDraftUpdate) => {
+    // Ensure compose form is visible when assistant drafts an email
+    if (!composing) {
+      setComposing(true);
+    }
+
     switch (update.field) {
       case "to":
         setComposeTo(update.value);
@@ -1225,12 +1230,7 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
         setComposeBody(update.value);
         break;
     }
-
-    toast({
-      title: "Email mis à jour",
-      description: `Le champ "${update.field === "to" ? "destinataire" : update.field === "subject" ? "objet" : "corps"}" a été mis à jour par l'assistant`,
-    });
-  }, [toast]);
+  }, [composing]);
 
   return (
     <>
@@ -2470,7 +2470,8 @@ Commence directement par la formule de salutation (Bonjour, Madame, Monsieur, et
                 <MessageSquare className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="w-full sm:w-96 p-0">
+            <SheetContent side="right" className="w-full sm:w-96 p-0" aria-describedby={undefined}>
+              <SheetTitle className="sr-only">Assistant IA</SheetTitle>
               <EmailAssistantSidebar
                 className="h-full flex"
                 onDraftUpdate={handleDraftUpdate}
