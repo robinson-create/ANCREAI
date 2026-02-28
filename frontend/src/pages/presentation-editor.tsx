@@ -418,6 +418,7 @@ export function PresentationEditorPage() {
                 <SlideEditor
                   presentationId={pres.id}
                   slide={selectedSlide}
+                  themeData={pres.theme?.theme_data ?? null}
                   onSlideUpdate={handleSlideUpdate}
                   onRegenerateSlide={(slideId) =>
                     regenerateSlideMutation.mutate(slideId)

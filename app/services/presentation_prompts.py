@@ -131,13 +131,18 @@ FORMAT DE SORTIE (JSON strict) :
   ]
 }}
 
-CONSIGNES IMPORTANTES :
+CONSIGNES IMPORTANTES — LE CONTENU DOIT TENIR DANS UN SLIDE 16:9 SANS SCROLL :
+- Maximum 3-4 blocs de contenu par slide (titre h2 + 2-3 éléments visuels).
+- Le contenu texte ne doit PAS dépasser 50 mots par slide (hors titres).
+- Pour les listes : 2-3 items max, descriptions courtes (1 phrase max par item).
+- Pour les stats_group : 2-3 items max.
+- Pour les box_group : 2-3 items max, avec des textes très concis.
+- Pour les graphiques : 4-6 data points max, données réalistes et cohérentes.
+- Pour les quotes : 1-2 phrases max.
 - Varie les layouts (pas deux slides consécutifs avec le même layout).
 - Varie les éléments (utilise des boxes, stats, quotes, charts, timeline — pas que des bullet_group).
 - La query d'image doit être descriptive et spécifique (10+ mots).
-- Pour les listes : 2-4 items max.
-- Le contenu texte ne doit PAS dépasser 80 mots par slide.
-- Pour les graphiques, fournis des données réalistes et cohérentes.
+- RAPPEL : tout le contenu DOIT être visible dans un format paysage 16:9 sans défilement.
 
 Contexte additionnel (sources RAG) :
 {rag_context}

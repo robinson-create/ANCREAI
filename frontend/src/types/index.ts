@@ -409,6 +409,7 @@ export interface PresentationFull {
   slide_order: string[]
   version: number
   theme_id?: string | null
+  theme?: ThemeRead | null
   error_message?: string | null
   created_at: string
   updated_at: string
