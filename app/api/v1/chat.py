@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.database import async_session_maker
 from app.deps import CurrentUser, DbSession
 from app.models.assistant import Assistant
+from app.models.document import Document
 from app.models.message import Message, MessageRole
 from app.schemas.chat import ChatRequest, ChatResponse
 from app.services.chat import chat_service
@@ -264,7 +265,7 @@ async def chat_stream(
     """Chat with an assistant (SSE streaming)."""
     tenant_id = user.tenant_id
     user_id = user.id
-    
+
     # Get assistant with collections and integrations
     result = await db.execute(
         select(Assistant)
@@ -283,13 +284,26 @@ async def chat_stream(
             detail="Assistant not found",
         )
 
-    if not assistant.collections and not assistant.integrations:
+    if not assistant.collections and not assistant.integrations and not request.attachment_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="L'assistant n'a ni collections ni outils connectés.",
         )
 
     collection_ids = [c.id for c in assistant.collections]
+
+    # Merge collections from uploaded attachments into the RAG scope
+    if request.attachment_ids:
+        att_result = await db.execute(
+            select(Document.collection_id)
+            .where(Document.id.in_(request.attachment_ids))
+            .where(Document.tenant_id == tenant_id)
+        )
+        att_collection_ids = list({row[0] for row in att_result.all() if row[0]})
+        for cid in att_collection_ids:
+            if cid not in collection_ids:
+                collection_ids.append(cid)
+
     conversation_id = request.conversation_id or uuid4()
 
     # Build integrations list for the chat service

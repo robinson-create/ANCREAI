@@ -38,6 +38,7 @@ interface SearchStreamContextType {
     assistantId: string,
     userText: string,
     onConversationListChanged?: () => void,
+    attachmentIds?: string[],
   ) => void;
   loadConversation: (
     convId: string,
@@ -105,6 +106,7 @@ export function SearchStreamProvider({ children }: { children: ReactNode }) {
       assistantId: string,
       userText: string,
       onConversationListChanged?: () => void,
+      attachmentIds?: string[],
     ) => {
       abortStream();
 
@@ -143,6 +145,7 @@ export function SearchStreamProvider({ children }: { children: ReactNode }) {
             include_history: forceFreshConversation
               ? false
               : !!conversationIdRef.current,
+            attachment_ids: attachmentIds?.length ? attachmentIds : undefined,
           },
           (token) => {
             setMessages((prev) =>

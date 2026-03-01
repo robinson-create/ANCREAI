@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
     include_history: bool = True
     max_history_messages: int = 10
     context_hint: str | None = None  # Optional hint about the UI context (e.g. "email")
+    attachment_ids: list[UUID] = []  # Document IDs uploaded via /uploads, added to RAG scope
 
 
 class BlockData(BaseModel):

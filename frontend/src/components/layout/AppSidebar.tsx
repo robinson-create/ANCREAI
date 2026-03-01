@@ -62,10 +62,13 @@ export function AppSidebar() {
   return (
     <TooltipProvider delayDuration={200}>
       <aside className="flex flex-col h-screen max-h-screen w-16 bg-sidebar text-sidebar-foreground border-r border-sidebar-border shrink-0 overflow-y-auto">
-        {/* Logo */}
-        <div className="flex items-center justify-center h-14 border-b border-sidebar-border">
+        {/* Logo — clickable, back to home */}
+        <Link
+          to="/app/search"
+          className="flex items-center justify-center h-14 border-b border-sidebar-border hover:bg-sidebar-accent transition-colors"
+        >
           <AnchorLogo size="sm" />
-        </div>
+        </Link>
 
         {/* Main nav */}
         <nav className="py-4 px-2 space-y-1 flex flex-col items-center">
@@ -118,8 +121,13 @@ export function AppSidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               <Link
-                to="/app/search"
-                className="flex items-center justify-center h-10 w-10 rounded-md text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+                to="/app/folders"
+                className={cn(
+                  "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
+                  location.pathname === "/app/folders"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                )}
               >
                 <Folder className="h-4 w-4" />
               </Link>

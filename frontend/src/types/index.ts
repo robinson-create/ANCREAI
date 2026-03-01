@@ -135,6 +135,7 @@ export interface ChatRequest {
   include_history?: boolean
   max_history_messages?: number
   context_hint?: string
+  attachment_ids?: string[]
 }
 
 export interface ChatResponse {

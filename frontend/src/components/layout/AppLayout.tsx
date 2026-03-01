@@ -16,7 +16,7 @@ export function NewAppLayout() {
   const [createOpen, setCreateOpen] = useState(false);
   const location = useLocation();
 
-  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname.startsWith("/app/presentations/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname === "/app/contacts" || location.pathname.startsWith("/app/assistant");
+  const hideHeader = location.pathname === "/app" || location.pathname === "/app/documents" || location.pathname.startsWith("/app/documents/") || location.pathname.startsWith("/app/presentations/") || location.pathname === "/app/workspace" || location.pathname === "/app/email" || location.pathname === "/app/search" || location.pathname === "/app/profile" || location.pathname === "/app/billing" || location.pathname === "/app/contacts" || location.pathname === "/app/folders" || location.pathname.startsWith("/app/assistant");
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -68,7 +68,7 @@ export function NewAppLayout() {
               aria-hidden
             >
               <div
-                className="absolute inset-0 bg-cover bg-top bg-no-repeat dashboard-wallpaper"
+                className="absolute inset-0 bg-cover bg-top bg-no-repeat dashboard-wallpaper opacity-85"
                 style={{ backgroundImage: `url(${merFond})` }}
               />
             </div>
