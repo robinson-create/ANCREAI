@@ -84,7 +84,11 @@ class Settings(BaseSettings):
     # --- Transcription (Mistral Voxtral) ---
     transcription_model: str = "mistral-stt-latest"
 
-    # --- Mistral OCR ---
+    # --- Document parsing (Docling) ---
+    use_docling: bool = True  # Use Docling as primary parser for uploads
+    docling_ocr_engine: str = "easyocr"  # easyocr | tesseract | rapidocr
+
+    # --- Mistral OCR (fallback) ---
     mistral_api_key: str = ""
     mistral_ocr_model: str = "mistral-ocr-latest"
     use_mistral_ocr: bool = True

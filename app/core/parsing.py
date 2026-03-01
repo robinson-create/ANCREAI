@@ -30,7 +30,7 @@ class ParsedDocument:
     pages: list[ParsedPage]
     total_pages: int
     metadata: dict = field(default_factory=dict)
-    parser_used: Literal["native", "mistral_ocr"] = "native"
+    parser_used: Literal["native", "mistral_ocr", "docling"] = "native"
 
     @property
     def full_text(self) -> str:
@@ -282,12 +282,20 @@ PARSERS: dict[str, type[DocumentParser]] = {
 EXTENSION_TO_CONTENT_TYPE: dict[str, str] = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     ".html": "text/html",
     ".htm": "text/html",
     ".md": "text/markdown",
     ".markdown": "text/markdown",
     ".txt": "text/plain",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".tiff": "image/tiff",
+    ".tif": "image/tiff",
+    ".webp": "image/webp",
+    ".bmp": "image/bmp",
 }
 
 

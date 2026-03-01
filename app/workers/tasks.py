@@ -86,9 +86,21 @@ async def process_document(ctx: dict, document_id: str) -> dict:
         # 1. Download from S3
         content = await storage_service.download_file(document.s3_key)
 
-        # 2. Parse document (with OCR fallback for scanned PDFs)
-        parsed = await parse_document_with_ocr(content, document.filename, document.content_type)
+        # 2. Parse document — use Docling pipeline for uploads, legacy for others
+        is_upload = (document.doc_metadata or {}).get("source") == "uploads"
+        if is_upload:
+            from app.services.document_ai.document_parser import extract_document_content
+            parsed = await extract_document_content(content, document.filename, document.content_type)
+        else:
+            parsed = await parse_document_with_ocr(content, document.filename, document.content_type)
         document.page_count = parsed.total_pages
+
+        # Store parser metadata on the document
+        meta = document.doc_metadata or {}
+        meta["parser_used"] = parsed.parser_used
+        meta["ocr_used"] = parsed.metadata.get("ocr_used", parsed.parser_used in ("mistral_ocr", "docling"))
+        document.doc_metadata = meta
+
         logger.info(
             f"Parsed with {parsed.parser_used}: {parsed.total_pages} pages"
         )

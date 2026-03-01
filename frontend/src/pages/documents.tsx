@@ -1,12 +1,16 @@
-import { useState, useEffect, useRef, useMemo } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import {
   Plus,
   FileEdit,
   FileText,
+  Image,
+  FileSpreadsheet,
   Loader2,
   AlertCircle,
+  CheckCircle2,
+  Clock,
   Copy,
   Archive,
   Trash2,
@@ -15,6 +19,10 @@ import {
   FolderPlus,
   ArrowRight,
   Presentation,
+  Upload,
+  Download,
+  Eye,
+  RotateCcw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -63,9 +71,10 @@ import { useToast } from "@/hooks/use-toast"
 import { workspaceDocumentsApi } from "@/api/workspace-documents"
 import { presentationsApi } from "@/api/presentations"
 import { contactsApi } from "@/api/contacts"
+import { uploadsApi } from "@/api/uploads"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
-import type { WorkspaceDocumentListItem, PresentationListItem } from "@/types"
+import type { WorkspaceDocumentListItem, PresentationListItem, UploadDocument } from "@/types"
 
 // ── Constants ──
 
@@ -127,6 +136,42 @@ function detectDocType(text: string): string {
   return "generic"
 }
 
+// ── Upload helpers ──
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} Ko`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`
+}
+
+function getUploadFileIcon(contentType: string) {
+  if (contentType.startsWith("image/")) return Image
+  if (contentType.includes("spreadsheet") || contentType.includes("excel")) return FileSpreadsheet
+  if (contentType.includes("presentation") || contentType.includes("powerpoint")) return Presentation
+  return FileText
+}
+
+function getUploadTypeBadge(contentType: string, filename: string): string {
+  if (contentType === "application/pdf") return "PDF"
+  if (contentType.startsWith("image/")) return "Image"
+  if (contentType.includes("wordprocessing") || filename.endsWith(".docx")) return "Word"
+  if (contentType.includes("spreadsheet") || filename.endsWith(".xlsx")) return "Excel"
+  if (contentType.includes("presentation") || filename.endsWith(".pptx")) return "PowerPoint"
+  if (contentType === "text/html") return "HTML"
+  if (contentType === "text/markdown") return "Markdown"
+  if (contentType === "text/plain") return "Texte"
+  return "Fichier"
+}
+
+const UPLOAD_STATUS_CONFIG: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive"; icon: typeof CheckCircle2 }> = {
+  pending: { label: "En attente", variant: "outline", icon: Clock },
+  processing: { label: "Traitement...", variant: "secondary", icon: Loader2 },
+  ready: { label: "Prêt", variant: "default", icon: CheckCircle2 },
+  failed: { label: "Erreur", variant: "destructive", icon: AlertCircle },
+}
+
+const ACCEPTED_UPLOAD_TYPES = ".pdf,.jpg,.jpeg,.png,.tiff,.tif,.webp,.bmp,.docx,.xlsx,.pptx,.txt,.html,.htm,.md"
+
 // ── Unified item type ──
 
 type UnifiedDocItem = {
@@ -157,7 +202,7 @@ export function DocumentsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newDocType, setNewDocType] = useState("generic")
-  const [kindFilter, setKindFilter] = useState<"all" | "document" | "presentation">("all")
+  const [kindFilter, setKindFilter] = useState<"all" | "document" | "presentation" | "upload">("all")
   const [prompt, setPrompt] = useState("")
   const [isCreatingFromPrompt, setIsCreatingFromPrompt] = useState(false)
   const [createMode, setCreateMode] = useState<"document" | "presentation">("document")
@@ -178,8 +223,21 @@ export function DocumentsPage() {
     queryFn: () => presentationsApi.list(),
   })
 
-  const isLoading = docsLoading || presLoading
-  const error = docsError || presError
+  const { data: uploads, isLoading: uploadsLoading, error: uploadsError } = useQuery({
+    queryKey: ["uploads"],
+    queryFn: () => uploadsApi.list(),
+    refetchInterval: (query) => {
+      const data = query.state.data
+      if (!data) return false
+      const hasProcessing = data.some(
+        (d) => d.status === "pending" || d.status === "processing"
+      )
+      return hasProcessing ? 3000 : false
+    },
+  })
+
+  const isLoading = docsLoading || presLoading || (kindFilter === "upload" && uploadsLoading)
+  const error = docsError || presError || (kindFilter === "upload" ? uploadsError : null)
 
   // ── Unified items ──
 
@@ -284,6 +342,66 @@ export function DocumentsPage() {
       toast({ title: "Erreur", description: "Impossible de dupliquer la présentation.", variant: "destructive" })
     },
   })
+
+  // ── Upload state & mutations ──
+
+  const uploadFileInputRef = useRef<HTMLInputElement>(null)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [uploadDeleteTarget, setUploadDeleteTarget] = useState<string | null>(null)
+
+  const uploadMutation = useMutation({
+    mutationFn: (files: File[]) => uploadsApi.upload(files),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["uploads"] })
+      toast({ title: "Fichiers importés", description: "Le traitement a démarré." })
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible d'importer les fichiers." })
+    },
+  })
+
+  const deleteUploadMutation = useMutation({
+    mutationFn: (id: string) => uploadsApi.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["uploads"] })
+      toast({ title: "Document supprimé" })
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de supprimer le document." })
+    },
+  })
+
+  const reprocessUploadMutation = useMutation({
+    mutationFn: (id: string) => uploadsApi.reprocess(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["uploads"] })
+      toast({ title: "Relance du traitement" })
+    },
+  })
+
+  const handleUploadFiles = useCallback(
+    (files: FileList | File[]) => {
+      const fileArray = Array.from(files)
+      if (fileArray.length > 0) uploadMutation.mutate(fileArray)
+    },
+    [uploadMutation]
+  )
+
+  const handleUploadDownload = useCallback(async (id: string) => {
+    try {
+      const { url } = await uploadsApi.getDownloadUrl(id)
+      window.open(url, "_blank")
+    } catch {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de télécharger." })
+    }
+  }, [toast])
+
+  const sortedUploads = useMemo(() => {
+    if (!uploads) return []
+    return [...uploads].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
+  }, [uploads])
 
   // ── Chat prompt submit ──
 
@@ -393,10 +511,27 @@ export function DocumentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between p-6 border-b bg-background">
         <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground">Documents</h1>
-        <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Nouveau document
-        </Button>
+        <div className="flex items-center gap-2">
+          {kindFilter === "upload" && (
+            <Button
+              variant="outline"
+              onClick={() => uploadFileInputRef.current?.click()}
+              className="gap-2"
+              disabled={uploadMutation.isPending}
+            >
+              {uploadMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              Importer
+            </Button>
+          )}
+          <Button onClick={() => setIsCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Nouveau document
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
@@ -404,15 +539,193 @@ export function DocumentsPage() {
       {/* Kind filter tabs */}
       <Tabs
         value={kindFilter}
-        onValueChange={(v) => setKindFilter(v as "all" | "document" | "presentation")}
+        onValueChange={(v) => setKindFilter(v as "all" | "document" | "presentation" | "upload")}
       >
         <TabsList className="bg-muted">
           <TabsTrigger value="all" className="font-medium font-body">Tous</TabsTrigger>
           <TabsTrigger value="document" className="font-medium font-body">Documents</TabsTrigger>
           <TabsTrigger value="presentation" className="font-medium font-body">Présentations</TabsTrigger>
+          <TabsTrigger value="upload" className="font-medium font-body">Uploads</TabsTrigger>
         </TabsList>
       </Tabs>
 
+      {/* Hidden file input for uploads */}
+      <input
+        ref={uploadFileInputRef}
+        type="file"
+        multiple
+        accept={ACCEPTED_UPLOAD_TYPES}
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) {
+            handleUploadFiles(e.target.files)
+            e.target.value = ""
+          }
+        }}
+      />
+
+      {/* ══════ UPLOADS TAB CONTENT ══════ */}
+      {kindFilter === "upload" && (
+        <>
+          {/* Drop zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false) }}
+            onDrop={(e) => {
+              e.preventDefault()
+              setIsDragOver(false)
+              if (e.dataTransfer.files.length > 0) handleUploadFiles(e.dataTransfer.files)
+            }}
+            onClick={() => uploadFileInputRef.current?.click()}
+            className={`
+              flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed
+              p-8 cursor-pointer transition-all
+              ${isDragOver
+                ? "border-primary bg-primary/5 scale-[1.01]"
+                : "border-border hover:border-primary/40 hover:bg-muted/30"
+              }
+            `}
+          >
+            <Upload className={`h-8 w-8 ${isDragOver ? "text-primary" : "text-muted-foreground/50"}`} />
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground">
+                {isDragOver ? "Déposez vos fichiers ici" : "Glissez-déposez ou cliquez pour importer"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                PDF, images, Word, Excel, PowerPoint, texte
+              </p>
+            </div>
+          </div>
+
+          {/* Uploads loading */}
+          {uploadsLoading && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-36 rounded-lg" />
+              ))}
+            </div>
+          )}
+
+          {/* Uploads error */}
+          {uploadsError && (
+            <div className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-4 w-4" />
+              <span>Erreur lors du chargement des uploads.</span>
+            </div>
+          )}
+
+          {/* Uploads empty */}
+          {!uploadsLoading && !uploadsError && sortedUploads.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Upload className="h-12 w-12 text-muted-foreground/50 mb-4" />
+              <p className="text-lg font-semibold font-heading text-foreground">
+                Aucun document importé
+              </p>
+              <p className="text-sm text-muted-foreground mb-4 font-body">
+                Importez vos premiers fichiers pour enrichir votre base de connaissances.
+              </p>
+            </div>
+          )}
+
+          {/* Uploads grid */}
+          {sortedUploads.length > 0 && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {sortedUploads.map((doc) => {
+                const FileIcon = getUploadFileIcon(doc.content_type)
+                const statusCfg = UPLOAD_STATUS_CONFIG[doc.status] || UPLOAD_STATUS_CONFIG.pending
+                const StatusIcon = statusCfg.icon
+                const isProcessing = doc.status === "pending" || doc.status === "processing"
+
+                return (
+                  <Card
+                    key={doc.id}
+                    className="relative group cursor-pointer hover:shadow-lg hover:border-primary/20 transition-all rounded-xl border-border"
+                    onClick={() => navigate(`/app/uploads/${doc.id}`)}
+                  >
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant={statusCfg.variant} className="gap-1.5 font-medium">
+                          <StatusIcon className={`h-3 w-3 ${isProcessing ? "animate-spin" : ""}`} />
+                          {statusCfg.label}
+                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5 gap-1 flex items-center">
+                            <FileIcon className="h-3 w-3" />
+                            {getUploadTypeBadge(doc.content_type, doc.filename)}
+                          </Badge>
+                          {doc.ocr_used && (
+                            <Badge variant="outline" className="text-[10px] font-medium px-2 py-0.5">
+                              OCR
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <CardTitle className="font-heading text-sm mt-2 text-foreground truncate">
+                        {doc.filename}
+                      </CardTitle>
+                      <CardDescription className="font-body text-xs">
+                        {formatFileSize(doc.file_size)}
+                        {doc.page_count ? ` — ${doc.page_count} page${doc.page_count > 1 ? "s" : ""}` : ""}
+                        {doc.chunk_count ? ` — ${doc.chunk_count} chunks` : ""}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardFooter className="text-xs text-muted-foreground font-body">
+                      {doc.parser_used !== "pending" && doc.parser_used !== "native" && (
+                        <span className="mr-2 text-muted-foreground/60">
+                          Parser: {doc.parser_used}
+                        </span>
+                      )}
+                      Importé le {new Date(doc.created_at).toLocaleDateString("fr-FR")}
+                    </CardFooter>
+
+                    {/* Actions dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => navigate(`/app/uploads/${doc.id}`)}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Voir
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleUploadDownload(doc.id)}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Télécharger
+                        </DropdownMenuItem>
+                        {doc.status === "failed" && (
+                          <DropdownMenuItem onClick={() => reprocessUploadMutation.mutate(doc.id)}>
+                            <RotateCcw className="h-4 w-4 mr-2" />
+                            Relancer
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setUploadDeleteTarget(doc.id)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Supprimer
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </Card>
+                )
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ══════ DOCS / PRES TAB CONTENT ══════ */}
+      {kindFilter !== "upload" && (
+        <>
       {/* Loading */}
       {isLoading && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -555,6 +868,8 @@ export function DocumentsPage() {
             )
           })}
         </div>
+      )}
+        </>
       )}
 
       {/* Create dialog */}
@@ -713,6 +1028,32 @@ export function DocumentsPage() {
         itemTitle={addToFolderTarget?.title}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
       />
+
+      {/* Upload delete confirmation */}
+      <AlertDialog open={!!uploadDeleteTarget} onOpenChange={(open) => !open && setUploadDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce document importé ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. Le document sera supprimé du stockage, de l'index et de la base de connaissances.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (uploadDeleteTarget) {
+                  deleteUploadMutation.mutate(uploadDeleteTarget)
+                  setUploadDeleteTarget(null)
+                }
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       </div>
     </div>
   )

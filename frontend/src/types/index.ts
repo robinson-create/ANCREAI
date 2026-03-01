@@ -88,6 +88,46 @@ export interface DocumentUploadResponse {
   message: string
 }
 
+// Upload document types
+export type UploadDocumentStatus = "pending" | "processing" | "ready" | "failed" | "deleting"
+
+export interface UploadDocument {
+  id: string
+  collection_id: string
+  filename: string
+  content_type: string
+  file_size: number
+  content_hash: string
+  status: UploadDocumentStatus
+  error_message: string | null
+  page_count: number | null
+  chunk_count: number | null
+  tokens_used: number | null
+  source: string
+  ocr_used: boolean
+  parser_used: string
+  created_at: string
+  updated_at: string
+  processed_at: string | null
+}
+
+export interface UploadPage {
+  page_number: number
+  text: string
+  meta: Record<string, unknown> | null
+}
+
+export interface UploadDocumentDetail extends UploadDocument {
+  pages: UploadPage[]
+}
+
+export interface UploadDownloadUrl {
+  url: string
+  filename: string
+  content_type: string
+  expires_in: number
+}
+
 // Chat types
 export interface ChatRequest {
   message: string

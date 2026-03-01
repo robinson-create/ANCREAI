@@ -21,6 +21,7 @@ from app.api.v1 import (
     settings,
     stats,
     tenants,
+    uploads,
     usage,
     webhooks,
     workspace_documents,
@@ -49,3 +50,4 @@ api_router.include_router(folders.router, prefix="/folders", tags=["folders"])
 api_router.include_router(agent_chat.router, prefix="/chat", tags=["agent-chat"])
 api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
 api_router.include_router(presentations.router, prefix="/presentations", tags=["presentations"])
+api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

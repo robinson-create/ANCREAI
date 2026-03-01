@@ -1,7 +1,8 @@
-"""Mistral OCR client for PDF text extraction."""
+"""Mistral OCR client for document text extraction (PDF + images)."""
 
 import base64
 import logging
+from pathlib import Path
 
 import httpx
 
@@ -13,18 +14,47 @@ settings = get_settings()
 
 MISTRAL_OCR_URL = "https://api.mistral.ai/v1/ocr"
 
+# MIME types supported by Mistral OCR
+MISTRAL_OCR_MIME_TYPES = {
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/tiff",
+    "image/webp",
+    "image/bmp",
+}
+
 
 class OCRProviderError(Exception):
     """Raised when the OCR provider fails."""
 
 
-async def ocr_pdf(
+def _resolve_ocr_mime(content_type: str, filename: str) -> str:
+    """Resolve the MIME type for the OCR data URI."""
+    if content_type in MISTRAL_OCR_MIME_TYPES:
+        return content_type
+    ext = Path(filename).suffix.lower()
+    ext_map = {
+        ".pdf": "application/pdf",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".tiff": "image/tiff",
+        ".tif": "image/tiff",
+        ".webp": "image/webp",
+        ".bmp": "image/bmp",
+    }
+    return ext_map.get(ext, "application/pdf")
+
+
+async def ocr_document(
     file_bytes: bytes,
     filename: str,
+    content_type: str = "application/pdf",
     model: str | None = None,
 ) -> list[dict]:
     """
-    Extract text from a PDF using Mistral OCR.
+    Extract text from a document (PDF or image) using Mistral OCR.
 
     Returns:
         List of pages: [{"page": 1, "text": "...", "meta": {...}}, ...]
@@ -35,17 +65,30 @@ async def ocr_pdf(
     if not api_key:
         raise OCRProviderError("MISTRAL_API_KEY is not configured")
 
+    mime = _resolve_ocr_mime(content_type, filename)
+
     # Encode file as base64 data URI
     b64 = base64.b64encode(file_bytes).decode("ascii")
-    document_url = f"data:application/pdf;base64,{b64}"
+    data_uri = f"data:{mime};base64,{b64}"
 
-    payload = {
-        "model": model,
-        "document": {
-            "type": "document_url",
-            "document_url": document_url,
-        },
-    }
+    # Use image_url type for images, document_url for PDFs
+    is_image = mime.startswith("image/")
+    if is_image:
+        payload = {
+            "model": model,
+            "document": {
+                "type": "image_url",
+                "image_url": data_uri,
+            },
+        }
+    else:
+        payload = {
+            "model": model,
+            "document": {
+                "type": "document_url",
+                "document_url": data_uri,
+            },
+        }
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
@@ -88,3 +131,13 @@ async def ocr_pdf(
 
     logger.info("Mistral OCR extracted %d pages from %s", len(pages), filename)
     return pages
+
+
+# Backward-compatible alias
+async def ocr_pdf(
+    file_bytes: bytes,
+    filename: str,
+    model: str | None = None,
+) -> list[dict]:
+    """Legacy alias for ocr_document (PDF only)."""
+    return await ocr_document(file_bytes, filename, "application/pdf", model)
