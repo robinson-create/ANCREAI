@@ -405,7 +405,7 @@ async def presentation_events(
                     f"data: {json.dumps(payload)}\n\n"
                 )
 
-                if event_type in ("outline_ready", "generation_complete", "export_ready", "error"):
+                if event_type in ("generation_complete", "export_ready", "error"):
                     break
         finally:
             await pubsub.unsubscribe(channel)

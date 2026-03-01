@@ -97,12 +97,27 @@ async def generate_presentation_outline(
             async def slide_callback(slide, index, total):
                 await publisher.slide_generated(pres_uuid, slide.id, index, total)
 
-            slides = await presentation_service.generate_slides(
-                db, tenant_uuid, pres_uuid, slides_request,
-                on_slide_progress=slide_callback,
-            )
-            await db.commit()
-            await publisher.generation_complete(pres_uuid)
+            try:
+                slides = await presentation_service.generate_slides(
+                    db, tenant_uuid, pres_uuid, slides_request,
+                    on_slide_progress=slide_callback,
+                )
+                await db.commit()
+                await publisher.generation_complete(pres_uuid)
+            except Exception as slide_err:
+                logger.exception(f"Error in auto-chain slide generation for {presentation_id}")
+                await db.rollback()
+                # Update status to error (outline is already committed)
+                result = await db.execute(
+                    select(Presentation).where(Presentation.id == pres_uuid)
+                )
+                pres = result.scalar_one_or_none()
+                if pres:
+                    pres.status = PresentationStatus.ERROR.value
+                    pres.error_message = str(slide_err)[:2000]
+                    await db.commit()
+                await publisher.error(pres_uuid, str(slide_err)[:500])
+                return {"error": str(slide_err)}
 
             logger.info(f"Slides auto-generated for {presentation_id}: {len(slides)} slides")
             return {"status": "ok", "outline_count": len(outline), "slide_count": len(slides)}

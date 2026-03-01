@@ -25,6 +25,9 @@ export function usePresentationSSE({
   const connect = useCallback(async () => {
     if (!presentationId) return
 
+    // Abort any previous connection before starting a new one
+    abortRef.current?.abort()
+
     const token = await getCurrentAuthToken()
     if (!token) {
       onErrorRef.current?.("Token d'authentification indisponible")
@@ -90,8 +93,8 @@ export function usePresentationSSE({
             }
           }
 
-          // Terminal events
-          if (["outline_ready", "generation_complete", "export_ready", "error"].includes(eventType)) {
+          // Terminal events (outline_ready removed — auto-chain continues to generation_complete)
+          if (["generation_complete", "export_ready", "error"].includes(eventType)) {
             setIsConnected(false)
             return
           }

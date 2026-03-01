@@ -144,6 +144,7 @@ export function PresentationEditorPage() {
             current: (event.payload.slide_index as number) + 1,
             total: event.payload.total as number,
           })
+          queryClient.invalidateQueries({ queryKey: ["presentation", id] })
           break
         case "export_progress":
           setExportProgress(event.payload.percent as number)
@@ -358,7 +359,7 @@ export function PresentationEditorPage() {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground animate-pulse">
-                  {pres.status === "generating_slides"
+                  {pres.status === "generating_slides" || pres.status === "outline_ready"
                     ? "Génération des slides..."
                     : "Préparation du plan..."}
                 </p>
