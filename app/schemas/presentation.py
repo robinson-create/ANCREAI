@@ -38,8 +38,11 @@ class SlideNode(BaseModel):
     variant: str | None = None
     # Value for stats items
     value: str | None = None
-    # Image query for gallery items
+    # Image/icon query — semantic search term (free text from LLM)
     query: str | None = None
+    # Icon fields — resolved by backend, rendered by frontend
+    icon_name: str | None = None  # Exact Lucide name: "Rocket", "Shield", "TrendingUp"
+    icon_role: Literal["inline", "card", "section", "hero"] | None = None  # Sizing hint
 
 
 class CropSettings(BaseModel):
@@ -68,6 +71,8 @@ class SlideContent(BaseModel):
     ] = "vertical"
     root_image: RootImage | None = None
     bg_color: str | None = None
+    # Slide intent — communication purpose (set by template suggestion, optional)
+    intent: str | None = None  # "inform"|"compare"|"sequence"|"highlight_metric"|"persuade"|etc.
 
 
 # ── Outline ──
@@ -98,12 +103,24 @@ class ThemeFonts(BaseModel):
     body: str = "Inter"
 
 
+class DesignTokens(BaseModel):
+    """Design tokens controlling visual rendering beyond colors/fonts.
+
+    These are resolved by the engine, not decided by the LLM.
+    """
+
+    shadow_level: Literal["none", "soft", "medium"] = "soft"
+    card_style: Literal["flat", "outline", "soft-elevated"] = "soft-elevated"
+    accent_usage: Literal["minimal", "balanced", "strong"] = "balanced"
+
+
 class ThemeData(BaseModel):
     """Theme properties stored in presentation_themes.theme_data."""
 
     colors: ThemeColors = Field(default_factory=ThemeColors)
     fonts: ThemeFonts = Field(default_factory=ThemeFonts)
     border_radius: str = "12px"
+    design_tokens: DesignTokens = Field(default_factory=DesignTokens)
 
 
 class ThemeRead(BaseModel):
@@ -218,6 +235,7 @@ class GenerateOutlineRequest(BaseModel):
     language: str = "fr-FR"
     style: str = "professional"
     collection_ids: list[UUID] = Field(default_factory=list)
+    auto_generate_slides: bool = True  # Chain outline → slides without user review
 
 
 class GenerateSlidesRequest(BaseModel):
@@ -225,7 +243,17 @@ class GenerateSlidesRequest(BaseModel):
 
 
 class RegenerateSlideRequest(BaseModel):
-    instruction: str = ""
+    instruction: str = ""  # Free-text user instruction: "rends plus premium", "ajoute des icônes"
+    style_hints: list[str] = Field(default_factory=list)  # ["more_icons", "lighter_text", "premium"]
+    target_template: str | None = None  # Force a specific template: "kpi_3", "timeline"
+    collection_ids: list[UUID] = Field(default_factory=list)
+
+
+class TransformPresentationRequest(BaseModel):
+    """Global instruction applied to multiple slides at once."""
+
+    instruction: str  # "uniformise les couleurs", "ajoute plus de respiration"
+    slide_ids: list[UUID] = Field(default_factory=list)  # Empty = all slides
     collection_ids: list[UUID] = Field(default_factory=list)
 
 

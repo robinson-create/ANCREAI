@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # LLM
     llm_model: str = "mistral-medium-latest"
+    llm_slide_model: str = "mistral-large-latest"  # Mistral Large for slide generation
     llm_max_tokens: int = 4096
 
     # Chunking

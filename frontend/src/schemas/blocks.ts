@@ -136,6 +136,17 @@ export const contactSuggestionSchema = z.object({
 export type ContactSuggestionPayload = z.infer<typeof contactSuggestionSchema>
 
 // ---------------------------------------------------------------------------
+// Presentation Suggestion
+// ---------------------------------------------------------------------------
+export const presentationSuggestionSchema = z.object({
+  title: z.string(),
+  prompt: z.string(),
+  slide_count: z.number(),
+  style: z.enum(["professional", "creative", "minimal", "corporate"]),
+})
+export type PresentationSuggestionPayload = z.infer<typeof presentationSuggestionSchema>
+
+// ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 export const blockSchemas = {
@@ -149,4 +160,5 @@ export const blockSchemas = {
   calendar_connect_cta: calendarConnectCtaSchema,
   email_suggestion: emailSuggestionSchema,
   contact_suggestion: contactSuggestionSchema,
+  presentation_suggestion: presentationSuggestionSchema,
 } as const

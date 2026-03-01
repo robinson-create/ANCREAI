@@ -11,6 +11,7 @@ import { CalendarEventChoices } from "./calendar/CalendarEventChoices"
 import { CalendarConnectProviderCTA } from "./calendar/CalendarConnectProviderCTA"
 import { EmailSuggestionBlock } from "./EmailSuggestionBlock"
 import { ContactSuggestionBlock } from "./ContactSuggestionBlock"
+import { PresentationSuggestionBlock } from "./PresentationSuggestionBlock"
 
 const blockComponents = {
   kpi_cards: KpiCards,
@@ -23,6 +24,7 @@ const blockComponents = {
   calendar_connect_cta: CalendarConnectProviderCTA,
   email_suggestion: EmailSuggestionBlock,
   contact_suggestion: ContactSuggestionBlock,
+  presentation_suggestion: PresentationSuggestionBlock,
 } as const
 
 type RenderableBlockType = keyof typeof blockComponents

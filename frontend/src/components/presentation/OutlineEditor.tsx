@@ -105,7 +105,7 @@ export function OutlineEditor({
   }, [items, update])
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 overflow-y-auto h-full">
+    <div className="max-w-4xl mx-auto px-4 py-6 space-y-4 overflow-y-auto h-full">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">Plan de la présentation</h2>
         {dirty && (
@@ -150,7 +150,7 @@ export function OutlineEditor({
               <Input
                 value={item.title}
                 onChange={(e) => updateTitle(itemIdx, e.target.value)}
-                className="font-medium"
+                className="font-medium flex-1 min-w-0"
                 placeholder="Titre de la section"
               />
 
@@ -174,7 +174,7 @@ export function OutlineEditor({
                     onChange={(e) =>
                       updateBullet(itemIdx, bulletIdx, e.target.value)
                     }
-                    className="h-8 text-sm"
+                    className="h-8 text-sm flex-1 min-w-0"
                     placeholder="Point clé"
                   />
                   <Button

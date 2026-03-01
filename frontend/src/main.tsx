@@ -38,8 +38,8 @@ const queryClient = new QueryClient({
 const AppWithProviders = () => (
   <QueryClientProvider client={queryClient}>
     <CopilotProvider>
-      {COPILOTKIT_ENABLED && <CopilotActions />}
       <BrowserRouter>
+        {COPILOTKIT_ENABLED && <CopilotActions />}
         <App />
       </BrowserRouter>
       {COPILOTKIT_ENABLED && <CopilotChatPopup />}

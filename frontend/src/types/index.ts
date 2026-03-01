@@ -115,11 +115,11 @@ export interface Citation {
 }
 
 // Generative UI blocks
-export type BlockType = "kpi_cards" | "steps" | "table" | "callout" | "tool_call" | "error"
+export type BlockType = "kpi_cards" | "steps" | "table" | "callout" | "tool_call" | "error" | "presentation_suggestion"
 
 export interface Block {
   id: string
-  type: BlockType
+  type: string // Flexible for new block types from backend
   payload: unknown
 }
 
@@ -365,8 +365,11 @@ export interface SlideNode {
   variant?: string
   // Value for stats items
   value?: string
-  // Image query for gallery items
+  // Image/icon query — semantic search term (free text from LLM)
   query?: string
+  // Icon fields — resolved by backend, rendered by frontend
+  icon_name?: string // Exact Lucide name: "Rocket", "Shield", "TrendingUp"
+  icon_role?: "inline" | "card" | "section" | "hero" // Sizing hint
 }
 
 export interface RootImage {

@@ -19,6 +19,8 @@ interface AnchorSpinnerProps {
   /** Called when the deceleration animation finishes (spinner has stopped) */
   onStopped?: () => void
   className?: string
+  /** Optional label below the spinner. Set to null to hide. Defaults to "Generation en cours…" */
+  label?: string | null
 }
 
 // Physics constants
@@ -28,7 +30,7 @@ const FRICTION = 4          // deg/s² deceleration (lower = longer coast)
 const BLUR_THRESHOLD = 400  // velocity above which blur starts
 const MAX_BLUR = 3          // max blur in px at full speed
 
-export function AnchorSpinner({ active, onStopped, className }: AnchorSpinnerProps) {
+export function AnchorSpinner({ active, onStopped, className, label }: AnchorSpinnerProps) {
   const angleRef = useRef(0)
   const velocityRef = useRef(0)
   const phaseRef = useRef<"idle" | "spinning_up" | "full_speed" | "decelerating">("idle")
@@ -137,9 +139,11 @@ export function AnchorSpinner({ active, onStopped, className }: AnchorSpinnerPro
       </div>
 
       {/* Label */}
-      <p className="mt-6 text-sm font-medium text-muted-foreground animate-pulse">
-        Generation en cours…
-      </p>
+      {label !== null && (
+        <p className="mt-6 text-sm font-medium text-muted-foreground animate-pulse">
+          {label ?? "Generation en cours…"}
+        </p>
+      )}
     </div>
   )
 }

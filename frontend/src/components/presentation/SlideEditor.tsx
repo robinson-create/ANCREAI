@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react"
-import { RefreshCw, Loader2, ChevronUp, ChevronDown, Trash2, GripVertical } from "lucide-react"
+import { ChevronUp, ChevronDown, Trash2, GripVertical, ImagePlus, X, icons as lucideIcons } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
@@ -24,8 +26,33 @@ interface SlideEditorProps {
   slide: Slide
   themeData: ThemeData | null
   onSlideUpdate: (slideId: string, update: SlideUpdate) => void
-  onRegenerateSlide: (slideId: string) => void
-  isRegenerating: boolean
+}
+
+// ── Lucide icon resolver ──
+
+const ICON_ROLE_SIZES: Record<string, number> = {
+  inline: 16,
+  card: 24,
+  section: 32,
+  hero: 48,
+}
+
+function SlideIcon({ iconName, role = "card" }: { iconName?: string | null; role?: string }) {
+  if (!iconName) return null
+
+  const IconComponent = (lucideIcons as Record<string, LucideIcon>)[iconName]
+  if (!IconComponent) return null
+
+  const size = ICON_ROLE_SIZES[role] ?? 24
+
+  return (
+    <IconComponent
+      size={size}
+      strokeWidth={size >= 32 ? 1.5 : 1.75}
+      style={{ color: "var(--pres-primary)" }}
+      className="shrink-0"
+    />
+  )
 }
 
 // ── Theme helpers ──
@@ -302,8 +329,16 @@ function SlideNodeRenderer({
           {renderChildren()}
         </div>
       )
-    case "icon":
+    case "icon": {
+      const iconName = node.icon_name as string | undefined
+      const iconRole = (node.icon_role as string) || "card"
+      // Only render resolved icons — never render unresolved ones
+      if (iconName) {
+        return <SlideIcon iconName={iconName} role={iconRole} />
+      }
+      // Fallback: colored dot for unresolved icons (should not happen after normalization)
       return <span className="text-sm" style={{ color: "var(--pres-primary)" }}>●</span>
+    }
 
     // ── Boxes ──
     case "box_group": {
@@ -789,11 +824,11 @@ export function SlideEditor({
   slide,
   themeData,
   onSlideUpdate,
-  onRegenerateSlide,
-  isRegenerating,
 }: SlideEditorProps) {
   const [localNotes, setLocalNotes] = useState(slide.speaker_notes || "")
   const [localBgColor, setLocalBgColor] = useState(slide.bg_color || "#ffffff")
+  const [showImageInput, setShowImageInput] = useState(false)
+  const [imageUrl, setImageUrl] = useState("")
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>()
 
   const theme = themeData ?? DEFAULT_THEME
@@ -827,6 +862,10 @@ export function SlideEditor({
     slide.content_json?.content_json ||
     (Array.isArray(slide.content_json) ? slide.content_json : [])
   ) as SlideNode[]
+
+  // Root image (layout image)
+  const rootImage = slide.root_image as { asset_id?: string; query?: string; url?: string } | null
+  const rootImageUrl = rootImage?.url || rootImage?.asset_id || null
 
   const debouncedSave = useCallback(
     (update: SlideUpdate) => {
@@ -897,10 +936,19 @@ export function SlideEditor({
     }
   }, [slide.id, localNotes, slide.speaker_notes, onSlideUpdate])
 
-  const handleRegenerate = useCallback(() => {
-    console.log("[SlideEditor] Regenerating slide:", slide.id)
-    onRegenerateSlide(slide.id)
-  }, [slide.id, onRegenerateSlide])
+  const handleSetImage = useCallback(() => {
+    const url = imageUrl.trim()
+    if (!url) return
+    onSlideUpdate(slide.id, {
+      root_image: { url, query: "", layout_type: slide.layout_type },
+    })
+    setShowImageInput(false)
+    setImageUrl("")
+  }, [imageUrl, slide.id, slide.layout_type, onSlideUpdate])
+
+  const handleRemoveImage = useCallback(() => {
+    onSlideUpdate(slide.id, { root_image: null })
+  }, [slide.id, onSlideUpdate])
 
   // Use theme background if no custom bg_color has been set
   const slideBg = localBgColor !== "#ffffff" ? localBgColor : theme.colors.background
@@ -934,28 +982,56 @@ export function SlideEditor({
           />
         </div>
 
-        <div className="flex-1 min-w-0" />
+        <div className="h-5 w-px bg-border shrink-0" />
 
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleRegenerate}
-          disabled={isRegenerating}
-          className="gap-1.5 shrink-0"
-        >
-          {isRegenerating ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
-          Régénérer
-        </Button>
+        {/* Image controls */}
+        {rootImageUrl ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <span className="text-xs text-muted-foreground truncate max-w-[120px]">Image</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-muted-foreground hover:text-destructive"
+              onClick={handleRemoveImage}
+              title="Supprimer l'image"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ) : showImageInput ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <Input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSetImage()}
+              placeholder="URL de l'image..."
+              className="h-7 w-52 text-xs"
+              autoFocus
+            />
+            <Button variant="default" size="sm" className="h-7 text-xs px-2" onClick={handleSetImage}>
+              OK
+            </Button>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setShowImageInput(false)}>
+              <X className="h-3 w-3" />
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1 text-xs shrink-0"
+            onClick={() => setShowImageInput(true)}
+          >
+            <ImagePlus className="h-3.5 w-3.5" />
+            Image
+          </Button>
+        )}
       </div>
 
       {/* Slide canvas */}
       <div className="flex-1 min-h-0 overflow-auto p-6 flex items-start justify-center">
         <div
-          className="w-full max-w-3xl aspect-video rounded-lg shadow-lg border p-5 pl-12 overflow-hidden relative shrink-0"
+          className="w-full max-w-3xl aspect-video rounded-lg shadow-lg border overflow-hidden relative shrink-0"
           style={{
             ...cssVars,
             backgroundColor: slideBg,
@@ -963,27 +1039,71 @@ export function SlideEditor({
             fontFamily: "var(--pres-body-font)",
           }}
         >
-          {contentNodes.length > 0 ? (
-            contentNodes.map((node, i) => (
-              <DraggableNodeWrapper
-                key={`${node.type}-${i}`}
-                index={i}
-                total={contentNodes.length}
-                onMoveUp={() => handleMoveNode(i, i - 1)}
-                onMoveDown={() => handleMoveNode(i, i + 1)}
-                onDelete={() => handleDeleteNode(i)}
-              >
-                <SlideNodeRenderer
-                  node={node}
-                  editable
-                  onNodeChange={(updated) => handleNodeChange(i, updated)}
-                  themeColors={chartColors}
-                />
-              </DraggableNodeWrapper>
-            ))
+          {/* Background image (layout: background) */}
+          {rootImageUrl && slide.layout_type === "background" && (
+            <img src={rootImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          )}
+          {rootImageUrl && slide.layout_type === "background" && (
+            <div className="absolute inset-0 bg-black/40" />
+          )}
+
+          {/* Layout with side image */}
+          {rootImageUrl && ["left", "right", "left-fit", "right-fit"].includes(slide.layout_type) ? (
+            <div className={`flex h-full ${slide.layout_type.startsWith("right") ? "flex-row" : "flex-row-reverse"}`}>
+              <div className="flex-1 p-5 pl-12 overflow-hidden relative">
+                {contentNodes.length > 0 ? (
+                  contentNodes.map((node, i) => (
+                    <DraggableNodeWrapper
+                      key={`${node.type}-${i}`}
+                      index={i}
+                      total={contentNodes.length}
+                      onMoveUp={() => handleMoveNode(i, i - 1)}
+                      onMoveDown={() => handleMoveNode(i, i + 1)}
+                      onDelete={() => handleDeleteNode(i)}
+                    >
+                      <SlideNodeRenderer
+                        node={node}
+                        editable
+                        onNodeChange={(updated) => handleNodeChange(i, updated)}
+                        themeColors={chartColors}
+                      />
+                    </DraggableNodeWrapper>
+                  ))
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm" style={{ color: "var(--pres-muted)" }}>
+                    Slide vide
+                  </div>
+                )}
+              </div>
+              <div className={`shrink-0 ${slide.layout_type.includes("fit") ? "w-1/2" : "w-2/5"}`}>
+                <img src={rootImageUrl} alt="" className="w-full h-full object-cover" />
+              </div>
+            </div>
           ) : (
-            <div className="flex items-center justify-center h-full text-sm" style={{ color: "var(--pres-muted)" }}>
-              Slide vide — cliquez sur &ldquo;Régénérer&rdquo; pour générer le contenu
+            <div className={`p-5 pl-12 h-full ${slide.layout_type === "background" && rootImageUrl ? "relative z-10" : ""}`}>
+              {contentNodes.length > 0 ? (
+                contentNodes.map((node, i) => (
+                  <DraggableNodeWrapper
+                    key={`${node.type}-${i}`}
+                    index={i}
+                    total={contentNodes.length}
+                    onMoveUp={() => handleMoveNode(i, i - 1)}
+                    onMoveDown={() => handleMoveNode(i, i + 1)}
+                    onDelete={() => handleDeleteNode(i)}
+                  >
+                    <SlideNodeRenderer
+                      node={node}
+                      editable
+                      onNodeChange={(updated) => handleNodeChange(i, updated)}
+                      themeColors={chartColors}
+                    />
+                  </DraggableNodeWrapper>
+                ))
+              ) : (
+                <div className="flex items-center justify-center h-full text-sm" style={{ color: "var(--pres-muted)" }}>
+                  Slide vide — utilisez le panneau IA pour générer le contenu
+                </div>
+              )}
             </div>
           )}
         </div>

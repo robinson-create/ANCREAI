@@ -100,6 +100,7 @@ export function ChatPage() {
   const [editContent, setEditContent] = useState("")
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const abortFnRef = useRef<(() => void) | null>(null)
   const isNewConversationRef = useRef(false)
   const conversationIdRef = useRef(conversationId)
@@ -118,7 +119,10 @@ export function ChatPage() {
   })
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+    const el = scrollContainerRef.current
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [])
 
   useEffect(() => {
@@ -552,7 +556,7 @@ export function ChatPage() {
           </div>
 
           {/* Messages */}
-          <ScrollArea className="flex-1 p-4">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
             <div className="mx-auto max-w-3xl space-y-6">
               {messages.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -737,7 +741,7 @@ export function ChatPage() {
               ))}
               <div ref={messagesEndRef} />
             </div>
-          </ScrollArea>
+          </div>
 
           {/* Composer - assistant-ui */}
           <div className="border-t p-4">

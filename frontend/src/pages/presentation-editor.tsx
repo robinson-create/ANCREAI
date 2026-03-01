@@ -24,16 +24,16 @@ import { useToast } from "@/hooks/use-toast"
 import { usePresentationSSE } from "@/hooks/use-presentation-sse"
 import { presentationsApi } from "@/api/presentations"
 import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
-import { OutlineEditor } from "@/components/presentation/OutlineEditor"
+// OutlineEditor removed — auto-chain outline → slides, no intermediate review
 import { SlidePanel } from "@/components/presentation/SlidePanel"
 import { SlideEditor } from "@/components/presentation/SlideEditor"
+import { InstructionBar } from "@/components/presentation/InstructionBar"
 import { AddElementsPanel } from "@/components/presentation/AddElementsPanel"
 import { ThemePanel } from "@/components/presentation/ThemePanel"
 import type {
   PresentationFull,
   PresentationStatus,
   PresentationSSEEvent,
-  OutlineItem,
   SlideUpdate,
 } from "@/types"
 
@@ -83,6 +83,7 @@ export function PresentationEditorPage() {
       const status = query.state.data?.status
       if (
         status === "generating_outline" ||
+        status === "outline_ready" ||
         status === "generating_slides" ||
         status === "exporting"
       )
@@ -120,6 +121,7 @@ export function PresentationEditorPage() {
   // ── SSE for generation tracking ──
   const isGenerating =
     presentation?.status === "generating_outline" ||
+    presentation?.status === "outline_ready" ||
     presentation?.status === "generating_slides" ||
     presentation?.status === "exporting"
 
@@ -174,27 +176,7 @@ export function PresentationEditorPage() {
       queryClient.invalidateQueries({ queryKey: ["presentation", id] }),
   })
 
-  const outlineSaveMutation = useMutation({
-    mutationFn: (outline: OutlineItem[]) =>
-      presentationsApi.updateOutline(id!, outline),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["presentation", id] })
-      toast({ title: "Plan enregistré" })
-    },
-  })
-
-  const generateSlidesMutation = useMutation({
-    mutationFn: () => presentationsApi.generateSlides(id!, {}),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["presentation", id] })
-    },
-    onError: () =>
-      toast({
-        title: "Erreur",
-        description: "Impossible de lancer la génération des slides.",
-        variant: "destructive",
-      }),
-  })
+  // outlineSaveMutation and generateSlidesMutation removed — auto-chain handles both
 
   const slideUpdateMutation = useMutation({
     mutationFn: ({ slideId, update }: { slideId: string; update: SlideUpdate }) =>
@@ -204,11 +186,11 @@ export function PresentationEditorPage() {
   })
 
   const regenerateSlideMutation = useMutation({
-    mutationFn: async (slideId: string) => {
-      console.log("[Regenerate] Starting for slide:", slideId, "presentation:", id)
-      return presentationsApi.regenerateSlide(id!, slideId, {})
+    mutationFn: async ({ slideId, instruction }: { slideId: string; instruction?: string }) => {
+      console.log("[Regenerate] Starting for slide:", slideId, "presentation:", id, instruction ? `instruction: ${instruction}` : "")
+      return presentationsApi.regenerateSlide(id!, slideId, { instruction: instruction || "" })
     },
-    onMutate: (slideId) => setRegeneratingSlideId(slideId),
+    onMutate: ({ slideId }) => setRegeneratingSlideId(slideId),
     onSuccess: (data) => {
       console.log("[Regenerate] Success:", data)
       setRegeneratingSlideId(null)
@@ -357,26 +339,11 @@ export function PresentationEditorPage() {
     switch (pres.status) {
       case "draft":
       case "generating_outline":
-        return (
-          <div className="relative flex-1">
-            <AnchorSpinner active className="relative h-full" />
-          </div>
-        )
-
       case "outline_ready":
-        return (
-          <OutlineEditor
-            presentation={pres}
-            onSaveOutline={(outline) => outlineSaveMutation.mutate(outline)}
-            onGenerateSlides={() => generateSlidesMutation.mutate()}
-            isSaving={outlineSaveMutation.isPending}
-          />
-        )
-
       case "generating_slides":
         return (
           <div className="relative flex-1">
-            <AnchorSpinner active className="relative h-full" />
+            <AnchorSpinner active className="relative h-full" label={null} />
             {/* Progress overlay below the spinner */}
             <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 pb-16">
               {slideGenProgress ? (
@@ -391,7 +358,9 @@ export function PresentationEditorPage() {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground animate-pulse">
-                  Préparation de la génération...
+                  {pres.status === "generating_slides"
+                    ? "Génération des slides..."
+                    : "Préparation du plan..."}
                 </p>
               )}
             </div>
@@ -420,10 +389,6 @@ export function PresentationEditorPage() {
                   slide={selectedSlide}
                   themeData={pres.theme?.theme_data ?? null}
                   onSlideUpdate={handleSlideUpdate}
-                  onRegenerateSlide={(slideId) =>
-                    regenerateSlideMutation.mutate(slideId)
-                  }
-                  isRegenerating={regeneratingSlideId === selectedSlide.id}
                 />
               ) : (
                 <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -442,6 +407,14 @@ export function PresentationEditorPage() {
                 presentationId={pres.id}
                 currentThemeId={pres.theme_id}
                 onClose={() => setShowThemePanel(false)}
+              />
+            )}
+            {selectedSlide && !showAddPanel && !showThemePanel && (
+              <InstructionBar
+                onSubmit={(instruction) =>
+                  regenerateSlideMutation.mutate({ slideId: selectedSlide.id, instruction })
+                }
+                isProcessing={regeneratingSlideId === selectedSlide.id}
               />
             )}
           </div>

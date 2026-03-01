@@ -86,6 +86,27 @@ async def generate_presentation_outline(
         )
 
         logger.info(f"Outline generated for presentation {presentation_id}: {len(outline)} items")
+
+        # Auto-chain: immediately generate slides (skip user review)
+        if request.auto_generate_slides:
+            logger.info(f"Auto-chaining slide generation for {presentation_id}")
+            slides_request = GenerateSlidesRequest(
+                collection_ids=request.collection_ids or [],
+            )
+
+            async def slide_callback(slide, index, total):
+                await publisher.slide_generated(pres_uuid, slide.id, index, total)
+
+            slides = await presentation_service.generate_slides(
+                db, tenant_uuid, pres_uuid, slides_request,
+                on_slide_progress=slide_callback,
+            )
+            await db.commit()
+            await publisher.generation_complete(pres_uuid)
+
+            logger.info(f"Slides auto-generated for {presentation_id}: {len(slides)} slides")
+            return {"status": "ok", "outline_count": len(outline), "slide_count": len(slides)}
+
         return {"status": "ok", "outline_count": len(outline)}
 
     except Exception as e:

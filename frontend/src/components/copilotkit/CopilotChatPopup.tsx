@@ -16,15 +16,17 @@ export function CopilotChatPopup() {
   return (
     <CopilotPopup
       instructions={
-        "Tu es l'assistant IA d'Ancre. Tu peux afficher des KPI et statistiques " +
-        "sous forme de cartes visuelles en utilisant l'action render_kpi_card. " +
-        "Quand l'utilisateur demande des métriques, des stats ou un dashboard, " +
-        "utilise render_kpi_card pour afficher les données de manière structurée. " +
-        "Réponds en français."
+        "Tu es l'assistant IA d'Ancre. Tu peux :\n" +
+        "1. Créer des présentations professionnelles avec l'action create_presentation. " +
+        "Quand l'utilisateur décrit un diaporama, un pitch, des slides ou une présentation, " +
+        "utilise create_presentation en extrayant TOUT le contenu décrit (sujets, sections, consignes de design, couleurs). " +
+        "Ne te contente PAS de répondre en texte — crée la présentation.\n" +
+        "2. Afficher des KPI et statistiques avec render_kpi_card.\n" +
+        "Réponds en français. Sois concis."
       }
       labels={{
         title: "Ancre AI",
-        initial: "Bonjour ! Je peux afficher des KPI et statistiques. Essayez : « Montre-moi les KPI du mois »",
+        initial: "Bonjour ! Je peux creer des presentations et afficher des KPI. Decrivez votre presentation et je la cree pour vous.",
       }}
       defaultOpen={false}
     />

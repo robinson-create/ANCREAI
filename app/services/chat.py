@@ -181,6 +181,46 @@ BLOCK_TOOL_EMAIL_SUGGESTION = {
     },
 }
 
+BLOCK_TOOL_SUGGEST_PRESENTATION = {
+    "type": "function",
+    "function": {
+        "name": "suggestPresentation",
+        "strict": True,
+        "description": (
+            "Propose de créer une présentation (slides/diaporama/pitch). "
+            "Utilise cet outil quand l'utilisateur décrit le contenu d'une présentation, "
+            "demande de créer des slides, un pitch deck, un diaporama, ou décrit "
+            "des sections/slides avec leur contenu. "
+            "Extrais le titre et le prompt COMPLET de la demande. "
+            "Ne génère PAS la présentation toi-même en texte."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Titre court de la présentation",
+                },
+                "prompt": {
+                    "type": "string",
+                    "description": "Le prompt COMPLET pour générer la présentation. Reprends TOUT le contenu décrit par l'utilisateur : sujets, sections, points clés, consignes de style, couleurs, etc. Ne résume pas.",
+                },
+                "slide_count": {
+                    "type": "number",
+                    "description": "Nombre de slides souhaité (par défaut 8)",
+                },
+                "style": {
+                    "type": "string",
+                    "enum": ["professional", "creative", "minimal", "corporate"],
+                    "description": "Style de la présentation",
+                },
+            },
+            "required": ["title", "prompt", "slide_count", "style"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 BLOCK_TOOL_WRITE_TO_DOCUMENT = {
     "type": "function",
     "function": {
@@ -220,7 +260,7 @@ BLOCK_TOOL_WRITE_TO_DOCUMENT = {
     },
 }
 
-BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT, BLOCK_TOOL_EMAIL_SUGGESTION, BLOCK_TOOL_WRITE_TO_DOCUMENT]
+BLOCK_TOOLS = [BLOCK_TOOL_KPI, BLOCK_TOOL_TABLE, BLOCK_TOOL_STEPS, BLOCK_TOOL_CALLOUT, BLOCK_TOOL_EMAIL_SUGGESTION, BLOCK_TOOL_SUGGEST_PRESENTATION, BLOCK_TOOL_WRITE_TO_DOCUMENT]
 
 # Map tool function name → block type for the frontend
 _TOOL_NAME_TO_BLOCK_TYPE = {
@@ -229,6 +269,7 @@ _TOOL_NAME_TO_BLOCK_TYPE = {
     "renderSteps": "steps",
     "renderCallout": "callout",
     "suggestEmail": "email_suggestion",
+    "suggestPresentation": "presentation_suggestion",
 }
 
 # Map calendar tool names → block types for the frontend
@@ -241,12 +282,13 @@ _CALENDAR_TOOL_TO_BLOCK_TYPE = {
 
 BLOCK_INSTRUCTIONS = """
 INSTRUCTIONS POUR LES BLOCS VISUELS :
-Tu disposes de 6 outils pour afficher des blocs structurés dans le chat :
+Tu disposes de 7 outils pour afficher des blocs structurés dans le chat :
 - `renderKpiCards` → quand ta réponse contient des KPIs, métriques ou chiffres comparatifs
 - `renderSteps` → quand ta réponse décrit un plan, une procédure ou des étapes séquentielles
 - `renderTable` → quand ta réponse compare des options ou présente des données tabulaires
 - `renderCallout` → quand tu dois alerter, avertir ou mettre en avant un point important
 - `suggestEmail` → quand l'utilisateur demande d'écrire, rédiger ou envoyer un email. Appelle DIRECTEMENT l'outil avec le contenu complet de l'email dans `body_draft`. Ne reproduis PAS le texte de l'email dans le chat ; dis simplement une phrase courte comme "Je rédige votre email..." avant d'appeler l'outil. L'email sera ouvert dans l'éditeur dédié.
+- `suggestPresentation` → quand l'utilisateur décrit une présentation, un diaporama, un pitch deck, des slides, ou le contenu de slides. Appelle cet outil avec le titre et le prompt COMPLET (reprends TOUT le contenu décrit). Ne génère PAS les slides en texte toi-même. Dis simplement "Je prépare votre présentation..." puis appelle l'outil. L'utilisateur cliquera sur le bouton pour ouvrir l'éditeur.
 - `writeToDocument` → quand l'utilisateur est dans l'éditeur de documents et demande de rédiger/ajouter du contenu. Appelle DIRECTEMENT l'outil avec le contenu en markdown dans `markdown_content`. Ne reproduis PAS le contenu dans le chat ; dis simplement une phrase courte puis appelle l'outil. Le contenu sera inséré dans l'éditeur.
 Garde le texte concis et complémentaire ; mets la structure dans les blocs.
 Ne pas inventer de données manquantes ; si une valeur n'est pas disponible, indique "N/A".
