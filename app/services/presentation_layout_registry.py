@@ -203,7 +203,7 @@ LAYOUT_REGISTRY: list[dict[str, Any]] = [
     {
         "id": "metrics-slide",
         "name": "Metrics",
-        "description": "A slide for showcasing key business metrics with large numbers and descriptive text boxes. Only use with actual metrics and numbers.",
+        "description": "A slide for showcasing key business metrics with large numbers. Supports 2-8 metrics — auto-compacts to fit. Use when many numbers or KPIs must appear on one slide.",
         "json_schema": {
             "type": "object",
             "properties": {
@@ -211,15 +211,15 @@ LAYOUT_REGISTRY: list[dict[str, Any]] = [
                 "metrics": {
                     "type": "array",
                     "minItems": 2,
-                    "maxItems": 3,
+                    "maxItems": 8,
                     "items": {
                         "type": "object",
                         "properties": {
                             "label": {"type": "string", "minLength": 2, "maxLength": 50, "description": "Metric label/title"},
-                            "value": {"type": "string", "minLength": 1, "maxLength": 10, "description": "Metric value (e.g., 150+, 95%, $2M). Keep simple."},
-                            "description": {"type": "string", "minLength": 10, "maxLength": 150, "description": "Detailed description of the metric"},
+                            "value": {"type": "string", "minLength": 1, "maxLength": 10, "description": "Metric value (e.g., 150+, 95%, $2M). Keep very short."},
+                            "description": {"type": "string", "maxLength": 80, "description": "Optional short description"},
                         },
-                        "required": ["label", "value", "description"],
+                        "required": ["label", "value"],
                     },
                 },
             },
@@ -230,7 +230,7 @@ LAYOUT_REGISTRY: list[dict[str, Any]] = [
     {
         "id": "metrics-with-image-slide",
         "name": "Metrics with Image",
-        "description": "A slide with supporting image on the left and title, description, and metrics grid on the right. Alternative to MetricsSlide.",
+        "description": "A slide with supporting image on the left and title, description, and metrics grid on the right. Supports 2-6 metrics.",
         "json_schema": {
             "type": "object",
             "properties": {
@@ -240,7 +240,7 @@ LAYOUT_REGISTRY: list[dict[str, Any]] = [
                 "metrics": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 3,
+                    "maxItems": 6,
                     "items": {
                         "type": "object",
                         "properties": {

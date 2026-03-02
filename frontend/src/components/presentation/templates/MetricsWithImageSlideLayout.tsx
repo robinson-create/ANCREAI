@@ -21,6 +21,7 @@ interface MetricsWithImageSlideData {
 export default function MetricsWithImageSlideLayout({ data }: { data: Record<string, any> }) {
   const d = data as MetricsWithImageSlideData;
   const metrics = d.metrics ?? [];
+  const compact = metrics.length > 4;
 
   return (
     <div
@@ -47,7 +48,7 @@ export default function MetricsWithImageSlideLayout({ data }: { data: Record<str
           value={d.title}
           fieldPath="title"
           as="h2"
-          className="text-3xl font-bold leading-tight tracking-tight mb-2"
+          className={`font-bold leading-tight tracking-tight ${compact ? "text-2xl mb-1" : "text-3xl mb-2"}`}
           style={{
             color: "var(--primary-color, #323F50)",
             fontFamily: "var(--heading-font-family, 'Plus Jakarta Sans'), system-ui, sans-serif",
@@ -59,17 +60,17 @@ export default function MetricsWithImageSlideLayout({ data }: { data: Record<str
           value={d.description}
           fieldPath="description"
           as="p"
-          className="text-sm leading-relaxed mb-6 opacity-75"
+          className={`leading-relaxed opacity-75 ${compact ? "text-xs mb-3" : "text-sm mb-6"}`}
           style={{ color: "var(--background-text, #323F50)" }}
           placeholder="Description"
         />
 
         {metrics.length > 0 && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className={`grid ${compact ? "grid-cols-3 gap-2" : "grid-cols-2 gap-3"}`}>
             {metrics.map((metric, i) => (
               <div
                 key={i}
-                className="p-3 rounded-lg"
+                className={`rounded-lg ${compact ? "p-2" : "p-3"}`}
                 style={{
                   backgroundColor: "var(--card-color, #F8F7F6)",
                   border: "1px solid var(--stroke, #E5E7EB)",
@@ -79,14 +80,14 @@ export default function MetricsWithImageSlideLayout({ data }: { data: Record<str
                   value={metric.value}
                   fieldPath={`metrics.${i}.value`}
                   as="p"
-                  className="text-xl font-bold leading-none mb-1"
+                  className={`font-bold leading-none mb-1 ${compact ? "text-base" : "text-xl"}`}
                   style={{ color: "var(--primary-color, #323F50)" }}
                 />
                 <EditableText
                   value={metric.label}
                   fieldPath={`metrics.${i}.label`}
                   as="p"
-                  className="text-xs leading-snug opacity-70"
+                  className={`leading-snug opacity-70 ${compact ? "text-[10px]" : "text-xs"}`}
                   style={{ color: "var(--background-text, #323F50)" }}
                 />
               </div>
