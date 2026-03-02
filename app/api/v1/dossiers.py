@@ -201,7 +201,7 @@ async def delete_dossier(
     _ensure_owner(dossier, user.id)
 
     # Delete personal vectors from Qdrant
-    await vector_store.delete_by_dossier(dossier_id)
+    await vector_store.delete_by_dossier(dossier_id, user.tenant_id)
 
     await db.delete(dossier)
     await db.commit()
@@ -343,7 +343,7 @@ async def delete_dossier_document(
     await storage_service.delete_file(doc.s3_key)
 
     # Delete personal vectors from Qdrant
-    await vector_store.delete_by_dossier_document(doc.id)
+    await vector_store.delete_by_dossier_document(doc.id, user.tenant_id)
 
     await db.delete(doc)
     await db.commit()
@@ -432,6 +432,11 @@ async def _run_dossier_llm_producer(
     user_message_id: UUID,
 ):
     """Streaming LLM producer for dossier chat (personal scope)."""
+    logger.info("dossier_chat_started", extra={
+        "tenant_id": str(tenant_id),
+        "dossier_id": str(dossier_id),
+        "conversation_ref_id": str(conversation_ref_id),
+    })
     full_response = ""
     citations_for_db: list = []
     blocks_for_db: list = []
@@ -472,7 +477,11 @@ async def _run_dossier_llm_producer(
                     await queue.put((event.event, event.data))
 
     except Exception as e:
-        logger.error("Dossier LLM producer error: %s", e)
+        logger.error("dossier_chat_error", extra={
+            "tenant_id": str(tenant_id),
+            "dossier_id": str(dossier_id),
+            "error": str(e),
+        })
         await queue.put(("error", str(e)))
 
     finally:
@@ -497,8 +506,19 @@ async def _run_dossier_llm_producer(
                         save_db, tenant_id, tokens_input, tokens_output
                     )
                     await save_db.commit()
+                    logger.info("dossier_chat_completed", extra={
+                        "tenant_id": str(tenant_id),
+                        "dossier_id": str(dossier_id),
+                        "tokens_input": tokens_input,
+                        "tokens_output": tokens_output,
+                    })
             except Exception as save_err:
-                logger.error("Failed to save dossier message: %s", save_err)
+                logger.error("dossier_chat_save_error", extra={
+                    "tenant_id": str(tenant_id),
+                    "dossier_id": str(dossier_id),
+                    "error": str(save_err),
+                })
+                await queue.put(("error", "Failed to save message"))
 
         await queue.put(_STREAM_END)
 

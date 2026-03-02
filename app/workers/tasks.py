@@ -244,7 +244,13 @@ async def process_dossier_document(ctx: dict, document_id: str) -> dict:
         doc.status = DossierDocumentStatus.PROCESSING
         await db.commit()
 
-        logger.info(f"Processing dossier document {document_id}: {doc.filename}")
+        logger.info("dossier_document_processing_started", extra={
+            "document_id": str(doc.id),
+            "dossier_id": str(doc.dossier_id),
+            "user_id": str(doc.user_id),
+            "tenant_id": str(doc.tenant_id),
+            "filename": doc.filename,
+        })
 
         # 1. Download from S3
         content = await storage_service.download_file(doc.s3_key)
@@ -260,6 +266,11 @@ async def process_dossier_document(ctx: dict, document_id: str) -> dict:
         doc.chunk_count = len(chunks)
 
         if not chunks:
+            logger.warning("dossier_document_no_chunks", extra={
+                "document_id": str(doc.id),
+                "dossier_id": str(doc.dossier_id),
+                "tenant_id": str(doc.tenant_id),
+            })
             doc.status = DossierDocumentStatus.READY
             doc.processed_at = datetime.now(timezone.utc)
             await db.commit()
@@ -328,11 +339,14 @@ async def process_dossier_document(ctx: dict, document_id: str) -> dict:
         doc.error_message = None
         await db.commit()
 
-        logger.info(
-            f"Dossier document {document_id} processed: "
-            f"{doc.page_count} pages, {len(chunks)} chunks, "
-            f"{tokens_used} tokens"
-        )
+        logger.info("dossier_document_indexed", extra={
+            "document_id": str(doc.id),
+            "dossier_id": str(doc.dossier_id),
+            "tenant_id": str(doc.tenant_id),
+            "chunks_count": len(chunks),
+            "tokens_used": tokens_used,
+            "pages": doc.page_count,
+        })
         return {
             "document_id": document_id,
             "pages": doc.page_count,

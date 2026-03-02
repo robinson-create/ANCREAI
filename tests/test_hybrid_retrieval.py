@@ -279,6 +279,7 @@ class TestKeywordSearchQuery:
     @pytest.mark.asyncio
     async def test_calls_db_execute(self):
         from app.core.retrieval.keyword_retriever import keyword_search
+        from uuid import UUID
 
         mock_result = MagicMock()
         mock_result.fetchall.return_value = []
@@ -289,7 +290,7 @@ class TestKeywordSearchQuery:
         result = await keyword_search(
             db=mock_db,
             tenant_id="00000000-0000-0000-0000-000000000001",
-            collection_ids=None,
+            collection_ids=[UUID("00000000-0000-0000-0000-000000000002")],
             query="test search",
             topk=10,
             fts_config="simple",

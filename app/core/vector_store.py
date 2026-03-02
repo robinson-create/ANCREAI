@@ -1,5 +1,6 @@
 """Qdrant vector store client."""
 
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -16,6 +17,7 @@ from qdrant_client.models import (
 
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -31,7 +33,7 @@ class VectorStore:
         """Create collection if it doesn't exist."""
         collections = await self.client.get_collections()
         collection_names = [c.name for c in collections.collections]
-        
+
         if self.collection_name not in collection_names:
             await self.client.create_collection(
                 collection_name=self.collection_name,
@@ -40,7 +42,7 @@ class VectorStore:
                     distance=Distance.COSINE,
                 ),
             )
-            
+
             # Create payload indices for filtering
             for field in (
                 "tenant_id", "collection_id", "document_id",
@@ -103,8 +105,13 @@ class VectorStore:
                 points=points,
             )
 
-    async def delete_by_document(self, document_id: UUID) -> None:
-        """Delete all chunks for a document."""
+    async def delete_by_document(self, document_id: UUID, tenant_id: UUID) -> None:
+        """Delete all chunks for a document, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_document",
+            "document_id": str(document_id),
+            "tenant_id": str(tenant_id),
+        })
         try:
             await self.client.delete(
                 collection_name=self.collection_name,
@@ -113,7 +120,11 @@ class VectorStore:
                         FieldCondition(
                             key="document_id",
                             match=MatchValue(value=str(document_id)),
-                        )
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
                     ]
                 ),
             )
@@ -122,8 +133,13 @@ class VectorStore:
                 return  # Collection doesn't exist yet — nothing to delete
             raise
 
-    async def delete_by_collection(self, collection_id: UUID) -> None:
-        """Delete all chunks for a collection."""
+    async def delete_by_collection(self, collection_id: UUID, tenant_id: UUID) -> None:
+        """Delete all chunks for a collection, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_collection",
+            "collection_id": str(collection_id),
+            "tenant_id": str(tenant_id),
+        })
         try:
             await self.client.delete(
                 collection_name=self.collection_name,
@@ -132,7 +148,11 @@ class VectorStore:
                         FieldCondition(
                             key="collection_id",
                             match=MatchValue(value=str(collection_id)),
-                        )
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
                     ]
                 ),
             )
@@ -189,8 +209,13 @@ class VectorStore:
                     )
                 )
 
-        if scope_should:
-            must_conditions.append(Filter(should=scope_should))
+        if not scope_should:
+            logger.warning("vector_search_no_scope", extra={
+                "tenant_id": str(tenant_id),
+            })
+            return []
+
+        must_conditions.append(Filter(should=scope_should))
 
         results = await self.client.query_points(
             collection_name=self.collection_name,
@@ -209,8 +234,13 @@ class VectorStore:
             for point in results.points
         ]
 
-    async def delete_by_dossier_document(self, dossier_document_id: UUID) -> None:
-        """Delete all personal chunks for a dossier document."""
+    async def delete_by_dossier_document(self, dossier_document_id: UUID, tenant_id: UUID) -> None:
+        """Delete all personal chunks for a dossier document, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_dossier_document",
+            "dossier_document_id": str(dossier_document_id),
+            "tenant_id": str(tenant_id),
+        })
         try:
             await self.client.delete(
                 collection_name=self.collection_name,
@@ -219,7 +249,11 @@ class VectorStore:
                         FieldCondition(
                             key="dossier_document_id",
                             match=MatchValue(value=str(dossier_document_id)),
-                        )
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
                     ]
                 ),
             )
@@ -228,8 +262,13 @@ class VectorStore:
                 return
             raise
 
-    async def delete_by_dossier(self, dossier_id: UUID) -> None:
-        """Delete all personal chunks for an entire dossier."""
+    async def delete_by_dossier(self, dossier_id: UUID, tenant_id: UUID) -> None:
+        """Delete all personal chunks for an entire dossier, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_dossier",
+            "dossier_id": str(dossier_id),
+            "tenant_id": str(tenant_id),
+        })
         try:
             await self.client.delete(
                 collection_name=self.collection_name,
@@ -238,7 +277,11 @@ class VectorStore:
                         FieldCondition(
                             key="dossier_id",
                             match=MatchValue(value=str(dossier_id)),
-                        )
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
                     ]
                 ),
             )

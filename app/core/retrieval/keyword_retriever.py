@@ -77,8 +77,10 @@ async def keyword_search(
         params["dossier_ids"] = [str(did) for did in dossier_ids]
 
     if not scope_clauses:
-        # No scope filter — search all tenant chunks (backward compat)
-        scope_filter = ""
+        logger.warning("keyword_search_no_scope", extra={
+            "tenant_id": str(tenant_id),
+        })
+        return []
     else:
         scope_filter = "AND (" + " OR ".join(scope_clauses) + ")"
 

@@ -289,17 +289,13 @@ async def delete_upload(
     await db.flush()
 
     # 2. Delete from vector store
-    await vector_store.delete_by_document(document_id)
+    await vector_store.delete_by_document(document_id, user.tenant_id)
 
     # 3. Delete from S3
     await storage_service.delete_file(doc.s3_key)
 
     # 4. Reduce storage usage
-    col_result = await db.execute(
-        select(Collection).where(Collection.id == doc.collection_id)
-    )
-    col = col_result.scalar_one()
-    await usage_service.reduce_storage(db, col.tenant_id, doc.file_size)
+    await usage_service.reduce_storage(db, user.tenant_id, doc.file_size)
 
     # 5. Delete from DB (cascades to chunks + pages)
     await db.delete(doc)
@@ -318,7 +314,7 @@ async def reprocess_upload(
     doc = await _get_upload_document(document_id, user.tenant_id, db)
 
     # Delete existing chunks from vector store
-    await vector_store.delete_by_document(document_id)
+    await vector_store.delete_by_document(document_id, user.tenant_id)
 
     # Reset status
     doc.status = DocumentStatus.PENDING.value

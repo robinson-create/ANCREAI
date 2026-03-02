@@ -181,7 +181,7 @@ async def delete_collection(
         )
     
     # Delete all vectors for this collection
-    await vector_store.delete_by_collection(collection_id)
+    await vector_store.delete_by_collection(collection_id, user.tenant_id)
     
     # Delete from DB (cascades to documents and chunks)
     await db.delete(collection)

@@ -212,18 +212,13 @@ async def delete_document(
         )
     
     # Delete from vector store
-    await vector_store.delete_by_document(document_id)
-    
+    await vector_store.delete_by_document(document_id, user.tenant_id)
+
     # Delete from S3
     await storage_service.delete_file(document.s3_key)
-    
+
     # Reduce storage usage
-    # Get tenant_id from collection
-    from sqlalchemy import select as sql_select
-    from app.models.collection import Collection as Coll
-    coll_result = await db.execute(sql_select(Coll).where(Coll.id == document.collection_id))
-    coll = coll_result.scalar_one()
-    await usage_service.reduce_storage(db, coll.tenant_id, document.file_size)
+    await usage_service.reduce_storage(db, user.tenant_id, document.file_size)
     
     # Delete from DB (cascades to chunks)
     await db.delete(document)
@@ -255,8 +250,8 @@ async def reprocess_document(
         )
     
     # Delete existing chunks from vector store
-    await vector_store.delete_by_document(document_id)
-    
+    await vector_store.delete_by_document(document_id, user.tenant_id)
+
     # Reset status
     document.status = DocumentStatus.PENDING.value
     document.error_message = None
