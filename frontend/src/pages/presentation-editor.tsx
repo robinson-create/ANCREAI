@@ -6,7 +6,6 @@ import {
   Loader2,
   AlertCircle,
   Download,
-  Plus,
   Palette,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,8 +26,7 @@ import { AnchorSpinner } from "@/components/documents/AnchorSpinner"
 // OutlineEditor removed — auto-chain outline → slides, no intermediate review
 import { SlidePanel } from "@/components/presentation/SlidePanel"
 import { SlideEditor } from "@/components/presentation/SlideEditor"
-import { InstructionBar } from "@/components/presentation/InstructionBar"
-import { AddElementsPanel } from "@/components/presentation/AddElementsPanel"
+// InstructionBar removed per user request
 import { ThemePanel } from "@/components/presentation/ThemePanel"
 import type {
   PresentationFull,
@@ -103,9 +101,8 @@ export function PresentationEditorPage() {
   const [title, setTitle] = useState("")
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null)
   const [exportProgress, setExportProgress] = useState<number | undefined>()
-  const [regeneratingSlideId, setRegeneratingSlideId] = useState<string | null>(null)
+  // regeneratingSlideId removed — InstructionBar removed
   const [slideGenProgress, setSlideGenProgress] = useState<{ current: number; total: number } | null>(null)
-  const [showAddPanel, setShowAddPanel] = useState(false)
   const [showThemePanel, setShowThemePanel] = useState(false)
   const titleInitialized = useRef(false)
 
@@ -144,6 +141,7 @@ export function PresentationEditorPage() {
 
   const handleSSEEvent = useCallback(
     (event: PresentationSSEEvent) => {
+      console.log('[SSE]', event.type, event.payload)
       switch (event.type) {
         case "outline_ready":
         case "generation_complete":
@@ -211,30 +209,7 @@ export function PresentationEditorPage() {
       queryClient.invalidateQueries({ queryKey: ["presentation", id] }),
   })
 
-  const regenerateSlideMutation = useMutation({
-    mutationFn: async ({ slideId, instruction }: { slideId: string; instruction?: string }) => {
-      console.log("[Regenerate] Starting for slide:", slideId, "presentation:", id, instruction ? `instruction: ${instruction}` : "")
-      return presentationsApi.regenerateSlide(id!, slideId, { instruction: instruction || "" })
-    },
-    onMutate: ({ slideId }) => setRegeneratingSlideId(slideId),
-    onSuccess: (data) => {
-      console.log("[Regenerate] Success:", data)
-      setRegeneratingSlideId(null)
-      queryClient.invalidateQueries({ queryKey: ["presentation", id] })
-      toast({ title: "Slide régénéré" })
-    },
-    onError: (error) => {
-      console.error("[Regenerate] Error:", error)
-      setRegeneratingSlideId(null)
-      const msg =
-        error instanceof Error ? error.message : "Impossible de régénérer le slide."
-      toast({
-        title: "Erreur de régénération",
-        description: msg,
-        variant: "destructive",
-      })
-    },
-  })
+  // regenerateSlideMutation removed — InstructionBar removed
 
   const addSlideMutation = useMutation({
     mutationFn: () => presentationsApi.addSlide(id!),
@@ -314,21 +289,12 @@ export function PresentationEditorPage() {
 
   const selectedSlide = useMemo(() => {
     if (!presentation || !selectedSlideId) return null
-    return presentation.slides.find((s) => s.id === selectedSlideId) || null
+    const slide = presentation.slides.find((s) => s.id === selectedSlideId) || null
+    if (slide) {
+      console.log('[Slide] Selected:', slide.id, 'layout:', slide.layout_type, 'content keys:', Object.keys(slide.content_json || {}))
+    }
+    return slide
   }, [presentation, selectedSlideId])
-
-  const handleInsertElements = useCallback(
-    (nodes: import("@/types").SlideNode[]) => {
-      if (!selectedSlide || !presentation) return
-      const existingNodes = (
-        selectedSlide.content_json?.content_json ||
-        (Array.isArray(selectedSlide.content_json) ? selectedSlide.content_json : [])
-      ) as import("@/types").SlideNode[]
-      const newContentJson = { ...selectedSlide.content_json, content_json: [...existingNodes, ...nodes] }
-      slideUpdateMutation.mutate({ slideId: selectedSlide.id, update: { content_json: newContentJson } })
-    },
-    [selectedSlide, presentation, slideUpdateMutation],
-  )
 
   // ── Loading / Error ──
 
@@ -465,12 +431,6 @@ export function PresentationEditorPage() {
                 </div>
               )}
             </div>
-            {showAddPanel && (
-              <AddElementsPanel
-                onInsertElements={handleInsertElements}
-                onClose={() => setShowAddPanel(false)}
-              />
-            )}
             {showThemePanel && (
               <ThemePanel
                 presentationId={pres.id}
@@ -478,15 +438,7 @@ export function PresentationEditorPage() {
                 onClose={() => setShowThemePanel(false)}
               />
             )}
-            {selectedSlide && !showAddPanel && !showThemePanel && (
-              <InstructionBar
-                onSubmit={(instruction) =>
-                  regenerateSlideMutation.mutate({ slideId: selectedSlide.id, instruction })
-                }
-                isProcessing={regeneratingSlideId === selectedSlide.id}
-                prompt={pres.prompt}
-              />
-            )}
+            {/* InstructionBar removed */}
           </div>
         )
 
@@ -538,19 +490,10 @@ export function PresentationEditorPage() {
         {presentation.status === "ready" && (
           <>
             <Button
-              variant={showAddPanel ? "default" : "outline"}
-              size="sm"
-              className="gap-1.5 shrink-0"
-              onClick={() => { setShowAddPanel(!showAddPanel); setShowThemePanel(false) }}
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Éléments
-            </Button>
-            <Button
               variant={showThemePanel ? "default" : "outline"}
               size="sm"
               className="gap-1.5 shrink-0"
-              onClick={() => { setShowThemePanel(!showThemePanel); setShowAddPanel(false) }}
+              onClick={() => setShowThemePanel(!showThemePanel)}
             >
               <Palette className="h-3.5 w-3.5" />
               Thème

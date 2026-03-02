@@ -124,7 +124,7 @@ class PresentationSlide(Base):
         nullable=False,
     )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    layout_type: Mapped[str] = mapped_column(String(20), default="vertical")
+    layout_type: Mapped[str] = mapped_column(String(50), default="basic-info-slide")
     content_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     root_image: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     bg_color: Mapped[str | None] = mapped_column(String(20), nullable=True)

@@ -70,6 +70,8 @@ async def generate_presentation_slides_direct(
     Returns:
         Dict with status and slide count
     """
+    logger.info("JOB START: generate_slides_direct pres=%s tenant=%s", presentation_id, tenant_id)
+
     pres_uuid = UUID(presentation_id)
     tenant_uuid = UUID(tenant_id)
     db = await _get_db()
@@ -78,6 +80,10 @@ async def generate_presentation_slides_direct(
 
     try:
         request = GenerateOutlineRequest(**request_data)
+        logger.info(
+            "JOB: prompt=%.80s..., slide_count=%d, lang=%s",
+            request.prompt, request.slide_count, request.language,
+        )
 
         # Save prompt + settings on the presentation
         result = await db.execute(
@@ -102,6 +108,7 @@ async def generate_presentation_slides_direct(
         )
 
         async def slide_callback(slide, index, total):
+            logger.info("JOB: slide_callback slide=%s (index=%d/%d)", slide.id, index, total)
             await publisher.slide_generated(pres_uuid, slide.id, index, total)
 
         slides = await presentation_service.generate_slides(
@@ -112,7 +119,7 @@ async def generate_presentation_slides_direct(
 
         await publisher.generation_complete(pres_uuid)
 
-        logger.info(f"Slides generated for presentation {presentation_id}: {len(slides)} slides")
+        logger.info("JOB DONE: pres=%s, %d slides generated", presentation_id, len(slides))
         return {"status": "ok", "slide_count": len(slides)}
 
     except Exception as e:

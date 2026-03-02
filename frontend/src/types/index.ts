@@ -385,43 +385,6 @@ export interface PresentationCreate {
 
 // ── Presentation Full Types ──
 
-export interface TextLeaf {
-  text: string
-  bold?: boolean
-  italic?: boolean
-  underline?: boolean
-  color?: string
-  font_size?: string
-  font_family?: string
-}
-
-export interface SlideNode {
-  type: string // h1|h2|h3|h4|h5|h6|p|img|bullet_group|bullet_item|box_group|box_item|...
-  children: (SlideNode | TextLeaf)[]
-  url?: string
-  asset_id?: string
-  data?: Record<string, unknown>[]
-  align?: string
-  // Variant for styled elements (boxes, bullets, timeline, pyramid, quote, stats, gallery)
-  variant?: string
-  // Value for stats items
-  value?: string
-  // Image/icon query — semantic search term (free text from LLM)
-  query?: string
-  // Icon fields — resolved by backend, rendered by frontend
-  icon_name?: string // Exact Lucide name: "Rocket", "Shield", "TrendingUp"
-  icon_role?: "inline" | "card" | "section" | "hero" // Sizing hint
-  // Color for badge/pill
-  color?: string
-}
-
-export interface RootImage {
-  asset_id?: string
-  query?: string
-  url?: string
-  layout_type?: string
-}
-
 export interface AssetReadWithUrl {
   id: string
   kind: string
@@ -439,20 +402,11 @@ export interface AssetUrlResponse {
   url: string
 }
 
-export interface SlideSizing {
-  font_scale: "S" | "M" | "L"
-  block_spacing: "tight" | "normal" | "loose"
-  card_width: "S" | "M" | "L"
-}
-
 export interface Slide {
   id: string
   position: number
-  layout_type: string
-  content_json: Record<string, unknown>
-  root_image?: RootImage | null
-  bg_color?: string | null
-  sizing?: SlideSizing | null
+  layout_type: string       // layout_id: "general-intro-slide", "metrics-slide", etc.
+  content_json: Record<string, unknown>  // JSON matching the template schema
   speaker_notes?: string | null
   created_at: string
   updated_at: string
@@ -504,8 +458,6 @@ export interface PresentationUpdate {
 export interface SlideUpdate {
   content_json?: Record<string, unknown>
   layout_type?: string
-  root_image?: Record<string, unknown> | null
-  bg_color?: string | null
   speaker_notes?: string | null
 }
 

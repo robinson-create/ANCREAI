@@ -250,8 +250,6 @@ class SlideUpdate(BaseModel):
 
     content_json: list | dict | None = None
     layout_type: str | None = None
-    root_image: dict | None = None
-    bg_color: str | None = None
     speaker_notes: str | None = None
 
 

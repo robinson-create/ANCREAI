@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     # OpenAI
     openai_api_key: str = ""
 
+    # Image generation (requires openai_api_key)
+    image_provider: str = ""  # "openai" to enable, "" to disable
+    image_model: str = "dall-e-3"
+    image_size: str = "1792x1024"  # landscape for slides
+    image_quality: str = "standard"  # "standard" or "hd"
+
     # Embeddings
     embedding_provider: str = "mistral"  # openai | mistral
     embedding_model: str = "mistral-embed"
@@ -43,8 +49,6 @@ class Settings(BaseSettings):
     llm_model: str = "mistral-medium-latest"
     llm_slide_model: str = "mistral-large-latest"  # Mistral Large for slide generation
     llm_max_tokens: int = 4096
-    use_pipeline_v2: bool = True  # V2 multi-step pipeline (outline → plan → per-slide XML)
-
     # Chunking
     chunk_size: int = 800  # tokens
     chunk_overlap: int = 100  # tokens

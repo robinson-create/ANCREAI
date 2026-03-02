@@ -1,12 +1,12 @@
 import { useMemo } from "react"
 import { cn } from "@/lib/utils"
 import {
-  SLIDE_REF_WIDTH, SLIDE_REF_HEIGHT, CARD_INNER_MAX,
+  SLIDE_REF_WIDTH, SLIDE_REF_HEIGHT,
   DEFAULT_THEME,
-  buildThemeCSSVars, buildSizingCSSVars, resolveChartColors,
-  SlideNodeRenderer, SlideFooter,
+  buildThemeCSSVars,
 } from "./SlideRenderer"
-import type { Slide, SlideNode, ThemeData, FooterConfig } from "@/types"
+import SlideTemplateRenderer from "./SlideTemplateRenderer"
+import type { Slide, ThemeData, FooterConfig } from "@/types"
 
 interface SlidePreviewCardProps {
   slide: Slide
@@ -28,24 +28,15 @@ export function SlidePreviewCard({
   isSelected,
   onClick,
   themeData,
-  footer,
 }: SlidePreviewCardProps) {
   const theme = themeData ?? DEFAULT_THEME
   const cssVars = useMemo(() => buildThemeCSSVars(theme), [theme])
-  const sizingVars = useMemo(() => buildSizingCSSVars(slide.sizing), [slide.sizing])
-  const chartColors = useMemo(() => resolveChartColors(theme), [theme])
 
-  const contentNodes = (
-    slide.content_json?.content_json ||
-    (Array.isArray(slide.content_json) ? slide.content_json : [])
-  ) as SlideNode[]
-
-  const slideBg = slide.bg_color && slide.bg_color !== "#ffffff"
-    ? slide.bg_color
-    : theme.colors.background
-
-  const rootImage = slide.root_image as { url?: string; asset_id?: string } | null
-  const rootImageUrl = rootImage?.url || rootImage?.asset_id || null
+  const data = (
+    typeof slide.content_json === 'object' && !Array.isArray(slide.content_json)
+      ? slide.content_json
+      : {}
+  ) as Record<string, any>
 
   return (
     <button
@@ -77,47 +68,12 @@ export function SlidePreviewCard({
               transform: `scale(${THUMB_SCALE})`,
               transformOrigin: "top left",
               ...cssVars,
-              ...sizingVars,
-              backgroundColor: slideBg,
-              color: "var(--pres-text)",
-              fontFamily: "var(--pres-body-font)",
             }}
           >
-            {/* Background image */}
-            {rootImageUrl && slide.layout_type === "background" && (
-              <>
-                <img src={rootImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/40" />
-              </>
-            )}
-
-            {/* Layout with side image */}
-            {rootImageUrl && ["left", "right", "left-fit", "right-fit"].includes(slide.layout_type) ? (
-              <div className={`flex h-full ${slide.layout_type.startsWith("right") ? "flex-row" : "flex-row-reverse"}`}>
-                <div
-                  className="flex-1 overflow-hidden"
-                  style={{ padding: "20px", maxWidth: CARD_INNER_MAX[slide.sizing?.card_width ?? "M"] }}
-                >
-                  {contentNodes.map((node, i) => (
-                    <SlideNodeRenderer key={i} node={node} editable={false} themeColors={chartColors} />
-                  ))}
-                </div>
-                <div className={`shrink-0 ${slide.layout_type.includes("fit") ? "w-1/2" : "w-2/5"}`}>
-                  <img src={rootImageUrl} alt="" className="w-full h-full object-cover" />
-                </div>
-              </div>
-            ) : (
-              <div
-                className={`h-full mx-auto ${slide.layout_type === "background" && rootImageUrl ? "relative z-10" : ""}`}
-                style={{ padding: "20px", maxWidth: CARD_INNER_MAX[slide.sizing?.card_width ?? "M"] }}
-              >
-                {contentNodes.map((node, i) => (
-                  <SlideNodeRenderer key={i} node={node} editable={false} themeColors={chartColors} />
-                ))}
-              </div>
-            )}
-
-            <SlideFooter footer={footer} />
+            <SlideTemplateRenderer
+              layoutType={slide.layout_type}
+              data={data}
+            />
           </div>
         </div>
       </div>

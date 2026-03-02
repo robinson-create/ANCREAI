@@ -66,11 +66,11 @@ async def _resolve_slide_asset_urls(
     tenant_id: UUID,
     pres_read: PresentationRead,
 ) -> None:
-    """Resolve presigned URLs for root_image asset_ids in slides."""
+    """Resolve presigned URLs for asset_ids in root_image and content_json."""
     if not pres_read.slides:
         return
 
-    # Collect all asset IDs from root_image fields
+    # Collect all asset IDs from root_image fields AND content_json __asset_id__ fields
     asset_ids: list[UUID] = []
     for slide in pres_read.slides:
         if slide.root_image and slide.root_image.get("asset_id"):
@@ -78,6 +78,24 @@ async def _resolve_slide_asset_urls(
                 asset_ids.append(UUID(slide.root_image["asset_id"]))
             except (ValueError, TypeError):
                 pass
+
+        # Also collect __asset_id__ from content_json image fields
+        if slide.content_json and isinstance(slide.content_json, dict):
+            for _key, value in slide.content_json.items():
+                if isinstance(value, dict) and value.get("__asset_id__"):
+                    try:
+                        asset_ids.append(UUID(value["__asset_id__"]))
+                    except (ValueError, TypeError):
+                        pass
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            for _sk, sv in item.items():
+                                if isinstance(sv, dict) and sv.get("__asset_id__"):
+                                    try:
+                                        asset_ids.append(UUID(sv["__asset_id__"]))
+                                    except (ValueError, TypeError):
+                                        pass
 
     if not asset_ids:
         return
@@ -92,11 +110,32 @@ async def _resolve_slide_asset_urls(
 
     # Resolve presigned URLs
     for slide in pres_read.slides:
+        # root_image (legacy)
         if slide.root_image and slide.root_image.get("asset_id"):
             asset = assets_by_id.get(slide.root_image["asset_id"])
             if asset and asset.s3_key:
                 url = await storage_service.get_presigned_url(asset.s3_key, expires_in=3600)
                 slide.root_image["url"] = url
+
+        # content_json image fields (new JSON template pipeline)
+        if slide.content_json and isinstance(slide.content_json, dict):
+            for _key, value in slide.content_json.items():
+                if isinstance(value, dict) and value.get("__asset_id__"):
+                    asset = assets_by_id.get(value["__asset_id__"])
+                    if asset and asset.s3_key:
+                        value["__image_url__"] = await storage_service.get_presigned_url(
+                            asset.s3_key, expires_in=3600,
+                        )
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            for _sk, sv in item.items():
+                                if isinstance(sv, dict) and sv.get("__asset_id__"):
+                                    asset = assets_by_id.get(sv["__asset_id__"])
+                                    if asset and asset.s3_key:
+                                        sv["__image_url__"] = await storage_service.get_presigned_url(
+                                            asset.s3_key, expires_in=3600,
+                                        )
 
 
 # ══════════════════════════════════════════════
@@ -552,7 +591,9 @@ async def upload_asset(
     # Generate presigned URL
     url = await storage_service.get_presigned_url(s3_key, expires_in=3600)
 
-    return AssetReadWithUrl.model_validate(asset, update={"url": url})
+    result = AssetReadWithUrl.model_validate(asset)
+    result.url = url
+    return result
 
 
 @router.get(
@@ -581,7 +622,9 @@ async def list_assets(
         url = None
         if asset.s3_key:
             url = await storage_service.get_presigned_url(asset.s3_key, expires_in=3600)
-        items.append(AssetReadWithUrl.model_validate(asset, update={"url": url}))
+        item = AssetReadWithUrl.model_validate(asset)
+        item.url = url
+        items.append(item)
 
     return items
 

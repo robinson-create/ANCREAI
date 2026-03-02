@@ -1,428 +1,482 @@
-"""Per-slide XML generator — Step 3 of the V2 pipeline.
+"""JSON template slide generator — 3-step pipeline.
 
-Generates one slide at a time with constrained prompts, validates,
-repairs if needed, and falls back to deterministic templates.
+Step 1: generate_outline()  — LLM produces N markdown outlines
+Step 2: select_layouts()    — LLM picks a layout index per slide
+Step 3: generate_slide_content() — LLM fills JSON per template schema (parallelisable)
 
-This function NEVER raises — it always returns a valid slide_data dict.
+Also: edit_slide_content() for instruction-based regeneration.
 """
 
 from __future__ import annotations
 
+import asyncio
+import copy
+import json
 import logging
 from typing import Any, Callable, Awaitable
 
-from app.services.presentation_design_normalizer import normalize_slide
-from app.services.presentation_fit_evaluator import adjust_sizing_for_fit
-from app.services.presentation_slide_planner import SlidePlan, DeckPlan
-from app.services.presentation_slide_validator import validate_slide
-from app.services.presentation_xml_parser import XMLSlideParser
+from pydantic import BaseModel, Field
+
+from app.services.presentation_layout_registry import (
+    LAYOUT_REGISTRY,
+    build_layout_description_for_llm,
+    get_layout_by_index,
+    get_schema_for_llm,
+)
+from app.services.presentation_prompts import (
+    OUTLINE_SYSTEM_PROMPT,
+    OUTLINE_USER_PROMPT,
+    STRUCTURE_SYSTEM_PROMPT,
+    STRUCTURE_USER_PROMPT,
+    SLIDE_CONTENT_SYSTEM_PROMPT,
+    SLIDE_CONTENT_USER_PROMPT,
+    SLIDE_EDIT_SYSTEM_PROMPT,
+    SLIDE_EDIT_USER_PROMPT,
+    build_outline_system_prompt,
+    build_structure_system_prompt,
+    build_slide_content_system_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
-# Type aliases
-LLMCallXmlFn = Callable[[str, str], Awaitable[str]]
+# Type alias: async (system_prompt, user_prompt) -> raw string
+LLMCallFn = Callable[[str, str], Awaitable[str]]
+
+# Batch size for parallel slide content generation
+_BATCH_SIZE = 5
 
 
 # ══════════════════════════════════════════════
-#  Fallback slide builder (deterministic, no LLM)
+#  Data models
 # ══════════════════════════════════════════════
 
 
-def _build_fallback_slide(plan: SlidePlan) -> dict[str, Any]:
-    """Build a deterministic fallback slide from the plan.
+class SlideOutline(BaseModel):
+    """One slide in the generated outline."""
+    slide_number: int
+    content: str  # markdown description of what the slide should contain
 
-    Used when LLM generation + repair both fail.
-    Produces a safe accent-top + H2 + BULLETS layout.
-    """
-    content_json: list[dict[str, Any]] = [
-        {
-            "type": "h2",
-            "children": [{"text": plan.title}],
-        },
-    ]
 
-    # Build bullet items from key_points
-    items: list[dict[str, Any]] = []
-    points = plan.key_points[:5] if plan.key_points else [plan.goal or plan.title]
-    for kp in points:
-        if not kp or not kp.strip():
-            continue
-        items.append({
-            "type": "bullet_item",
-            "children": [
-                {"type": "h3", "children": [{"text": kp[:80]}]},
-            ],
-        })
+class PresentationOutline(BaseModel):
+    """Full outline: a list of slide outlines."""
+    slides: list[SlideOutline] = Field(default_factory=list)
 
-    if items:
-        content_json.append({
-            "type": "bullet_group",
-            "variant": "arrow",
-            "children": items,
-        })
 
-    # Build root_image if plan requires it
-    root_image = None
-    if plan.needs_image:
-        root_image = {
-            "query": f"{plan.title} professional business context high quality photo",
-        }
-
-    layout = plan.layout if plan.layout != "background" else "accent-top"
-
-    return {
-        "layout_type": layout,
-        "content_json": content_json,
-        "root_image": root_image,
-        "bg_color": None,
-        "sizing": {
-            "font_scale": plan.font_scale,
-            "block_spacing": "normal",
-            "card_width": "M",
-        },
-    }
+class LayoutSelection(BaseModel):
+    """Layout selection result: one index per slide."""
+    slides: list[int] = Field(default_factory=list)
 
 
 # ══════════════════════════════════════════════
-#  Template resolution for fit evaluation
+#  Helpers
 # ══════════════════════════════════════════════
 
 
-def _resolve_template_for_plan(plan: SlidePlan):
-    """Resolve a TemplateDefinition for a SlidePlan (best-effort).
+def _ensure_dict(raw: str) -> dict[str, Any]:
+    """Parse a raw LLM response into a dict, stripping markdown fences."""
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines)
+    return json.loads(cleaned)
 
-    Returns TemplateDefinition or None. Used by adjust_sizing_for_fit().
-    """
-    try:
-        from app.services.presentation_briefs import NarrativeRole
-        from app.services.presentation_template_registry import TEMPLATE_REGISTRY
 
-        role = NarrativeRole(plan.role)
-    except (ValueError, ImportError):
-        return None
-
-    candidates = [
-        t for t in TEMPLATE_REGISTRY.values()
-        if role in t.allowed_roles
-    ]
-    if not candidates:
-        return None
-
-    # Match preferred component to template node_structure
-    _COMP_TO_STRUCTURE: dict[str, str] = {
-        "BOXES": "box_group",
-        "STATS": "stats_group",
-        "TIMELINE": "timeline_group",
-        "BULLETS": "bullet_group",
-        "COMPARE": "compare_group",
-        "STAIRCASE": "staircase_group",
-        "QUOTE": "quote",
-    }
-    if plan.preferred_component:
-        target = _COMP_TO_STRUCTURE.get(plan.preferred_component)
-        if target:
-            for t in candidates:
-                if t.node_structure == target:
-                    return t
-
-    return candidates[0]
+def _ensure_list(raw: str) -> list[Any]:
+    """Parse a raw LLM response into a list, stripping markdown fences."""
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        cleaned = "\n".join(lines)
+    data = json.loads(cleaned)
+    if isinstance(data, dict):
+        # Try common keys
+        for key in ("slides", "layout_indices", "indices", "selections"):
+            if key in data and isinstance(data[key], list):
+                return data[key]
+        # If dict has numeric keys or a single list value
+        for v in data.values():
+            if isinstance(v, list):
+                return v
+    if isinstance(data, list):
+        return data
+    raise ValueError(f"Expected list, got {type(data)}")
 
 
 # ══════════════════════════════════════════════
-#  Prompt builders
+#  Step 1: Outline generation
 # ══════════════════════════════════════════════
 
 
-def _build_previous_slides_summary(previously_generated: list[dict]) -> str:
-    """Build a compact one-line-per-slide summary for context."""
-    if not previously_generated:
-        return "Aucun slide précédent."
-
-    lines: list[str] = []
-    for i, slide in enumerate(previously_generated):
-        layout = slide.get("layout_type", "?")
-        content = slide.get("content_json", [])
-        # Find the main component
-        component = "?"
-        variant = ""
-        for node in content:
-            node_type = node.get("type", "")
-            if node_type.endswith("_group") or node_type in ("quote", "chart", "table"):
-                from app.services.presentation_slide_validator import GROUP_TYPE_TO_COMPONENT
-                component = GROUP_TYPE_TO_COMPONENT.get(node_type, node_type)
-                if node.get("variant"):
-                    variant = f" {node['variant']}"
-                break
-        # Find the title
-        title = ""
-        for node in content:
-            if node.get("type") in ("h1", "h2"):
-                children = node.get("children", [])
-                for child in children:
-                    if isinstance(child, dict) and child.get("text"):
-                        title = child["text"][:50]
-                        break
-                if title:
-                    break
-        lines.append(f'{i + 1}. "{title}" — layout: {layout}, composant: {component}{variant}')
-
-    return "\n".join(lines)
-
-
-def _build_slide_constraints(plan: SlidePlan) -> str:
-    """Build the constraints block for the slide prompt."""
-    parts: list[str] = [
-        f"- Le layout DOIT être \"{plan.layout}\"",
-    ]
-
-    if plan.allowed_components:
-        parts.append(f"- Composant principal PARMI : {', '.join(plan.allowed_components)}")
-        if plan.preferred_component:
-            parts.append(f"- Composant PRÉFÉRÉ (utiliser en priorité) : {plan.preferred_component}")
-            _COMP_HINTS: dict[str, str] = {
-                "STATS": "Valeurs percutantes (+XX%, XM€, xN). Chaque item : valeur + légende courte (10 mots max). Variant 'bar' ou 'circle'.",
-                "BOXES": "CHAQUE item DOIT avoir un <ICON query=\"...\">. Descriptions courtes (2 phrases max, ~25 mots). Variant 'sideline' ou 'icons'.",
-                "TIMELINE": "Variant 'pills'. Chaque étape : H3 daté/numéroté + P de 1-2 phrases (~20 mots). MAX 4 étapes.",
-                "COMPARE": "Exactement 2 DIV. Chaque côté : H3 titre + 3-4 BULLETS chiffrés. Pas de paragraphes longs.",
-                "BULLETS": "Variant 'numbered' ou 'arrow'. Points de synthèse percutants (~20 mots chacun).",
-                "QUOTE": "Variant 'large' ou 'sidebar'. Citation impactante avec attribution.",
-                "CHART": "4-6 data points réalistes. Pas d'étiquettes abstraites.",
-                "ICONS": "CHAQUE item DOIT avoir <ICON query=\"...\"> + H3 court (5 mots max) + P concis (~20 mots). Structure visuelle riche.",
-                "STAIRCASE": "Progression claire par paliers numérotés. MAX 4 paliers, ~20 mots par description.",
-                "ARROWS": "Séquence de 3-4 étapes. Chaque étape : H3 + P court (~15 mots). Montre un flux logique.",
-                "BEFORE-AFTER": "Exactement 2 côtés (Avant/Après). Chaque côté : H3 + 2-3 points concrets.",
-                "IMAGE-GALLERY": "Variant 'team' pour les profils. Chaque item : image + nom + rôle court.",
-            }
-            hint = _COMP_HINTS.get(plan.preferred_component)
-            if hint:
-                parts.append(f"  GUIDE : {hint}")
-
-    if plan.allowed_variants:
-        for comp, variants in plan.allowed_variants.items():
-            parts.append(f"- Variants autorisés pour {comp} : {', '.join(variants)}")
-
-    if plan.min_items > 0 or plan.max_items > 0:
-        parts.append(f"- Nombre d'items : entre {plan.min_items} et {plan.max_items}")
-
-    if plan.needs_image:
-        parts.append("- Image OBLIGATOIRE : inclure un tag <IMG query=\"description 10+ mots\" />")
-    else:
-        parts.append("- Image optionnelle")
-
-    parts.append(f"- Densité : {plan.density} (font_scale: {plan.font_scale})")
-
-    return "\n".join(parts)
-
-
-def _build_system_prompt(
-    plan: SlidePlan,
-    deck_plan: DeckPlan,
-    previously_generated: list[dict],
-    original_prompt: str,
-    rag_context: str,
-    language: str,
-    style: str,
-    theme_extra_sections: str,
-) -> str:
-    """Build the constrained system prompt for single-slide generation."""
-    from app.services.presentation_prompts import CONSTRAINED_SLIDE_SYSTEM_PROMPT
-
-    constraints = _build_slide_constraints(plan)
-    prev_summary = _build_previous_slides_summary(previously_generated)
-    deck_context = (
-        f"Titre : {deck_plan.presentation_title}\n"
-        f"Audience : {deck_plan.audience}\n"
-        f"Style : {deck_plan.tone}\n"
-        f"Sujet : {original_prompt[:8000]}"
-    )
-
-    image_rule = (
-        "IMG OBLIGATOIRE avec query de 10+ mots"
-        if plan.needs_image
-        else "IMG optionnelle"
-    )
-
-    prompt = CONSTRAINED_SLIDE_SYSTEM_PROMPT.replace(
-        "{{LANGUAGE}}", language,
-    ).replace(
-        "{{TONE}}", style,
-    ).replace(
-        "{{REQUIRED_LAYOUT}}", plan.layout,
-    ).replace(
-        "{{ALLOWED_COMPONENTS}}", ", ".join(plan.allowed_components) if plan.allowed_components else "(cover: H1 + P + IMG)",
-    ).replace(
-        "{{MIN_ITEMS}}", str(plan.min_items),
-    ).replace(
-        "{{MAX_ITEMS}}", str(plan.max_items),
-    ).replace(
-        "{{IMAGE_RULE}}", image_rule,
-    ).replace(
-        "{{SLIDE_CONSTRAINTS}}", constraints,
-    ).replace(
-        "{{DECK_CONTEXT}}", deck_context,
-    ).replace(
-        "{{PREVIOUS_SLIDES_SUMMARY}}", prev_summary,
-    ).replace(
-        "{{EXTRA_SECTIONS}}", theme_extra_sections,
-    )
-
-    return prompt
-
-
-def _build_user_prompt(
-    plan: SlidePlan,
-    deck_plan: DeckPlan,
-    rag_context: str,
-    instruction: str | None = None,
-) -> str:
-    """Build the user prompt for single-slide generation."""
-    total = len(deck_plan.slides)
-    parts: list[str] = [
-        f"Slide {plan.slide_number}/{total} — Rôle : {plan.role}",
-        f"Titre : {plan.title}",
-    ]
-
-    if plan.goal:
-        parts.append(f"Objectif : {plan.goal}")
-
-    if plan.key_points:
-        kps = "\n".join(f"  - {kp}" for kp in plan.key_points)
-        parts.append(f"Points clés :\n{kps}")
-
-    if rag_context and rag_context != "Aucun contexte additionnel.":
-        parts.append(f"\nContexte RAG :\n{rag_context[:4000]}")
-
-    if instruction:
-        parts.append(f"\nINSTRUCTION UTILISATEUR : {instruction.strip()}")
-
-    parts.append(f"\nGénère UN SEUL tag <SECTION layout=\"{plan.layout}\">...</SECTION>")
-
-    return "\n".join(parts)
-
-
-def _build_repair_prompt(
-    xml_content: str,
-    errors: list[str],
-    plan: SlidePlan,
-) -> str:
-    """Build a repair prompt for a failed slide."""
-    from app.services.presentation_prompts import SLIDE_REPAIR_XML_PROMPT
-
-    return SLIDE_REPAIR_XML_PROMPT.format(
-        xml_content=xml_content[:2000],
-        errors="\n".join(f"- {e}" for e in errors),
-        required_layout=plan.layout,
-        allowed_components=", ".join(plan.allowed_components) if plan.allowed_components else "H1, P, IMG",
-        min_items=plan.min_items,
-        max_items=plan.max_items,
-    )
-
-
-# ══════════════════════════════════════════════
-#  Main generation function
-# ══════════════════════════════════════════════
-
-
-async def generate_slide_xml(
+async def generate_outline(
     *,
-    slide_plan: SlidePlan,
-    deck_plan: DeckPlan,
-    previously_generated: list[dict],
-    original_prompt: str,
-    rag_context: str,
+    content: str,
+    n_slides: int,
     language: str,
-    style: str,
-    theme_extra_sections: str,
-    llm_call_xml: LLMCallXmlFn,
-    llm_call_json: LLMCallXmlFn | None = None,
-    instruction: str | None = None,
-) -> dict[str, Any]:
-    """Generate a single slide XML, validate, repair, or fallback.
+    additional_context: str = "",
+    instructions: str | None = None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    llm_call: LLMCallFn,
+) -> PresentationOutline:
+    """Generate N slide outlines via LLM.
 
-    This function NEVER raises. It always returns a valid slide_data dict.
+    Returns PresentationOutline with exactly n_slides entries.
     """
-    parser = XMLSlideParser()
+    from datetime import datetime
 
-    # ── Step 1: Build prompts ──
-    system_prompt = _build_system_prompt(
-        plan=slide_plan,
-        deck_plan=deck_plan,
-        previously_generated=previously_generated,
-        original_prompt=original_prompt,
-        rag_context=rag_context,
+    system_prompt = build_outline_system_prompt(
+        instructions=instructions,
+        tone=tone,
+        verbosity=verbosity,
+    )
+    user_prompt = OUTLINE_USER_PROMPT.format(
+        content=content,
         language=language,
-        style=style,
-        theme_extra_sections=theme_extra_sections,
-    )
-    user_prompt = _build_user_prompt(
-        plan=slide_plan,
-        deck_plan=deck_plan,
-        rag_context=rag_context,
-        instruction=instruction,
+        n_slides=n_slides,
+        current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        additional_context=additional_context or "None",
     )
 
-    xml_response = ""
+    logger.info("Outline: calling LLM with n_slides=%d, lang=%s", n_slides, language)
+
     try:
-        # ── Step 2: LLM call ──
-        xml_response = await llm_call_xml(system_prompt, user_prompt)
+        raw = await llm_call(system_prompt, user_prompt)
+        logger.debug("Outline: raw LLM response (first 1000 chars): %s", raw[:1000])
+        data = _ensure_dict(raw)
 
-        # ── Step 3: Parse XML ──
-        slide_data = parser.parse_single_section(xml_response)
+        slides_data = data.get("slides", [])
+        if not isinstance(slides_data, list):
+            logger.warning("Outline: 'slides' key missing or not a list, got keys=%s", list(data.keys()))
+            slides_data = []
 
-        # ── Step 4: Validate ──
-        result = validate_slide(slide_data, slide_plan)
-        slide_data = result.slide_data
+        slides: list[SlideOutline] = []
+        for i, item in enumerate(slides_data):
+            if isinstance(item, dict):
+                slides.append(SlideOutline(
+                    slide_number=item.get("slide_number", i + 1),
+                    content=item.get("content", item.get("title", f"Slide {i + 1}")),
+                ))
+            elif isinstance(item, str):
+                slides.append(SlideOutline(slide_number=i + 1, content=item))
 
-        if result.valid:
-            # ── Step 5: Normalize + fit check and return ──
-            slide_data = normalize_slide(slide_data)
-            template_def = _resolve_template_for_plan(slide_plan)
-            slide_data = adjust_sizing_for_fit(slide_data, template_def)
-            logger.info(
-                "Slide %d generated OK (auto_fixes=%d, warnings=%d)",
-                slide_plan.slide_number, len(result.auto_fixed), len(result.warnings),
-            )
-            return slide_data
-
-        # ── Step 6: Repair ──
-        logger.warning(
-            "Slide %d validation failed (%d errors), attempting repair",
-            slide_plan.slide_number, len(result.errors),
-        )
-
-        repair_fn = llm_call_json or llm_call_xml
-        repair_system = "Tu corriges du XML de slide de présentation. Renvoie UNIQUEMENT le tag <SECTION> corrigé."
-        repair_user = _build_repair_prompt(xml_response, result.errors, slide_plan)
-
-        repaired_xml = await repair_fn(repair_system, repair_user)
-        repaired_data = parser.parse_single_section(repaired_xml)
-        repaired_result = validate_slide(repaired_data, slide_plan)
-        repaired_data = repaired_result.slide_data
-
-        if repaired_result.valid:
-            repaired_data = normalize_slide(repaired_data)
-            template_def = _resolve_template_for_plan(slide_plan)
-            repaired_data = adjust_sizing_for_fit(repaired_data, template_def)
-            logger.info(
-                "Slide %d repaired OK (auto_fixes=%d)",
-                slide_plan.slide_number, len(repaired_result.auto_fixed),
-            )
-            return repaired_data
-
-        logger.warning(
-            "Slide %d repair also failed (%d errors), using fallback",
-            slide_plan.slide_number, len(repaired_result.errors),
-        )
+        logger.info("Outline: parsed %d slides from LLM (requested %d)", len(slides), n_slides)
+        outline = PresentationOutline(slides=slides)
 
     except Exception as e:
-        logger.error(
-            "Slide %d generation exception: %s, using fallback",
-            slide_plan.slide_number, e,
+        logger.error("Outline generation failed: %s", e, exc_info=True)
+        outline = PresentationOutline(slides=[])
+
+    # Pad or trim to match n_slides
+    if len(outline.slides) < n_slides:
+        logger.warning("Outline: padding %d → %d slides", len(outline.slides), n_slides)
+    while len(outline.slides) < n_slides:
+        n = len(outline.slides) + 1
+        outline.slides.append(SlideOutline(
+            slide_number=n,
+            content=f"Additional point {n}",
+        ))
+    if len(outline.slides) > n_slides:
+        outline.slides = outline.slides[:n_slides]
+
+    # Re-number
+    for i, s in enumerate(outline.slides):
+        s.slide_number = i + 1
+
+    logger.info("Outline generated: %d slides", len(outline.slides))
+    return outline
+
+
+# ══════════════════════════════════════════════
+#  Step 2: Layout selection
+# ══════════════════════════════════════════════
+
+
+async def select_layouts(
+    *,
+    outline: PresentationOutline,
+    n_slides: int,
+    instructions: str | None = None,
+    llm_call: LLMCallFn,
+) -> list[int]:
+    """Ask LLM to select a layout index for each slide.
+
+    Returns a list of layout indices (0-based into LAYOUT_REGISTRY).
+    """
+    layout_descriptions = build_layout_description_for_llm()
+
+    # Build outline text for the LLM
+    outline_lines: list[str] = []
+    for s in outline.slides:
+        outline_lines.append(f"Slide {s.slide_number}: {s.content}")
+    outline_text = "\n".join(outline_lines)
+
+    system_prompt = build_structure_system_prompt(
+        layout_descriptions=layout_descriptions,
+        n_slides=n_slides,
+        instructions=instructions,
+    )
+    user_prompt = STRUCTURE_USER_PROMPT.format(outline_text=outline_text)
+
+    max_index = len(LAYOUT_REGISTRY) - 1
+    logger.info("Layouts: calling LLM for %d slides (max_index=%d)", n_slides, max_index)
+
+    try:
+        raw = await llm_call(system_prompt, user_prompt)
+        logger.debug("Layouts: raw LLM response: %s", raw[:500])
+        indices = _ensure_list(raw)
+        logger.info("Layouts: LLM returned %d indices: %s", len(indices), indices)
+
+        # Validate and clamp indices
+        result: list[int] = []
+        for idx in indices:
+            if isinstance(idx, dict):
+                idx = idx.get("layout_index", idx.get("index", 0))
+            original = int(idx)
+            clamped = max(0, min(original, max_index))
+            if clamped != original:
+                logger.warning("Layouts: clamped index %d → %d", original, clamped)
+            result.append(clamped)
+
+    except Exception as e:
+        logger.error("Layout selection failed: %s", e, exc_info=True)
+        result = []
+
+    # Pad or trim
+    if len(result) < n_slides:
+        logger.warning("Layouts: padding %d → %d indices (default=1)", len(result), n_slides)
+    while len(result) < n_slides:
+        result.append(1)  # default to "Basic Info"
+    if len(result) > n_slides:
+        result = result[:n_slides]
+
+    # Force first slide to intro (index 0) if not already
+    if result and result[0] != 0:
+        result[0] = 0
+
+    logger.info("Layouts selected: %s", result)
+    return result
+
+
+# ══════════════════════════════════════════════
+#  Step 3: Slide content generation
+# ══════════════════════════════════════════════
+
+
+async def generate_slide_content(
+    *,
+    outline_content: str,
+    layout_id: str,
+    language: str,
+    instructions: str | None = None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    llm_call: LLMCallFn,
+) -> dict[str, Any]:
+    """Generate JSON content for a single slide based on its template schema.
+
+    Returns a dict matching the template's JSON schema.
+    """
+    from datetime import datetime
+
+    logger.info("Slide content: generating for layout=%s", layout_id)
+
+    schema = get_schema_for_llm(layout_id)
+    if not schema:
+        logger.error("No schema found for layout_id=%s", layout_id)
+        return {"title": "Error", "__speaker_note__": "Schema not found"}
+
+    logger.debug("Slide content: schema keys=%s", list(schema.get("properties", {}).keys()))
+
+    system_prompt = build_slide_content_system_prompt(
+        instructions=instructions,
+        tone=tone,
+        verbosity=verbosity,
+    )
+
+    # Inject schema into user prompt
+    schema_str = json.dumps(schema, indent=2, ensure_ascii=False)
+    user_prompt = SLIDE_CONTENT_USER_PROMPT.format(
+        current_datetime=datetime.now().strftime("%Y-%m-%d %H:%M"),
+        language=language,
+        outline_content=outline_content,
+    )
+    # Append schema to user prompt
+    user_prompt += f"\n\n## Slide JSON Schema (follow strictly)\n```json\n{schema_str}\n```"
+
+    try:
+        raw = await llm_call(system_prompt, user_prompt)
+        logger.debug("Slide content: raw LLM response (first 500 chars): %s", raw[:500])
+        content = _ensure_dict(raw)
+
+        # Extract speaker note from content
+        if "__speaker_note__" not in content:
+            content["__speaker_note__"] = ""
+
+        logger.info("Slide content: generated keys=%s for layout=%s", list(content.keys()), layout_id)
+        return content
+
+    except Exception as e:
+        logger.error("Slide content: FALLBACK for layout=%s, error=%s", layout_id, e, exc_info=True)
+        # Build minimal fallback from schema required fields
+        fallback: dict[str, Any] = {}
+        props = schema.get("properties", {})
+        for key, prop in props.items():
+            if prop.get("type") == "string":
+                fallback[key] = key.replace("_", " ").title()
+            elif prop.get("type") == "array":
+                fallback[key] = []
+            elif prop.get("type") == "object":
+                fallback[key] = {}
+        fallback["__speaker_note__"] = ""
+        logger.warning("Slide content: fallback keys=%s", list(fallback.keys()))
+        return fallback
+
+
+# ══════════════════════════════════════════════
+#  Step 3b: Slide editing (instruction-based)
+# ══════════════════════════════════════════════
+
+
+async def edit_slide_content(
+    *,
+    current_content: dict[str, Any],
+    instruction: str,
+    layout_id: str,
+    language: str,
+    llm_call: LLMCallFn,
+) -> dict[str, Any]:
+    """Edit a slide's content based on user instruction.
+
+    Returns updated dict matching the template's JSON schema.
+    """
+    schema = get_schema_for_llm(layout_id)
+    schema_str = json.dumps(schema, indent=2, ensure_ascii=False) if schema else "{}"
+
+    system_prompt = SLIDE_EDIT_SYSTEM_PROMPT
+    user_prompt = SLIDE_EDIT_USER_PROMPT.format(
+        current_content=json.dumps(current_content, indent=2, ensure_ascii=False),
+        instruction=instruction,
+        language=language,
+    )
+    user_prompt += f"\n\n## Slide JSON Schema (follow strictly)\n```json\n{schema_str}\n```"
+
+    try:
+        raw = await llm_call(system_prompt, user_prompt)
+        content = _ensure_dict(raw)
+        if "__speaker_note__" not in content:
+            content["__speaker_note__"] = current_content.get("__speaker_note__", "")
+        return content
+
+    except Exception as e:
+        logger.error("Slide edit failed for %s: %s", layout_id, e)
+        return current_content
+
+
+# ══════════════════════════════════════════════
+#  Orchestrator: full deck generation
+# ══════════════════════════════════════════════
+
+
+async def generate_full_deck(
+    *,
+    content: str,
+    n_slides: int,
+    language: str,
+    additional_context: str = "",
+    instructions: str | None = None,
+    tone: str | None = None,
+    verbosity: str | None = None,
+    llm_call: LLMCallFn,
+    on_slide_ready: Callable[[int, str, dict[str, Any]], Awaitable[None]] | None = None,
+) -> list[dict[str, Any]]:
+    """Generate a full presentation deck using the 3-step pipeline.
+
+    Args:
+        content: User's presentation prompt/content
+        n_slides: Number of slides to generate
+        language: Output language
+        additional_context: RAG-retrieved context
+        instructions: User instructions
+        tone: Presentation tone
+        verbosity: Content verbosity level
+        llm_call: Async LLM call function
+        on_slide_ready: Optional callback(slide_index, layout_id, slide_content)
+            Called as each slide is generated (for SSE streaming).
+
+    Returns:
+        List of dicts, each with:
+        - "layout_id": str
+        - "content_json": dict (template-specific JSON)
+        - "speaker_notes": str
+    """
+    logger.info("Full deck: starting pipeline for %d slides, lang=%s", n_slides, language)
+
+    # Step 1: Generate outline
+    outline = await generate_outline(
+        content=content,
+        n_slides=n_slides,
+        language=language,
+        additional_context=additional_context,
+        instructions=instructions,
+        tone=tone,
+        verbosity=verbosity,
+        llm_call=llm_call,
+    )
+
+    # Step 2: Select layouts
+    layout_indices = await select_layouts(
+        outline=outline,
+        n_slides=n_slides,
+        instructions=instructions,
+        llm_call=llm_call,
+    )
+
+    # Step 3: Generate content per slide (in batches for parallelism)
+    slides: list[dict[str, Any]] = [{}] * n_slides
+
+    async def _generate_one(index: int) -> None:
+        layout_index = layout_indices[index]
+        layout = get_layout_by_index(layout_index)
+        layout_id = layout["id"] if layout else "basic-info-slide"
+
+        slide_content = await generate_slide_content(
+            outline_content=outline.slides[index].content,
+            layout_id=layout_id,
+            language=language,
+            instructions=instructions,
+            tone=tone,
+            verbosity=verbosity,
+            llm_call=llm_call,
         )
 
-    # ── Step 7: Deterministic fallback ──
-    fallback = _build_fallback_slide(slide_plan)
-    fallback = normalize_slide(fallback)
-    fallback = adjust_sizing_for_fit(fallback, None)
-    logger.info("Slide %d using deterministic fallback", slide_plan.slide_number)
-    return fallback
+        # Extract speaker note
+        speaker_notes = slide_content.pop("__speaker_note__", "")
+
+        result = {
+            "layout_id": layout_id,
+            "content_json": slide_content,
+            "speaker_notes": speaker_notes,
+        }
+        slides[index] = result
+
+        if on_slide_ready:
+            await on_slide_ready(index, layout_id, slide_content)
+
+    # Process in batches
+    for batch_start in range(0, n_slides, _BATCH_SIZE):
+        batch_end = min(batch_start + _BATCH_SIZE, n_slides)
+        logger.info("Full deck: generating batch slides %d-%d of %d", batch_start + 1, batch_end, n_slides)
+        tasks = [_generate_one(i) for i in range(batch_start, batch_end)]
+        await asyncio.gather(*tasks)
+
+    layout_ids = [s.get("layout_id", "?") for s in slides]
+    logger.info("Full deck: complete, %d slides, layouts=%s", len(slides), layout_ids)
+    return slides
