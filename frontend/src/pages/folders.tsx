@@ -112,10 +112,12 @@ export function FoldersPage() {
 
   const createMutation = useMutation({
     mutationFn: (name: string) => foldersApi.create({ name }),
-    onSuccess: () => {
+    onSuccess: (folder) => {
       queryClient.invalidateQueries({ queryKey: ["folders"] });
       toast({ title: "Dossier créé" });
       setCreateOpen(false);
+      // Redirect to the newly created folder
+      selectFolder(folder.id);
     },
     onError: () => {
       toast({ variant: "destructive", title: "Erreur", description: "Impossible de créer le dossier." });
@@ -439,10 +441,23 @@ export function FoldersPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : filteredItems.length === 0 ? (
-                <div className="text-center py-16 text-sm text-muted-foreground font-body">
-                  {itemSearch
-                    ? "Aucun élément trouvé."
-                    : "Ce dossier est vide. Ajoutez des éléments depuis la page d'accueil."}
+                <div className="text-center py-16 space-y-4">
+                  <p className="text-sm text-muted-foreground font-body">
+                    {itemSearch
+                      ? "Aucun élément trouvé."
+                      : "Ce dossier est vide."}
+                  </p>
+                  {!itemSearch && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => navigate("/app/search")}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Ajouter des éléments
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-1">

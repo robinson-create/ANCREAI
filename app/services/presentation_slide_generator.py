@@ -183,12 +183,15 @@ def _build_slide_constraints(plan: SlidePlan) -> str:
                 "STATS": "Valeurs percutantes (+XX%, XM€, xN). Chaque item : valeur + légende courte (10 mots max). Variant 'bar' ou 'circle'.",
                 "BOXES": "CHAQUE item DOIT avoir un <ICON query=\"...\">. Descriptions courtes (2 phrases max, ~25 mots). Variant 'sideline' ou 'icons'.",
                 "TIMELINE": "Variant 'pills'. Chaque étape : H3 daté/numéroté + P de 1-2 phrases (~20 mots). MAX 4 étapes.",
-                "COMPARE": "Exactement 2 DIV. Chaque côté avec titre + 3-4 arguments chiffrés.",
+                "COMPARE": "Exactement 2 DIV. Chaque côté : H3 titre + 3-4 BULLETS chiffrés. Pas de paragraphes longs.",
                 "BULLETS": "Variant 'numbered' ou 'arrow'. Points de synthèse percutants (~20 mots chacun).",
-                "QUOTE": "Variant 'large'. Citation impactante avec attribution.",
+                "QUOTE": "Variant 'large' ou 'sidebar'. Citation impactante avec attribution.",
                 "CHART": "4-6 data points réalistes. Pas d'étiquettes abstraites.",
-                "ICONS": "CHAQUE item DOIT avoir <ICON query=\"...\"> + H3 court (5 mots max) + P concis (~20 mots).",
+                "ICONS": "CHAQUE item DOIT avoir <ICON query=\"...\"> + H3 court (5 mots max) + P concis (~20 mots). Structure visuelle riche.",
                 "STAIRCASE": "Progression claire par paliers numérotés. MAX 4 paliers, ~20 mots par description.",
+                "ARROWS": "Séquence de 3-4 étapes. Chaque étape : H3 + P court (~15 mots). Montre un flux logique.",
+                "BEFORE-AFTER": "Exactement 2 côtés (Avant/Après). Chaque côté : H3 + 2-3 points concrets.",
+                "IMAGE-GALLERY": "Variant 'team' pour les profils. Chaque item : image + nom + rôle court.",
             }
             hint = _COMP_HINTS.get(plan.preferred_component)
             if hint:

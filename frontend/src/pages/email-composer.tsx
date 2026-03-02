@@ -433,6 +433,8 @@ const EmailComposerContent = () => {
       prompt?: string;
       autoGenerate?: boolean;
       fromDocument?: { id: string; title: string; pdfUrl: string };
+      to?: string;
+      subject?: string;
     } | null;
     if (state?.fromDocument) {
       const doc = state.fromDocument;
@@ -450,6 +452,12 @@ const EmailComposerContent = () => {
       setComposeInstruction(
         `Rédige un email d'accompagnement pour le document "${doc.title}" en pièce jointe. Sois bref et professionnel.`
       );
+      window.history.replaceState({}, "");
+    } else if (state?.to || state?.subject) {
+      // Clicked on an email from the file list → prefill compose
+      setComposing(true);
+      if (state.to) setComposeTo(state.to);
+      if (state.subject) setComposeSubject(state.subject);
       window.history.replaceState({}, "");
     } else if (state?.prompt) {
       setComposing(true);

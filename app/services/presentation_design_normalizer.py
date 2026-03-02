@@ -49,10 +49,12 @@ def normalize_slide(
     # Use template_def.max_blocks as override for max items when available
     max_items_override = template_def.max_blocks if template_def else None
 
+    content = ensure_slide_title(content, slide_data.get("title", ""))
     content = normalize_icons(content)
     content = normalize_density(content, max_items_override=max_items_override)
     content = normalize_heading_levels(content)
     content = enforce_text_limits(content)
+    content = deduplicate_groups(content)
 
     if template:
         content = enforce_template_constraints(content, template)
@@ -62,6 +64,96 @@ def normalize_slide(
 
     slide_data["content_json"] = content
     return slide_data
+
+
+# ── Title enforcement ──
+
+
+def ensure_slide_title(nodes: list[dict], slide_title: str) -> list[dict]:
+    """Ensure slide starts with an H2 title. Inject one from slide metadata if missing."""
+    if not nodes:
+        if slide_title:
+            return [{"type": "h2", "children": [{"text": slide_title}]}]
+        return nodes
+
+    first_type = nodes[0].get("type", "")
+    if first_type in ("h1", "h2"):
+        return nodes  # Already has a title
+
+    # No title found — inject from slide metadata
+    if slide_title:
+        title_node = {"type": "h2", "children": [{"text": slide_title}]}
+        logger.debug("Injecting missing H2 title: %s", slide_title)
+        return [title_node] + nodes
+
+    return nodes
+
+
+# ── Group deduplication ──
+
+
+def deduplicate_groups(nodes: list[dict]) -> list[dict]:
+    """Remove redundant groups that repeat the same content in different formats.
+
+    Example: a bullet_group + box_group with the same info → keep only the richer one.
+    """
+    _GROUP_TYPES = {
+        "box_group", "bullet_group", "icon_list", "timeline_group",
+        "staircase_group", "stats_group", "image_gallery_group",
+    }
+
+    groups = [(i, n) for i, n in enumerate(nodes) if n.get("type") in _GROUP_TYPES]
+    if len(groups) < 2:
+        return nodes
+
+    # Extract text content from a group for comparison
+    def _extract_text(node: dict) -> set[str]:
+        texts = set()
+        children = node.get("children", [])
+        for child in children:
+            if isinstance(child, dict):
+                for leaf in child.get("children", []):
+                    if isinstance(leaf, dict) and "text" in leaf and "type" not in leaf:
+                        text = leaf["text"].strip().lower()
+                        if len(text) > 10:  # Only meaningful text
+                            texts.add(text[:50])  # Compare first 50 chars
+                    elif isinstance(leaf, dict) and "children" in leaf:
+                        for sub in leaf.get("children", []):
+                            if isinstance(sub, dict) and "text" in sub and "type" not in sub:
+                                text = sub["text"].strip().lower()
+                                if len(text) > 10:
+                                    texts.add(text[:50])
+        return texts
+
+    # Check for overlap between groups
+    indices_to_remove: set[int] = set()
+    for i in range(len(groups)):
+        if groups[i][0] in indices_to_remove:
+            continue
+        text_i = _extract_text(groups[i][1])
+        if not text_i:
+            continue
+        for j in range(i + 1, len(groups)):
+            if groups[j][0] in indices_to_remove:
+                continue
+            text_j = _extract_text(groups[j][1])
+            if not text_j:
+                continue
+            overlap = len(text_i & text_j)
+            if overlap >= 2:  # At least 2 shared text blocks
+                # Remove the simpler group (fewer children = simpler)
+                i_children = len(groups[i][1].get("children", []))
+                j_children = len(groups[j][1].get("children", []))
+                remove_idx = groups[i][0] if i_children <= j_children else groups[j][0]
+                indices_to_remove.add(remove_idx)
+                logger.debug(
+                    "Removing redundant group at index %d (overlap=%d)", remove_idx, overlap
+                )
+
+    if indices_to_remove:
+        return [n for i, n in enumerate(nodes) if i not in indices_to_remove]
+
+    return nodes
 
 
 # ── Icon normalization ──

@@ -23,6 +23,7 @@ import {
   Download,
   Eye,
   RotateCcw,
+  Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -75,7 +76,7 @@ import { uploadsApi } from "@/api/uploads"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
 import { DictationTextarea } from "@/components/dictation/DictationTextarea"
-import type { WorkspaceDocumentListItem, PresentationListItem, UploadDocument } from "@/types"
+import type { WorkspaceDocumentListItem, PresentationListItem } from "@/types"
 
 // ── Constants ──
 
@@ -284,6 +285,8 @@ export function DocumentsPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; kind: "document" | "presentation" } | null>(null)
   const [addToFolderTarget, setAddToFolderTarget] = useState<{ id: string; title: string } | null>(null)
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
+  const [uploadedForFolder, setUploadedForFolder] = useState<{ id: string; title: string } | null>(null)
 
   // ── Document mutations ──
 
@@ -352,12 +355,20 @@ export function DocumentsPage() {
 
   const uploadMutation = useMutation({
     mutationFn: (files: File[]) => uploadsApi.upload(files),
-    onSuccess: () => {
+    onSuccess: (docs) => {
       queryClient.invalidateQueries({ queryKey: ["uploads"] })
       toast({ title: "Fichiers importés", description: "Le traitement a démarré." })
+      // Prompt to add the first uploaded doc to a folder
+      if (docs.length > 0 && docs[0]) {
+        setUploadedForFolder({ id: docs[0].id, title: docs[0].filename })
+      }
     },
-    onError: () => {
-      toast({ variant: "destructive", title: "Erreur", description: "Impossible d'importer les fichiers." })
+    onError: (err: Error & { response?: { status?: number; data?: { detail?: string } } }) => {
+      if (err.response?.status === 403) {
+        setShowUpgradeDialog(true)
+      } else {
+        toast({ variant: "destructive", title: "Erreur", description: "Impossible d'importer les fichiers." })
+      }
     },
   })
 
@@ -469,6 +480,22 @@ export function DocumentsPage() {
         })
     }
   }, [location.state, navigate, queryClient, toast])
+
+  // ── Auto-open create dialog from compose buttons ──
+
+  const openCreateHandled = useRef(false)
+
+  useEffect(() => {
+    const state = location.state as { openCreate?: boolean; createMode?: "document" | "presentation" } | null
+    if (state?.openCreate && !openCreateHandled.current) {
+      openCreateHandled.current = true
+      setIsCreateOpen(true)
+      if (state.createMode) {
+        setCreateMode(state.createMode)
+      }
+      window.history.replaceState({}, "")
+    }
+  }, [location.state])
 
   // ── Contact prefill ──
 
@@ -1032,6 +1059,16 @@ export function DocumentsPage() {
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
       />
 
+      {/* Prompt to add uploaded document to a folder */}
+      <AddToFolderDialog
+        open={!!uploadedForFolder}
+        onOpenChange={(open) => !open && setUploadedForFolder(null)}
+        itemType="document"
+        itemId={uploadedForFolder?.id ?? ""}
+        itemTitle={uploadedForFolder?.title}
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
+      />
+
       {/* Upload delete confirmation */}
       <AlertDialog open={!!uploadDeleteTarget} onOpenChange={(open) => !open && setUploadDeleteTarget(null)}>
         <AlertDialogContent>
@@ -1057,6 +1094,43 @@ export function DocumentsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Upgrade dialog — shown on quota 403 */}
+      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <DialogContent className="sm:max-w-md text-center">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
+              <Sparkles className="h-7 w-7 text-primary" />
+            </div>
+            <DialogHeader className="text-center space-y-2">
+              <DialogTitle className="text-xl">Limite atteinte</DialogTitle>
+              <DialogDescription className="text-sm text-muted-foreground">
+                Vous avez atteint la limite de fichiers de votre abonnement actuel.
+                Passez au plan Pro pour importer des fichiers en illimité.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center gap-3 pt-2 w-full">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowUpgradeDialog(false)}
+              >
+                Plus tard
+              </Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => {
+                  setShowUpgradeDialog(false)
+                  navigate("/app/billing")
+                }}
+              >
+                <Sparkles className="h-4 w-4" />
+                Passer en Pro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       </div>
     </div>
   )

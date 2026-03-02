@@ -13,12 +13,14 @@ const createActions = [
     description: "Contrat, devis, NDA, compte-rendu",
     icon: FileText,
     path: "/app/documents",
+    state: { openCreate: true, createMode: "document" } as Record<string, unknown>,
   },
   {
     label: "Créer une présentation",
     description: "Slides et diaporamas",
     icon: Presentation,
     path: "/app/documents",
+    state: { openCreate: true, createMode: "presentation" } as Record<string, unknown>,
   },
   {
     label: "Composer un email",
@@ -54,7 +56,7 @@ export function CreateModal({ open, onOpenChange }: CreateModalProps) {
               key={action.label}
               className="flex items-center gap-3 rounded-lg px-3 py-3 text-left hover:bg-accent transition-colors"
               onClick={() => {
-                navigate(action.path);
+                navigate(action.path, action.state ? { state: action.state } : undefined);
                 onOpenChange(false);
               }}
             >

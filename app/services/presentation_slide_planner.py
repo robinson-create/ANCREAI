@@ -81,9 +81,9 @@ ROLE_PLAN_TABLE: dict[str, _RolePlanDef] = {
     },
     "context": {
         "layouts": ["left-fit", "right-fit", "accent-top"],
-        "components": ["BOXES", "ICONS", "BULLETS"],
-        "preferred": "BOXES",
-        "variants": {"BOXES": ["sideline", "icons"]},
+        "components": ["ICONS", "BOXES", "BULLETS"],
+        "preferred": "ICONS",
+        "variants": {"BOXES": ["sideline", "icons"], "ICONS": ["default"]},
         "min_items": 2,
         "max_items": 4,
         "needs_image": True,
@@ -92,8 +92,8 @@ ROLE_PLAN_TABLE: dict[str, _RolePlanDef] = {
     },
     "problem": {
         "layouts": ["accent-top", "left-fit"],
-        "components": ["BOXES", "ARROWS", "BEFORE-AFTER"],
-        "preferred": "BOXES",
+        "components": ["ARROWS", "BOXES", "BEFORE-AFTER"],
+        "preferred": "ARROWS",
         "variants": {"BOXES": ["sideline", "outline"]},
         "min_items": 2,
         "max_items": 4,
@@ -103,8 +103,8 @@ ROLE_PLAN_TABLE: dict[str, _RolePlanDef] = {
     },
     "insight": {
         "layouts": ["right-fit", "left-fit", "accent-top"],
-        "components": ["BOXES", "ICONS", "STATS", "STAIRCASE"],
-        "preferred": "BOXES",
+        "components": ["STATS", "ICONS", "BOXES", "STAIRCASE"],
+        "preferred": "STATS",
         "variants": {"BOXES": ["sideline", "icons"], "STATS": ["bar", "circle"]},
         "min_items": 2,
         "max_items": 4,
@@ -210,7 +210,7 @@ _DEFAULT_PLAN: _RolePlanDef = {
 # ══════════════════════════════════════════════
 
 LAYOUT_WINDOW = 3       # Sliding window for layout diversity
-COMPONENT_WINDOW = 3    # Sliding window for component diversity
+COMPONENT_WINDOW = 4    # Sliding window for component diversity (larger = more variety)
 MAX_IMAGELESS_STREAK = 2  # Max consecutive slides without image
 
 

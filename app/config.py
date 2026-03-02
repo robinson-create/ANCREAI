@@ -66,7 +66,7 @@ class Settings(BaseSettings):
 
     # Free tier quotas
     free_daily_chat_limit: int = 100
-    free_max_files: int = 5
+    free_max_files: int = 50
 
     # Dev mode: bypass Clerk auth
     dev_auth_bypass: bool = False

@@ -29,6 +29,7 @@ const actions = [
     description: "Contrat, devis, NDA, compte-rendu, note…",
     icon: FileText,
     path: "/app/documents",
+    state: { openCreate: true, createMode: "document" },
   },
   {
     id: "email",
@@ -68,6 +69,7 @@ interface HistoryItem {
   sortDate: number;
   status?: string;
   path: string;
+  emailState?: { to?: string; subject?: string };
 }
 
 function formatRelativeDate(dateStr: string): string {
@@ -304,6 +306,7 @@ export function DashboardPage() {
         sortDate: new Date(email.date).getTime(),
         status: email.status,
         path: "/app/email",
+        emailState: { to: email.to, subject: email.subject },
       });
     }
 
@@ -411,7 +414,7 @@ export function DashboardPage() {
             {actions.map((a) => (
               <button
                 key={a.id}
-                onClick={() => navigate(a.path)}
+                onClick={() => navigate(a.path, a.state ? { state: a.state } : undefined)}
                 className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium font-body bg-card/80 backdrop-blur-sm hover:bg-accent/20 border border-border/50 hover:border-primary/30 text-muted-foreground hover:text-foreground transition-all shadow-sm hover:shadow-md"
               >
                 <a.icon className="h-3.5 w-3.5 group-hover:text-primary transition-colors" />
@@ -459,7 +462,7 @@ export function DashboardPage() {
               {filteredItems.slice(0, 15).map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => navigate(item.path, item.emailState ? { state: item.emailState } : undefined)}
                   className="group flex items-center gap-3 w-full px-4 py-3 rounded-lg bg-card border border-border hover:shadow-lg hover:border-primary/20 transition-all text-left"
                 >
                   <div className={`w-8 h-8 rounded-lg ${typeBg(item.type)} flex items-center justify-center shrink-0`}>

@@ -465,7 +465,7 @@ export function SlideNodeRenderer({
     case "before_after_side":
       return (
         <div
-          className="border p-2"
+          className="border p-2.5 overflow-hidden"
           style={{
             borderColor: "color-mix(in srgb, var(--pres-primary) 30%, transparent)",
             borderRadius: "var(--pres-radius)",
@@ -473,7 +473,7 @@ export function SlideNodeRenderer({
             boxShadow: "var(--pres-shadow)",
           }}
         >
-          {renderChildren()}
+          {renderChildren(4)}
         </div>
       )
     case "pros_item":
@@ -494,17 +494,17 @@ export function SlideNodeRenderer({
       return (
         <div className="relative mb-1.5 pl-4">
           <div className="absolute left-1.5 top-0 bottom-0 w-0.5" style={{ backgroundColor: "var(--pres-primary)" }} />
-          <div style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.375rem)" }}>{renderChildren()}</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.5rem)" }}>{renderChildren()}</div>
         </div>
       )
     case "timeline_item":
       return (
-        <div className="relative pl-3 pb-1">
+        <div className="relative pl-3 pb-1 overflow-hidden">
           <div
             className="absolute -left-[14px] top-1.5 h-2.5 w-2.5 rounded-full border-2"
             style={{ backgroundColor: "var(--pres-bg)", borderColor: "var(--pres-primary)" }}
           />
-          {renderChildren()}
+          {renderChildren(3)}
         </div>
       )
     case "cycle_group": {
@@ -515,13 +515,13 @@ export function SlideNodeRenderer({
     case "cycle_item":
       return (
         <div
-          className="p-1.5 text-center border"
+          className="p-2 text-center border overflow-hidden"
           style={{
             borderColor: "color-mix(in srgb, var(--pres-primary) 30%, transparent)",
             borderRadius: "var(--pres-radius)",
           }}
         >
-          {renderChildren()}
+          {renderChildren(2)}
         </div>
       )
     case "arrow_list":
@@ -568,17 +568,17 @@ export function SlideNodeRenderer({
         </div>
       )
     case "staircase_group":
-      return <div className="mb-1.5" style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.375rem)" }}>{renderChildren()}</div>
+      return <div className="mb-1.5" style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.5rem)" }}>{renderChildren()}</div>
     case "stair_item":
       return (
-        <div className="flex items-center gap-2 border-b pb-1 ml-3 first:ml-0" style={{ borderColor: "color-mix(in srgb, var(--pres-muted) 30%, transparent)" }}>
+        <div className="flex items-center gap-2 border-b pb-1 ml-3 first:ml-0 overflow-hidden" style={{ borderColor: "color-mix(in srgb, var(--pres-muted) 30%, transparent)" }}>
           <div
             className="shrink-0 flex items-center justify-center h-6 w-6 text-[9px] font-bold"
             style={{ backgroundColor: "var(--pres-primary)", color: "var(--pres-bg)", borderRadius: "var(--pres-radius)" }}
           >
             #
           </div>
-          <div className="flex-1">{renderChildren()}</div>
+          <div className="flex-1 overflow-hidden">{renderChildren(2)}</div>
         </div>
       )
     case "pyramid_group":

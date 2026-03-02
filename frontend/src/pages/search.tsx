@@ -31,6 +31,7 @@ import {
   Paperclip,
   X,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -52,6 +53,13 @@ import { useCopilotReadable } from "@copilotkit/react-core";
 import { BlockRenderer } from "@/components/blocks/BlockRenderer";
 import { useSearchStream } from "@/contexts/search-stream";
 import { useSearchView } from "@/contexts/search-view-context";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog";
 import { FolderCreateDialog } from "@/components/folders/FolderCreateDialog";
 import { FolderDetailPanel } from "@/components/folders/FolderDetailPanel";
@@ -92,12 +100,14 @@ interface HistoryItem {
   /** Pour "Ajouter à un dossier" : type API folder */
   folderItemType?: "document" | "email_thread" | "conversation";
   folderItemId?: string;
+  /** For email items: navigate state */
+  emailState?: { to?: string; subject?: string };
 }
 
 const actions = [
-  { id: "document", label: "Rédiger un document", icon: FileText, path: "/app/documents" },
+  { id: "document", label: "Rédiger un document", icon: FileText, path: "/app/documents", state: { openCreate: true, createMode: "document" } },
   { id: "email", label: "Composer un email", icon: Mail, path: "/app/email" },
-  { id: "presentation", label: "Créer une présentation", icon: Presentation, path: "/app/documents" },
+  { id: "presentation", label: "Créer une présentation", icon: Presentation, path: "/app/documents", state: { openCreate: true, createMode: "presentation" } },
   { id: "search", label: "Rechercher une info", icon: Search, path: "/app/search" },
 ];
 
@@ -158,6 +168,7 @@ export function SearchPage() {
     itemTitle?: string;
   } | null>(null);
   const [folderCreateOpen, setFolderCreateOpen] = useState(false);
+  const [showUpgradeDialog, setShowUpgradeDialog] = useState(false);
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>("all");
   const [listSearch, setListSearch] = useState("");
   const [attachments, setAttachments] = useState<{ id: string; filename: string }[]>([]);
@@ -340,7 +351,7 @@ export function SearchPage() {
         sortDate: new Date(email.date).getTime(),
         status: email.status,
         path: "/app/email",
-        // Pas de folderItemId : emails mock sans thread_key réel
+        emailState: { to: email.to, subject: email.subject },
       });
     }
     for (const convo of allConversations) {
@@ -475,12 +486,17 @@ export function SearchPage() {
         ...prev,
         ...uploaded.map((doc) => ({ id: doc.id, filename: doc.filename })),
       ]);
-    } catch {
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible d'importer les fichiers.",
-      });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 403) {
+        setShowUpgradeDialog(true);
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Erreur",
+          description: "Impossible d'importer les fichiers.",
+        });
+      }
     } finally {
       setIsUploading(false);
     }
@@ -699,7 +715,7 @@ export function SearchPage() {
                 {actions.map((a) => (
                   <button
                     key={a.id}
-                    onClick={() => navigate(a.path)}
+                    onClick={() => navigate(a.path, a.state ? { state: a.state } : undefined)}
                     className="group inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold font-body bg-card/90 backdrop-blur-md hover:bg-card border border-border/60 hover:border-primary/30 text-foreground/80 hover:text-foreground transition-all shadow-md hover:shadow-lg"
                   >
                     <a.icon className="h-3.5 w-3.5 text-primary/70 group-hover:text-primary transition-colors" />
@@ -767,7 +783,7 @@ export function SearchPage() {
                   </div>
                   <div
                     ref={carouselRef}
-                    className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide snap-x snap-mandatory"
+                    className="flex gap-3 overflow-x-auto py-2 px-2 -mx-2 scrollbar-hide snap-x snap-mandatory"
                   >
                     {recentFiles.map((item) => (
                       <button
@@ -779,6 +795,8 @@ export function SearchPage() {
                             const assistantId = match?.[1];
                             const assistant = assistants.find((a: Assistant) => a.id === assistantId);
                             if (assistant) handleLoadConversation(convId, assistant.id, item.title);
+                          } else if (item.emailState) {
+                            navigate(item.path, { state: item.emailState });
                           } else {
                             navigate(item.path);
                           }
@@ -863,6 +881,8 @@ export function SearchPage() {
                             const assistantId = match?.[1];
                             const assistant = assistants.find((a: Assistant) => a.id === assistantId);
                             if (assistant) handleLoadConversation(convId, assistant.id, item.title);
+                          } else if (item.emailState) {
+                            navigate(item.path, { state: item.emailState });
                           } else {
                             navigate(item.path);
                           }
@@ -1169,6 +1189,44 @@ export function SearchPage() {
           }
         }}
       />
+
+      {/* Upgrade dialog for quota limits */}
+      <Dialog open={showUpgradeDialog} onOpenChange={setShowUpgradeDialog}>
+        <DialogContent className="sm:max-w-md text-center">
+          <div className="flex flex-col items-center gap-4 py-4">
+            <div className="flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
+              <Sparkles className="h-7 w-7 text-primary" />
+            </div>
+            <DialogHeader className="text-center space-y-2">
+              <DialogTitle className="text-xl">Limite atteinte</DialogTitle>
+              <DialogDescription>
+                Vous avez atteint la limite de votre forfait actuel.
+                Passez en Pro pour profiter d'un accès illimité à toutes les
+                fonctionnalités.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center gap-3 pt-2 w-full">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowUpgradeDialog(false)}
+              >
+                Plus tard
+              </Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={() => {
+                  setShowUpgradeDialog(false);
+                  navigate("/app/billing");
+                }}
+              >
+                <Sparkles className="h-4 w-4" />
+                Passer en Pro
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

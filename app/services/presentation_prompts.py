@@ -1095,10 +1095,15 @@ color: "primary"|"accent"|"secondary"|"muted". Utile pour indiquer une phase, un
 
 CHAQUE slide doit avoir un IMPACT VISUEL fort. Pas de slide "texte seul".
 
+RÈGLES DE STRUCTURE :
+- TOUJOURS commencer par H2 (titre de slide) puis UN SEUL composant principal (BOXES, STATS, TIMELINE, etc.)
+- NE JAMAIS mélanger 2 composants du même type (ex: bullet_group + box_group) sur la même slide
+- NE JAMAIS répéter les mêmes informations sous 2 formes différentes (ex: liste + cartes avec le même contenu)
+- Maximum 1 composant principal + éventuellement 1 composant secondaire court (BADGE, QUOTE courte)
+
 RÈGLES DE RICHESSE :
-- TOUJOURS inclure au moins UN composant visuel riche (STATS, CHART, ICONS, TIMELINE, COMPARE, etc.)
 - Les BOXES doivent TOUJOURS avoir un variant explicite ("sideline" ou "icons" — JAMAIS sans variant)
-- Pour le variant "icons" : chaque DIV DOIT commencer par <ICON query="terme_sémantique" />
+- CHAQUE DIV dans BOXES et ICONS DOIT commencer par <ICON query="terme_sémantique" />
 - Les STATS doivent avoir des valeurs PERCUTANTES avec unité/symbole ("+87%", "3,2M€", "x4.7", "<2h")
 - Les descriptions doivent contenir au moins UNE donnée concrète (chiffre, comparaison, nom propre)
 - NE PAS générer de slide avec uniquement H2 + P + P (trop pauvre visuellement)
@@ -1124,11 +1129,13 @@ DONNÉES RÉALISTES :
 2. Le composant principal DOIT être l'un de : {{ALLOWED_COMPONENTS}}
 3. Le nombre d'items DOIT être entre {{MIN_ITEMS}} et {{MAX_ITEMS}}
 4. {{IMAGE_RULE}}
-5. Titres COURTS et PERCUTANTS (max 10 mots)
-6. Descriptions CONCISES mais concrètes. Chaque P dans un item : MAX 2 phrases courtes (~25 mots). Privilégier les données chiffrées (%, €, x) aux longues explications. Si un item a trop de contenu, DÉCOUPER en 2 items séparés.
-7. NE PAS répéter le contenu des slides précédents
-8. Utilise UNIQUEMENT les tags XML définis ci-dessus
-9. PRÉSERVE les données exactes : chiffres, pourcentages, noms propres, statistiques, URLs. Ne résume pas — copie les données.
+5. CHAQUE slide DOIT commencer par un H2 titre court et percutant (max 8 mots). Pas de slide sans titre.
+6. Descriptions CONCISES : chaque P dans un item = MAX 2 phrases courtes (~25 mots). Privilégier données chiffrées (%, €, x). Si trop de contenu → DÉCOUPER en items séparés.
+7. NE JAMAIS répéter le même contenu dans 2 composants différents sur la même slide. UN seul bloc principal par idée.
+8. NE PAS répéter le contenu des slides précédents
+9. Utilise UNIQUEMENT les tags XML définis ci-dessus
+10. PRÉSERVE les données exactes : chiffres, pourcentages, noms propres, statistiques, URLs.
+11. CHAQUE box_item et icon_list_item DOIT avoir un <ICON query="terme_pertinent" /> en premier enfant. Jamais de card sans icône.
 
 Génère UN SEUL tag <SECTION layout="{{REQUIRED_LAYOUT}}">...</SECTION>.
 """
