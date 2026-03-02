@@ -416,7 +416,31 @@ export interface SlideNode {
 export interface RootImage {
   asset_id?: string
   query?: string
+  url?: string
   layout_type?: string
+}
+
+export interface AssetReadWithUrl {
+  id: string
+  kind: string
+  status: string
+  s3_key: string | null
+  mime: string | null
+  width: number | null
+  height: number | null
+  byte_size: number | null
+  created_at: string
+  url: string | null
+}
+
+export interface AssetUrlResponse {
+  url: string
+}
+
+export interface SlideSizing {
+  font_scale: "S" | "M" | "L"
+  block_spacing: "tight" | "normal" | "loose"
+  card_width: "S" | "M" | "L"
 }
 
 export interface Slide {
@@ -426,6 +450,7 @@ export interface Slide {
   content_json: Record<string, unknown>
   root_image?: RootImage | null
   bg_color?: string | null
+  sizing?: SlideSizing | null
   speaker_notes?: string | null
   created_at: string
   updated_at: string

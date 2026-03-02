@@ -74,6 +74,7 @@ import { contactsApi } from "@/api/contacts"
 import { uploadsApi } from "@/api/uploads"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
+import { DictationTextarea } from "@/components/dictation/DictationTextarea"
 import type { WorkspaceDocumentListItem, PresentationListItem, UploadDocument } from "@/types"
 
 // ── Constants ──
@@ -886,7 +887,7 @@ export function DocumentsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <textarea
+            <DictationTextarea
               placeholder={
                 createMode === "presentation"
                   ? "Décrivez la présentation à créer..."
@@ -894,6 +895,7 @@ export function DocumentsPage() {
               }
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              onTranscript={(text) => setPrompt((prev) => (prev ? prev + " " : "") + text)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault()
@@ -904,6 +906,7 @@ export function DocumentsPage() {
               rows={4}
               className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               autoFocus
+              language="fr"
             />
 
             {/* Document-specific: doc type */}

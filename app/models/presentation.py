@@ -128,6 +128,7 @@ class PresentationSlide(Base):
     content_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     root_image: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     bg_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    sizing: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     speaker_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

@@ -912,14 +912,14 @@ class WorkerSettings:
 
     from app.workers.agent_tasks import run_agent, watchdog_stuck_runs
     from app.workers.presentation_tasks import (
-        generate_presentation_outline,
+        generate_presentation_slides_direct,
         generate_presentation_slides,
         export_presentation,
     )
 
     functions = [
         process_document, crawl_website, send_email, sync_mail_account, sync_thread, run_agent,
-        generate_presentation_outline, generate_presentation_slides, export_presentation,
+        generate_presentation_slides_direct, generate_presentation_slides, export_presentation,
     ]
     cron_jobs = [
         cron(

@@ -41,8 +41,8 @@ import type {
 
 const STATUS_LABELS: Record<PresentationStatus, string> = {
   draft: "Brouillon",
-  generating_outline: "Génération du plan...",
-  outline_ready: "Plan prêt",
+  generating_outline: "Génération...",
+  outline_ready: "Génération...",
   generating_slides: "Génération des slides...",
   ready: "Prêt",
   exporting: "Export en cours...",
@@ -55,12 +55,19 @@ const STATUS_VARIANTS: Record<
 > = {
   draft: "outline",
   generating_outline: "secondary",
-  outline_ready: "default",
+  outline_ready: "secondary",
   generating_slides: "secondary",
   ready: "default",
   exporting: "secondary",
   error: "destructive",
 }
+
+// Step-by-step labels for the generation loading screen
+const GENERATION_STEPS = [
+  { key: "split", label: "Découpage du contenu en sections" },
+  { key: "slides", label: "Génération des slides" },
+  { key: "finalize", label: "Finalisation" },
+] as const
 
 // ── Main page ──
 
@@ -87,7 +94,7 @@ export function PresentationEditorPage() {
         status === "generating_slides" ||
         status === "exporting"
       )
-        return 5000
+        return 3000 // Poll faster for better UX during generation
       return false
     },
   })
@@ -125,6 +132,16 @@ export function PresentationEditorPage() {
     presentation?.status === "generating_slides" ||
     presentation?.status === "exporting"
 
+  // Track current generation step for step-by-step display
+  const [generationStep, setGenerationStep] = useState<"split" | "slides" | "finalize" | null>(null)
+
+  // Auto-set step based on status
+  if (isGenerating && !generationStep && !slideGenProgress) {
+    if (presentation?.status === "generating_slides" || presentation?.status === "generating_outline") {
+      setGenerationStep("split")
+    }
+  }
+
   const handleSSEEvent = useCallback(
     (event: PresentationSSEEvent) => {
       switch (event.type) {
@@ -133,13 +150,19 @@ export function PresentationEditorPage() {
         case "export_ready":
           queryClient.invalidateQueries({ queryKey: ["presentation", id] })
           if (event.type === "generation_complete") {
-            setSlideGenProgress(null)
+            setGenerationStep("finalize")
+            // Small delay to show "Finalisation" before clearing
+            setTimeout(() => {
+              setSlideGenProgress(null)
+              setGenerationStep(null)
+            }, 800)
           }
           if (event.type === "export_ready") {
             toast({ title: "Export terminé", description: "Votre présentation est prête." })
           }
           break
         case "slide_generated":
+          setGenerationStep("slides")
           setSlideGenProgress({
             current: (event.payload.slide_index as number) + 1,
             total: event.payload.total as number,
@@ -150,6 +173,8 @@ export function PresentationEditorPage() {
           setExportProgress(event.payload.percent as number)
           break
         case "error":
+          setGenerationStep(null)
+          setSlideGenProgress(null)
           queryClient.invalidateQueries({ queryKey: ["presentation", id] })
           toast({
             title: "Erreur de génération",
@@ -339,31 +364,71 @@ export function PresentationEditorPage() {
   function renderPhase(pres: PresentationFull) {
     switch (pres.status) {
       case "draft":
+        return (
+          <div className="relative flex-1">
+            <AnchorSpinner active className="relative h-full" label="Lancement de la génération..." />
+          </div>
+        )
       case "generating_outline":
       case "outline_ready":
       case "generating_slides":
         return (
           <div className="relative flex-1">
             <AnchorSpinner active className="relative h-full" label={null} />
-            {/* Progress overlay below the spinner */}
-            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-3 pb-16">
-              {slideGenProgress ? (
-                <>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    Slide {slideGenProgress.current} / {slideGenProgress.total}
-                  </p>
-                  <Progress
-                    value={(slideGenProgress.current / slideGenProgress.total) * 100}
-                    className="w-64 h-2"
-                  />
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground animate-pulse">
-                  {pres.status === "generating_slides" || pres.status === "outline_ready"
-                    ? "Génération des slides..."
-                    : "Préparation du plan..."}
-                </p>
+            {/* Step-by-step progress overlay */}
+            <div className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-4 pb-16">
+              {/* Steps indicator */}
+              <div className="flex flex-col gap-2 w-72">
+                {GENERATION_STEPS.map((step) => {
+                  const currentIdx = GENERATION_STEPS.findIndex(
+                    (s) => s.key === generationStep,
+                  )
+                  const stepIdx = GENERATION_STEPS.findIndex((s) => s.key === step.key)
+                  const isActive = step.key === generationStep
+                  const isDone = currentIdx > stepIdx
+
+                  return (
+                    <div
+                      key={step.key}
+                      className={`flex items-center gap-2.5 text-sm transition-opacity ${
+                        isActive
+                          ? "text-foreground font-medium"
+                          : isDone
+                            ? "text-muted-foreground/60"
+                            : "text-muted-foreground/40"
+                      }`}
+                    >
+                      <div
+                        className={`h-2 w-2 rounded-full shrink-0 transition-colors ${
+                          isActive
+                            ? "bg-primary animate-pulse"
+                            : isDone
+                              ? "bg-primary/40"
+                              : "bg-muted-foreground/20"
+                        }`}
+                      />
+                      <span>{step.label}</span>
+                      {isActive && step.key === "slides" && slideGenProgress && (
+                        <span className="ml-auto tabular-nums text-xs text-muted-foreground">
+                          {slideGenProgress.current}/{slideGenProgress.total}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Progress bar for slides */}
+              {slideGenProgress && (
+                <Progress
+                  value={
+                    (slideGenProgress.current / slideGenProgress.total) * 100
+                  }
+                  className="w-72 h-1.5"
+                />
               )}
+              <p className="text-xs text-muted-foreground">
+                Vous pouvez revenir à l'accueil, la génération continue en arrière-plan.
+              </p>
             </div>
           </div>
         )
@@ -376,6 +441,7 @@ export function PresentationEditorPage() {
               slides={pres.slides}
               slideOrder={pres.slide_order}
               selectedSlideId={selectedSlideId}
+              themeData={pres.theme?.theme_data}
               onSelectSlide={setSelectedSlideId}
               onAddSlide={() => addSlideMutation.mutate()}
               onDeleteSlide={handleDeleteSlide}
@@ -416,6 +482,7 @@ export function PresentationEditorPage() {
                   regenerateSlideMutation.mutate({ slideId: selectedSlide.id, instruction })
                 }
                 isProcessing={regeneratingSlideId === selectedSlide.id}
+                prompt={pres.prompt}
               />
             )}
           </div>

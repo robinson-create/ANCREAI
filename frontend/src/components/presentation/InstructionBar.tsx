@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef } from "react"
 import { Sparkles, Loader2, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
+import { DictationTextarea } from "@/components/dictation/DictationTextarea"
 
 interface InstructionBarProps {
   onSubmit: (instruction: string) => void
   isProcessing: boolean
   disabled?: boolean
+  prompt?: string | null
 }
 
 const SUGGESTION_CHIPS = [
@@ -18,7 +19,7 @@ const SUGGESTION_CHIPS = [
   "Plus premium",
 ]
 
-export function InstructionBar({ onSubmit, isProcessing, disabled }: InstructionBarProps) {
+export function InstructionBar({ onSubmit, isProcessing, disabled, prompt }: InstructionBarProps) {
   const [instruction, setInstruction] = useState("")
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -78,19 +79,33 @@ export function InstructionBar({ onSubmit, isProcessing, disabled }: Instruction
         </div>
       </div>
 
+      {/* Original prompt */}
+      {prompt && (
+        <div className="px-3 py-2.5 border-b">
+          <p className="text-[11px] text-muted-foreground mb-1.5">Prompt original</p>
+          <div className="max-h-48 overflow-y-auto rounded-md bg-muted/50 p-2">
+            <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {prompt}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Spacer */}
       <div className="flex-1" />
 
       {/* Input area */}
       <form onSubmit={handleSubmit} className="px-3 py-3 border-t">
-        <Textarea
+        <DictationTextarea
           ref={textareaRef}
           value={instruction}
           onChange={(e) => setInstruction(e.target.value)}
+          onTranscript={(text) => setInstruction((prev) => (prev ? prev + " " : "") + text)}
           onKeyDown={handleKeyDown}
           placeholder="Donne une consigne... ex: rends plus visuel, transforme en timeline"
           className="resize-none text-sm min-h-[72px]"
           disabled={isProcessing || disabled}
+          language="fr"
         />
         <div className="flex items-center justify-between mt-2">
           <p className="text-[10px] text-muted-foreground">

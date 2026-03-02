@@ -14,6 +14,8 @@ import type {
   ExportRead,
   ThemeRead,
   ThemeCreate,
+  AssetReadWithUrl,
+  AssetUrlResponse,
 } from "@/types"
 
 export const presentationsApi = {
@@ -156,5 +158,36 @@ export const presentationsApi = {
       theme_id: themeId,
     })
     return data
+  },
+
+  // ── Assets ──
+
+  uploadAsset: async (presId: string, file: File): Promise<AssetReadWithUrl> => {
+    const formData = new FormData()
+    formData.append("file", file)
+    const { data } = await apiClient.post<AssetReadWithUrl>(
+      `/presentations/${presId}/assets/upload`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    )
+    return data
+  },
+
+  listAssets: async (presId: string): Promise<AssetReadWithUrl[]> => {
+    const { data } = await apiClient.get<AssetReadWithUrl[]>(
+      `/presentations/${presId}/assets`,
+    )
+    return data
+  },
+
+  getAssetUrl: async (presId: string, assetId: string): Promise<AssetUrlResponse> => {
+    const { data } = await apiClient.get<AssetUrlResponse>(
+      `/presentations/${presId}/assets/${assetId}/url`,
+    )
+    return data
+  },
+
+  deleteAsset: async (presId: string, assetId: string): Promise<void> => {
+    await apiClient.delete(`/presentations/${presId}/assets/${assetId}`)
   },
 }

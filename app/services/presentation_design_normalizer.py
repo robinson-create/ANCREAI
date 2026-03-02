@@ -8,21 +8,24 @@ Pipeline: generation → schema validation → **design normalization** → repa
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from app.services.presentation_icons import is_valid_icon, resolve_icon
 from app.services.presentation_templates import SlideTemplate, get_template
+
+if TYPE_CHECKING:
+    from app.services.presentation_template_registry import TemplateDefinition
 
 logger = logging.getLogger(__name__)
 
 # ── Normalization limits ──
 
-MAX_TITLE_WORDS = 10
-MAX_DESCRIPTION_WORDS = 25
-MAX_CARD_DESCRIPTION_WORDS = 15
-MAX_ITEMS_IN_GROUP = 4
-MAX_ICONS_PER_SLIDE = 5
-MAX_TOP_LEVEL_BLOCKS = 4  # title + 2-3 content blocks
+MAX_TITLE_WORDS = 18
+MAX_DESCRIPTION_WORDS = 120  # ~600 chars, allow richer content per block
+MAX_CARD_DESCRIPTION_WORDS = 90  # ~450 chars per card body
+MAX_ITEMS_IN_GROUP = 8  # Supports up to 8 items (cards, timeline steps, etc.)
+MAX_ICONS_PER_SLIDE = 8  # Allow more icons
+MAX_TOP_LEVEL_BLOCKS = 6  # title + 4-5 content blocks for richer slides
 MAX_HEADING_LEVELS = 2  # Only h1/h2 + h3 — no h4/h5/h6 in presentation slides
 
 
@@ -33,6 +36,7 @@ def normalize_slide(
     slide_data: dict,
     template: SlideTemplate | None = None,
     theme: dict | None = None,
+    template_def: TemplateDefinition | None = None,
 ) -> dict:
     """Apply all normalization passes to a slide.
 
@@ -42,8 +46,11 @@ def normalize_slide(
     if not isinstance(content, list):
         return slide_data
 
+    # Use template_def.max_blocks as override for max items when available
+    max_items_override = template_def.max_blocks if template_def else None
+
     content = normalize_icons(content)
-    content = normalize_density(content)
+    content = normalize_density(content, max_items_override=max_items_override)
     content = normalize_heading_levels(content)
     content = enforce_text_limits(content)
 
@@ -119,12 +126,12 @@ def normalize_icons(nodes: list[dict]) -> list[dict]:
 # ── Density normalization ──
 
 
-def normalize_density(nodes: list[dict]) -> list[dict]:
+def normalize_density(nodes: list[dict], max_items_override: int | None = None) -> list[dict]:
     """Enforce maximum density rules.
 
     - Max 1 main title (h1 or h2)
     - Max MAX_TOP_LEVEL_BLOCKS top-level blocks
-    - Max MAX_ITEMS_IN_GROUP items in any group element
+    - Max items in any group element (uses template override if provided)
     """
     # Cap top-level blocks
     if len(nodes) > MAX_TOP_LEVEL_BLOCKS:
@@ -143,7 +150,9 @@ def normalize_density(nodes: list[dict]) -> list[dict]:
                 node["type"] = "h3"
         result.append(node)
 
-    # Cap items in group elements
+    # Cap items in group elements — use template-specific max if provided
+    effective_max_items = max_items_override or MAX_ITEMS_IN_GROUP
+
     _GROUP_TYPES = {
         "box_group", "bullet_group", "icon_list", "timeline_group",
         "staircase_group", "cycle_group", "arrow_list", "sequence_arrow_group",
@@ -153,12 +162,12 @@ def normalize_density(nodes: list[dict]) -> list[dict]:
     for node in result:
         if node.get("type") in _GROUP_TYPES:
             children = node.get("children", [])
-            if len(children) > MAX_ITEMS_IN_GROUP:
+            if len(children) > effective_max_items:
                 logger.debug(
                     "Trimming %s items from %d to %d",
-                    node["type"], len(children), MAX_ITEMS_IN_GROUP,
+                    node["type"], len(children), effective_max_items,
                 )
-                node["children"] = children[:MAX_ITEMS_IN_GROUP]
+                node["children"] = children[:effective_max_items]
 
     return result
 

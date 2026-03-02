@@ -45,26 +45,30 @@ async def _get_redis():
 
 
 # ══════════════════════════════════════════════
-#  Outline generation
+#  Direct generation (split + slides in one job)
 # ══════════════════════════════════════════════
 
 
-async def generate_presentation_outline(
+async def generate_presentation_slides_direct(
     ctx: dict,
     presentation_id: str,
     tenant_id: str,
     request_data: dict,
 ) -> dict:
-    """Arq job: generate outline via LLM.
+    """Arq job: split prompt + generate all slides in one pass.
+
+    Replaces the old outline → slides two-step flow.
+    The prompt is split into sections (deterministic or lightweight LLM),
+    then each section is processed through the per-slide pipeline.
 
     Args:
         ctx: Arq context
         presentation_id: UUID string
         tenant_id: UUID string
-        request_data: GenerateOutlineRequest dict
+        request_data: GenerateOutlineRequest dict (prompt, slide_count, language, etc.)
 
     Returns:
-        Dict with status and outline
+        Dict with status and slide count
     """
     pres_uuid = UUID(presentation_id)
     tenant_uuid = UUID(tenant_id)
@@ -74,58 +78,45 @@ async def generate_presentation_outline(
 
     try:
         request = GenerateOutlineRequest(**request_data)
-        outline = await presentation_service.generate_outline(
-            db, tenant_uuid, pres_uuid, request
+
+        # Save prompt + settings on the presentation
+        result = await db.execute(
+            select(Presentation).where(Presentation.id == pres_uuid)
+        )
+        pres = result.scalar_one_or_none()
+        if not pres:
+            return {"error": "Presentation not found"}
+
+        pres.prompt = request.prompt
+        pres.settings = {
+            **pres.settings,
+            "language": request.language,
+            "style": request.style,
+            "slide_count": request.slide_count,
+        }
+        await db.flush()
+
+        # generate_slides() now does the split internally
+        slides_request = GenerateSlidesRequest(
+            collection_ids=request.collection_ids or [],
+        )
+
+        async def slide_callback(slide, index, total):
+            await publisher.slide_generated(pres_uuid, slide.id, index, total)
+
+        slides = await presentation_service.generate_slides(
+            db, tenant_uuid, pres_uuid, slides_request,
+            on_slide_progress=slide_callback,
         )
         await db.commit()
 
-        # Publish SSE event
-        await publisher.outline_ready(
-            pres_uuid,
-            [item.model_dump() for item in outline],
-        )
+        await publisher.generation_complete(pres_uuid)
 
-        logger.info(f"Outline generated for presentation {presentation_id}: {len(outline)} items")
-
-        # Auto-chain: immediately generate slides (skip user review)
-        if request.auto_generate_slides:
-            logger.info(f"Auto-chaining slide generation for {presentation_id}")
-            slides_request = GenerateSlidesRequest(
-                collection_ids=request.collection_ids or [],
-            )
-
-            async def slide_callback(slide, index, total):
-                await publisher.slide_generated(pres_uuid, slide.id, index, total)
-
-            try:
-                slides = await presentation_service.generate_slides(
-                    db, tenant_uuid, pres_uuid, slides_request,
-                    on_slide_progress=slide_callback,
-                )
-                await db.commit()
-                await publisher.generation_complete(pres_uuid)
-            except Exception as slide_err:
-                logger.exception(f"Error in auto-chain slide generation for {presentation_id}")
-                await db.rollback()
-                # Update status to error (outline is already committed)
-                result = await db.execute(
-                    select(Presentation).where(Presentation.id == pres_uuid)
-                )
-                pres = result.scalar_one_or_none()
-                if pres:
-                    pres.status = PresentationStatus.ERROR.value
-                    pres.error_message = str(slide_err)[:2000]
-                    await db.commit()
-                await publisher.error(pres_uuid, str(slide_err)[:500])
-                return {"error": str(slide_err)}
-
-            logger.info(f"Slides auto-generated for {presentation_id}: {len(slides)} slides")
-            return {"status": "ok", "outline_count": len(outline), "slide_count": len(slides)}
-
-        return {"status": "ok", "outline_count": len(outline)}
+        logger.info(f"Slides generated for presentation {presentation_id}: {len(slides)} slides")
+        return {"status": "ok", "slide_count": len(slides)}
 
     except Exception as e:
-        logger.exception(f"Error generating outline for {presentation_id}")
+        logger.exception(f"Error generating slides for {presentation_id}")
         await db.rollback()
 
         # Update presentation status

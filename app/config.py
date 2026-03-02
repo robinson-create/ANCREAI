@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     llm_model: str = "mistral-medium-latest"
     llm_slide_model: str = "mistral-large-latest"  # Mistral Large for slide generation
     llm_max_tokens: int = 4096
+    use_pipeline_v2: bool = True  # V2 multi-step pipeline (outline → plan → per-slide XML)
 
     # Chunking
     chunk_size: int = 800  # tokens

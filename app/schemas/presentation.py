@@ -62,6 +62,28 @@ class RootImage(BaseModel):
     crop_settings: CropSettings | None = None
 
 
+class SlideSizing(BaseModel):
+    """Sizing hints computed by the composer based on template density.
+
+    The frontend uses these to adapt font sizes, spacing, and card widths.
+    """
+
+    font_scale: Literal["S", "M", "L"] = "M"
+    # S = compact (titres 1.4em, body 0.85em) → slides denses (cards_6, bullet_dense)
+    # M = normal  (titres 1.8em, body 1em)    → slides standard (cards_3, timeline)
+    # L = aéré   (titres 2.2em, body 1.15em)  → slides hero (cover, big_statement, quote)
+
+    block_spacing: Literal["tight", "normal", "loose"] = "normal"
+    # tight  = gap-2, p-2  → 6 cartes serrées
+    # normal = gap-4, p-4  → 3-4 cartes standards
+    # loose  = gap-6, p-6  → cover, quote, big statement
+
+    card_width: Literal["S", "M", "L"] = "M"
+    # S = max-w-4xl (576px) — quote centrée, KPI compact
+    # M = max-w-5xl (1024px) — standard
+    # L = max-w-6xl (1152px) — slides denses, plein écran
+
+
 class SlideContent(BaseModel):
     """Validated slide content — used at save time."""
 
@@ -73,6 +95,7 @@ class SlideContent(BaseModel):
     bg_color: str | None = None
     # Slide intent — communication purpose (set by template suggestion, optional)
     intent: str | None = None  # "inform"|"compare"|"sequence"|"highlight_metric"|"persuade"|etc.
+    sizing: SlideSizing = Field(default_factory=SlideSizing)
 
 
 # ── Outline ──
@@ -83,6 +106,7 @@ class OutlineItem(BaseModel):
 
     title: str
     bullets: list[str] = Field(default_factory=list)
+    detailed_content: str | None = None  # Preserves detailed user data per section
 
 
 # ── Theme ──
@@ -171,6 +195,7 @@ class SlideRead(BaseModel):
     content_json: list | dict
     root_image: dict | None = None
     bg_color: str | None = None
+    sizing: dict | None = None
     speaker_notes: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -297,3 +322,15 @@ class AssetRead(BaseModel):
     height: int | None = None
     byte_size: int | None = None
     created_at: datetime
+
+
+class AssetReadWithUrl(AssetRead):
+    """Asset with a presigned download URL."""
+
+    url: str | None = None
+
+
+class AssetUrlResponse(BaseModel):
+    """Response for refreshing an asset's presigned URL."""
+
+    url: str

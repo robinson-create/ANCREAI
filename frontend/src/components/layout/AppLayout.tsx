@@ -93,20 +93,7 @@ export function NewAppLayout() {
             </header>
           )}
 
-          {!isMobile && !hideHeader && (
-          <header className="relative z-10 flex items-center justify-between h-14 px-6 border-b border-border bg-surface-elevated shrink-0">
-            <div />
-            <Button
-              variant="premium"
-              size="sm"
-              onClick={() => setCreateOpen(true)}
-              className="gap-2"
-            >
-              <Plus className="h-4 w-4" />
-              Créer
-            </Button>
-            </header>
-          )}
+          {/* Desktop header removed — each page provides its own header/actions */}
           <main className="relative z-10 flex-1 overflow-auto">
             <Outlet />
           </main>

@@ -2,14 +2,18 @@
 
 import asyncio
 import json
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from arq import ArqRedis, create_pool
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import select
 
 from app.deps import CurrentUser, DbSession
+from app.models.presentation import AssetKind, AssetStatus, PresentationAsset
 from app.schemas.presentation import (
+    AssetReadWithUrl,
+    AssetUrlResponse,
     ExportRead,
     ExportRequest,
     GenerateOutlineRequest,
@@ -27,6 +31,7 @@ from app.schemas.presentation import (
     ThemeRead,
 )
 from app.services.presentation import presentation_service
+from app.services.storage import storage_service
 
 router = APIRouter()
 
@@ -51,7 +56,47 @@ async def _to_read(db, user, pres) -> PresentationRead:
     loaded = await presentation_service.get(
         db, user.tenant_id, pres.id, with_slides=True
     )
-    return PresentationRead.model_validate(loaded)
+    read = PresentationRead.model_validate(loaded)
+    await _resolve_slide_asset_urls(db, user.tenant_id, read)
+    return read
+
+
+async def _resolve_slide_asset_urls(
+    db,
+    tenant_id: UUID,
+    pres_read: PresentationRead,
+) -> None:
+    """Resolve presigned URLs for root_image asset_ids in slides."""
+    if not pres_read.slides:
+        return
+
+    # Collect all asset IDs from root_image fields
+    asset_ids: list[UUID] = []
+    for slide in pres_read.slides:
+        if slide.root_image and slide.root_image.get("asset_id"):
+            try:
+                asset_ids.append(UUID(slide.root_image["asset_id"]))
+            except (ValueError, TypeError):
+                pass
+
+    if not asset_ids:
+        return
+
+    # Fetch all assets in one query
+    result = await db.execute(
+        select(PresentationAsset)
+        .where(PresentationAsset.id.in_(asset_ids))
+        .where(PresentationAsset.tenant_id == tenant_id)
+    )
+    assets_by_id = {str(a.id): a for a in result.scalars().all()}
+
+    # Resolve presigned URLs
+    for slide in pres_read.slides:
+        if slide.root_image and slide.root_image.get("asset_id"):
+            asset = assets_by_id.get(slide.root_image["asset_id"])
+            if asset and asset.s3_key:
+                url = await storage_service.get_presigned_url(asset.s3_key, expires_in=3600)
+                slide.root_image["url"] = url
 
 
 # ══════════════════════════════════════════════
@@ -95,7 +140,9 @@ async def get_presentation(
     pres = _ensure_found(
         await presentation_service.get(db, user.tenant_id, pres_id, with_slides=True)
     )
-    return PresentationRead.model_validate(pres)
+    read = PresentationRead.model_validate(pres)
+    await _resolve_slide_asset_urls(db, user.tenant_id, read)
+    return read
 
 
 @router.patch("/{pres_id}", response_model=PresentationRead)
@@ -149,13 +196,18 @@ async def generate_outline(
     user: CurrentUser,
     db: DbSession,
 ) -> dict:
-    """Enqueue outline generation job."""
+    """Enqueue direct generation job (split + slides in one pass).
+
+    NOTE: endpoint name kept as /outline/generate for frontend compatibility.
+    Internally, this now enqueues the direct generation job which splits
+    the prompt and generates slides without a separate outline step.
+    """
     pres = _ensure_found(await presentation_service.get(db, user.tenant_id, pres_id))
-    pres.status = "generating_outline"
+    pres.status = "generating_slides"
     await db.commit()
     redis = await _get_redis()
     job = await redis.enqueue_job(
-        "generate_presentation_outline",
+        "generate_presentation_slides_direct",
         str(pres_id),
         str(user.tenant_id),
         request.model_dump(),
@@ -419,3 +471,178 @@ async def presentation_events(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ══════════════════════════════════════════════
+#  Assets — Image upload / management
+# ══════════════════════════════════════════════
+
+_ALLOWED_IMAGE_MIMES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+_MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+
+@router.post(
+    "/{presentation_id}/assets/upload",
+    response_model=AssetReadWithUrl,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_asset(
+    presentation_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+    file: UploadFile,
+) -> AssetReadWithUrl:
+    """Upload an image to a presentation."""
+    pres = await presentation_service.get(db, user.tenant_id, presentation_id)
+    _ensure_found(pres, "Présentation introuvable.")
+
+    # Validate MIME type
+    content_type = file.content_type or "application/octet-stream"
+    if content_type not in _ALLOWED_IMAGE_MIMES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Type de fichier non supporté : {content_type}. "
+                   f"Formats acceptés : JPEG, PNG, WebP, GIF.",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Fichier vide.",
+        )
+
+    if len(content) > _MAX_IMAGE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Fichier trop volumineux ({len(content) // (1024*1024)} MB). Maximum : 10 MB.",
+        )
+
+    # Build a unique filename
+    asset_id = uuid4()
+    original_name = file.filename or "image"
+    ext = original_name.rsplit(".", 1)[-1] if "." in original_name else "jpg"
+    filename = f"{asset_id}.{ext}"
+
+    # Upload to S3
+    s3_key, content_hash, file_size = await storage_service.upload_file(
+        tenant_id=user.tenant_id,
+        collection_id=presentation_id,
+        filename=filename,
+        content=content,
+        content_type=content_type,
+    )
+
+    # Create DB record
+    asset = PresentationAsset(
+        id=asset_id,
+        tenant_id=user.tenant_id,
+        presentation_id=presentation_id,
+        kind=AssetKind.IMAGE.value,
+        status=AssetStatus.READY.value,
+        s3_key=s3_key,
+        mime=content_type,
+        byte_size=file_size,
+        checksum=content_hash,
+    )
+    db.add(asset)
+    await db.commit()
+    await db.refresh(asset)
+
+    # Generate presigned URL
+    url = await storage_service.get_presigned_url(s3_key, expires_in=3600)
+
+    return AssetReadWithUrl.model_validate(asset, update={"url": url})
+
+
+@router.get(
+    "/{presentation_id}/assets",
+    response_model=list[AssetReadWithUrl],
+)
+async def list_assets(
+    presentation_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> list[AssetReadWithUrl]:
+    """List all assets for a presentation."""
+    pres = await presentation_service.get(db, user.tenant_id, presentation_id)
+    _ensure_found(pres, "Présentation introuvable.")
+
+    result = await db.execute(
+        select(PresentationAsset)
+        .where(PresentationAsset.presentation_id == presentation_id)
+        .where(PresentationAsset.tenant_id == user.tenant_id)
+        .order_by(PresentationAsset.created_at.desc())
+    )
+    assets = result.scalars().all()
+
+    items: list[AssetReadWithUrl] = []
+    for asset in assets:
+        url = None
+        if asset.s3_key:
+            url = await storage_service.get_presigned_url(asset.s3_key, expires_in=3600)
+        items.append(AssetReadWithUrl.model_validate(asset, update={"url": url}))
+
+    return items
+
+
+@router.get(
+    "/{presentation_id}/assets/{asset_id}/url",
+    response_model=AssetUrlResponse,
+)
+async def get_asset_url(
+    presentation_id: UUID,
+    asset_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> AssetUrlResponse:
+    """Get a fresh presigned URL for an asset (used for expired URL refresh)."""
+    result = await db.execute(
+        select(PresentationAsset)
+        .where(PresentationAsset.id == asset_id)
+        .where(PresentationAsset.presentation_id == presentation_id)
+        .where(PresentationAsset.tenant_id == user.tenant_id)
+    )
+    asset = result.scalar_one_or_none()
+    _ensure_found(asset, "Asset introuvable.")
+
+    if not asset.s3_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Asset sans fichier associé.",
+        )
+
+    url = await storage_service.get_presigned_url(asset.s3_key, expires_in=3600)
+    return AssetUrlResponse(url=url)
+
+
+@router.delete(
+    "/{presentation_id}/assets/{asset_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_asset(
+    presentation_id: UUID,
+    asset_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> None:
+    """Delete an asset (S3 file + DB record)."""
+    result = await db.execute(
+        select(PresentationAsset)
+        .where(PresentationAsset.id == asset_id)
+        .where(PresentationAsset.presentation_id == presentation_id)
+        .where(PresentationAsset.tenant_id == user.tenant_id)
+    )
+    asset = result.scalar_one_or_none()
+    _ensure_found(asset, "Asset introuvable.")
+
+    # Delete from S3
+    if asset.s3_key:
+        try:
+            await storage_service.delete_file(asset.s3_key)
+        except Exception:
+            pass  # S3 delete failure is non-blocking
+
+    # Delete DB record
+    await db.delete(asset)
+    await db.commit()
