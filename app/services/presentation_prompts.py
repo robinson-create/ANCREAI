@@ -1046,13 +1046,14 @@ Langue : {{LANGUAGE}}. Style : {{TONE}}.
 </PROS-CONS>
 ```
 
-13. QUOTE : Citation (variant: large|side-icon)
+13. QUOTE : Citation (variant: large|side-icon|sidebar)
 ```xml
 <QUOTE variant="large">
   <P>La citation impactante.</P>
   <P>— Auteur</P>
 </QUOTE>
 ```
+"sidebar" : barre latérale foncée avec citation — rendu impactant pour preuve ou hook.
 
 14. CHART : Données (charttype: bar|pie|line|donut|area|radar|funnel|treemap)
 ```xml
@@ -1075,6 +1076,12 @@ Langue : {{LANGUAGE}}. Style : {{TONE}}.
   <DIV><IMG query="description détaillée" /><P>Légende</P></DIV>
 </IMAGE-GALLERY>
 ```
+
+17. BADGE : Étiquette courte (max 15 caractères)
+```xml
+<BADGE color="primary">Q1 2026</BADGE>
+```
+color: "primary"|"accent"|"secondary"|"muted". Utile pour indiquer une phase, un statut, ou un label de slide.
 
 ## IMAGES
 ```xml
@@ -1118,7 +1125,7 @@ DONNÉES RÉALISTES :
 3. Le nombre d'items DOIT être entre {{MIN_ITEMS}} et {{MAX_ITEMS}}
 4. {{IMAGE_RULE}}
 5. Titres COURTS et PERCUTANTS (max 10 mots)
-6. Descriptions RICHES avec TOUTES les données concrètes du prompt. Pas de limite stricte de mots — inclure les détails fournis par l'utilisateur.
+6. Descriptions CONCISES mais concrètes. Chaque P dans un item : MAX 2 phrases courtes (~25 mots). Privilégier les données chiffrées (%, €, x) aux longues explications. Si un item a trop de contenu, DÉCOUPER en 2 items séparés.
 7. NE PAS répéter le contenu des slides précédents
 8. Utilise UNIQUEMENT les tags XML définis ci-dessus
 9. PRÉSERVE les données exactes : chiffres, pourcentages, noms propres, statistiques, URLs. Ne résume pas — copie les données.

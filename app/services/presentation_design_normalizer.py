@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 
 # ── Normalization limits ──
 
-MAX_TITLE_WORDS = 18
-MAX_DESCRIPTION_WORDS = 120  # ~600 chars, allow richer content per block
-MAX_CARD_DESCRIPTION_WORDS = 90  # ~450 chars per card body
-MAX_ITEMS_IN_GROUP = 8  # Supports up to 8 items (cards, timeline steps, etc.)
+MAX_TITLE_WORDS = 12
+MAX_DESCRIPTION_WORDS = 60  # ~300 chars, concise descriptions
+MAX_CARD_DESCRIPTION_WORDS = 40  # ~200 chars per card body
+MAX_ITEMS_IN_GROUP = 6  # Max 6 items (cards, timeline steps, etc.)
 MAX_ICONS_PER_SLIDE = 8  # Allow more icons
-MAX_TOP_LEVEL_BLOCKS = 6  # title + 4-5 content blocks for richer slides
+MAX_TOP_LEVEL_BLOCKS = 5  # title + 3-4 content blocks
 MAX_HEADING_LEVELS = 2  # Only h1/h2 + h3 — no h4/h5/h6 in presentation slides
 
 

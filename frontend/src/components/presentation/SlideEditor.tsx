@@ -17,12 +17,12 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { presentationsApi } from "@/api/presentations"
-import type { Slide, SlideNode, SlideUpdate, ThemeData } from "@/types"
+import type { Slide, SlideNode, SlideUpdate, ThemeData, FooterConfig } from "@/types"
 import {
   SLIDE_REF_WIDTH, SLIDE_REF_HEIGHT, CARD_INNER_MAX,
   DEFAULT_THEME,
   buildThemeCSSVars, buildSizingCSSVars, resolveChartColors,
-  SlideNodeRenderer,
+  SlideNodeRenderer, SlideFooter,
 } from "./SlideRenderer"
 
 // ── Types ──
@@ -31,6 +31,7 @@ interface SlideEditorProps {
   presentationId: string
   slide: Slide
   themeData: ThemeData | null
+  footer?: FooterConfig | null
   onSlideUpdate: (slideId: string, update: SlideUpdate) => void
 }
 
@@ -103,6 +104,7 @@ export function SlideEditor({
   presentationId,
   slide,
   themeData,
+  footer,
   onSlideUpdate,
 }: SlideEditorProps) {
   const [localNotes, setLocalNotes] = useState(slide.speaker_notes || "")
@@ -480,6 +482,8 @@ export function SlideEditor({
               )}
             </div>
           )}
+
+          <SlideFooter footer={footer} />
         </div>
       </div>
 

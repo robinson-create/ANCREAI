@@ -4,9 +4,9 @@ import {
   SLIDE_REF_WIDTH, SLIDE_REF_HEIGHT, CARD_INNER_MAX,
   DEFAULT_THEME,
   buildThemeCSSVars, buildSizingCSSVars, resolveChartColors,
-  SlideNodeRenderer,
+  SlideNodeRenderer, SlideFooter,
 } from "./SlideRenderer"
-import type { Slide, SlideNode, ThemeData } from "@/types"
+import type { Slide, SlideNode, ThemeData, FooterConfig } from "@/types"
 
 interface SlidePreviewCardProps {
   slide: Slide
@@ -14,6 +14,7 @@ interface SlidePreviewCardProps {
   isSelected: boolean
   onClick: () => void
   themeData?: ThemeData | null
+  footer?: FooterConfig | null
 }
 
 // Thumbnail renders a 960x540 canvas scaled down to this width
@@ -27,6 +28,7 @@ export function SlidePreviewCard({
   isSelected,
   onClick,
   themeData,
+  footer,
 }: SlidePreviewCardProps) {
   const theme = themeData ?? DEFAULT_THEME
   const cssVars = useMemo(() => buildThemeCSSVars(theme), [theme])
@@ -114,6 +116,8 @@ export function SlidePreviewCard({
                 ))}
               </div>
             )}
+
+            <SlideFooter footer={footer} />
           </div>
         </div>
       </div>

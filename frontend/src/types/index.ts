@@ -411,6 +411,8 @@ export interface SlideNode {
   // Icon fields — resolved by backend, rendered by frontend
   icon_name?: string // Exact Lucide name: "Rocket", "Shield", "TrendingUp"
   icon_role?: "inline" | "card" | "section" | "hero" // Sizing hint
+  // Color for badge/pill
+  color?: string
 }
 
 export interface RootImage {
@@ -461,10 +463,17 @@ export interface OutlineItem {
   bullets: string[]
 }
 
+export interface FooterConfig {
+  enabled: boolean
+  text: string
+  style?: "minimal" | "accent"
+}
+
 export interface PresentationSettings {
   language?: string
   style?: string
   slide_count?: number
+  footer?: FooterConfig | null
 }
 
 export interface PresentationFull {
@@ -532,10 +541,17 @@ export interface ThemeFonts {
   body: string
 }
 
+export interface DesignTokens {
+  shadow_level: "none" | "soft" | "medium"
+  card_style: "flat" | "outline" | "soft-elevated"
+  accent_usage: "minimal" | "balanced" | "strong"
+}
+
 export interface ThemeData {
   colors: ThemeColors
   fonts: ThemeFonts
   border_radius: string
+  design_tokens?: DesignTokens
 }
 
 export interface ThemeRead {

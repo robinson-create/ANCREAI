@@ -2,13 +2,14 @@ import { useMemo } from "react"
 import { ChevronUp, ChevronDown, Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { SlidePreviewCard } from "./SlidePreviewCard"
-import type { Slide, ThemeData } from "@/types"
+import type { Slide, ThemeData, FooterConfig } from "@/types"
 
 interface SlidePanelProps {
   slides: Slide[]
   slideOrder: string[]
   selectedSlideId: string | null
   themeData?: ThemeData | null
+  footer?: FooterConfig | null
   onSelectSlide: (id: string) => void
   onAddSlide: () => void
   onDeleteSlide: (id: string) => void
@@ -20,6 +21,7 @@ export function SlidePanel({
   slideOrder,
   selectedSlideId,
   themeData,
+  footer,
   onSelectSlide,
   onAddSlide,
   onDeleteSlide,
@@ -47,6 +49,7 @@ export function SlidePanel({
               isSelected={slide.id === selectedSlideId}
               onClick={() => onSelectSlide(slide.id)}
               themeData={themeData}
+              footer={footer}
             />
 
             {/* Hover actions */}

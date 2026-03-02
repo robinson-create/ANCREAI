@@ -138,6 +138,14 @@ class DesignTokens(BaseModel):
     accent_usage: Literal["minimal", "balanced", "strong"] = "balanced"
 
 
+class FooterConfig(BaseModel):
+    """Persistent footer displayed on every slide (presentation-level setting)."""
+
+    enabled: bool = False
+    text: str = ""
+    style: Literal["minimal", "accent"] = "minimal"
+
+
 class ThemeData(BaseModel):
     """Theme properties stored in presentation_themes.theme_data."""
 

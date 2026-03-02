@@ -442,6 +442,7 @@ export function PresentationEditorPage() {
               slideOrder={pres.slide_order}
               selectedSlideId={selectedSlideId}
               themeData={pres.theme?.theme_data}
+              footer={pres.settings?.footer}
               onSelectSlide={setSelectedSlideId}
               onAddSlide={() => addSlideMutation.mutate()}
               onDeleteSlide={handleDeleteSlide}
@@ -455,6 +456,7 @@ export function PresentationEditorPage() {
                   presentationId={pres.id}
                   slide={selectedSlide}
                   themeData={pres.theme?.theme_data ?? null}
+                  footer={pres.settings?.footer}
                   onSlideUpdate={handleSlideUpdate}
                 />
               ) : (

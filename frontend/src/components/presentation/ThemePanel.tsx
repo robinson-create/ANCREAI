@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Check, Plus, X, Palette } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -148,6 +148,15 @@ export function ThemePanel({
     queryFn: presentationsApi.listThemes,
   })
 
+  const builtinThemes = useMemo(
+    () => (themes ?? []).filter((t) => t.is_builtin),
+    [themes],
+  )
+  const customThemes = useMemo(
+    () => (themes ?? []).filter((t) => !t.is_builtin),
+    [themes],
+  )
+
   const applyThemeMutation = useMutation({
     mutationFn: (themeId: string) => presentationsApi.applyTheme(presentationId, themeId),
     onSuccess: () => {
@@ -243,29 +252,39 @@ export function ThemePanel({
       <ScrollArea className="flex-1">
         {tab === "presets" ? (
           <div className="p-3 space-y-4">
-            {/* Built-in presets */}
+            {/* Built-in presets from DB (with hardcoded fallback) */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">Thèmes prédéfinis</Label>
               <div className="grid grid-cols-2 gap-2">
-                {BUILTIN_THEMES.map((preset) => (
-                  <ThemePreview
-                    key={preset.name}
-                    name={preset.name}
-                    colors={preset.colors}
-                    isSelected={false}
-                    onClick={() => handleApplyBuiltin(preset)}
-                  />
-                ))}
+                {builtinThemes.length > 0
+                  ? builtinThemes.map((theme) => (
+                      <ThemePreview
+                        key={theme.id}
+                        name={theme.name}
+                        colors={theme.theme_data.colors}
+                        isSelected={currentThemeId === theme.id}
+                        onClick={() => applyThemeMutation.mutate(theme.id)}
+                      />
+                    ))
+                  : BUILTIN_THEMES.map((preset) => (
+                      <ThemePreview
+                        key={preset.name}
+                        name={preset.name}
+                        colors={preset.colors}
+                        isSelected={false}
+                        onClick={() => handleApplyBuiltin(preset)}
+                      />
+                    ))}
               </div>
             </div>
 
             {/* Custom themes from DB */}
-            {themes && themes.length > 0 && (
+            {customThemes.length > 0 && (
               <div>
                 <Separator className="mb-3" />
                 <Label className="text-xs text-muted-foreground mb-2 block">Vos thèmes</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {themes.map((theme) => (
+                  {customThemes.map((theme) => (
                     <ThemePreview
                       key={theme.id}
                       name={theme.name}

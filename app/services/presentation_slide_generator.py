@@ -180,15 +180,15 @@ def _build_slide_constraints(plan: SlidePlan) -> str:
         if plan.preferred_component:
             parts.append(f"- Composant PRÉFÉRÉ (utiliser en priorité) : {plan.preferred_component}")
             _COMP_HINTS: dict[str, str] = {
-                "STATS": "Utilise des valeurs percutantes (+XX%, XM€, xN). Variant 'bar' ou 'circle'.",
-                "BOXES": "Utilise variant 'sideline' (bord coloré) ou 'icons' (avec <ICON>). Chaque item avec donnée concrète.",
-                "TIMELINE": "Utilise variant 'pills'. Chaque étape datée ou numérotée avec livrable concret.",
+                "STATS": "Valeurs percutantes (+XX%, XM€, xN). Chaque item : valeur + légende courte (10 mots max). Variant 'bar' ou 'circle'.",
+                "BOXES": "CHAQUE item DOIT avoir un <ICON query=\"...\">. Descriptions courtes (2 phrases max, ~25 mots). Variant 'sideline' ou 'icons'.",
+                "TIMELINE": "Variant 'pills'. Chaque étape : H3 daté/numéroté + P de 1-2 phrases (~20 mots). MAX 4 étapes.",
                 "COMPARE": "Exactement 2 DIV. Chaque côté avec titre + 3-4 arguments chiffrés.",
-                "BULLETS": "Variant 'numbered' ou 'arrow'. Points de synthèse percutants.",
+                "BULLETS": "Variant 'numbered' ou 'arrow'. Points de synthèse percutants (~20 mots chacun).",
                 "QUOTE": "Variant 'large'. Citation impactante avec attribution.",
                 "CHART": "4-6 data points réalistes. Pas d'étiquettes abstraites.",
-                "ICONS": "Chaque item avec <ICON query=\"terme\"> + H3 + P descriptif.",
-                "STAIRCASE": "Progression claire par paliers numérotés.",
+                "ICONS": "CHAQUE item DOIT avoir <ICON query=\"...\"> + H3 court (5 mots max) + P concis (~20 mots).",
+                "STAIRCASE": "Progression claire par paliers numérotés. MAX 4 paliers, ~20 mots par description.",
             }
             hint = _COMP_HINTS.get(plan.preferred_component)
             if hint:

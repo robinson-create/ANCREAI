@@ -281,6 +281,7 @@ def _make_stats(node: XMLNode) -> dict:
             items.append({
                 "type": "stats_item",
                 "value": value,
+                "variant": variant,
                 "children": item_children or [{"type": "p", "children": [{"text": ""}]}],
             })
     return {
@@ -376,6 +377,7 @@ def _make_image_gallery(node: XMLNode) -> dict:
             item: dict[str, Any] = {
                 "type": "image_gallery_item",
                 "query": query,
+                "variant": variant,
                 "children": caption_children or [{"type": "p", "children": [{"text": ""}]}],
             }
             items.append(item)
@@ -394,6 +396,19 @@ def _make_columns(node: XMLNode) -> list[dict]:
         if child.tag.upper() == "DIV":
             results.extend(_process_div_children(child))
     return results
+
+
+# ── Badge ──
+
+
+def _make_badge(node: XMLNode) -> dict:
+    color = node.attributes.get("color", "primary")
+    text = _get_text_content(node)
+    return {
+        "type": "badge",
+        "color": color,
+        "children": [{"text": text}],
+    }
 
 
 # ── LI handling ──
@@ -480,6 +495,7 @@ _TOP_LEVEL_DISPATCH.update({
     "TABLE": _make_table,
     "IMAGE-GALLERY": _make_image_gallery,
     "IMAGEGALLERY": _make_image_gallery,
+    "BADGE": _make_badge,
 })
 
 

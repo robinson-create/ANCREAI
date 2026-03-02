@@ -1632,6 +1632,7 @@ class PresentationService:
         if theme_data:
             colors = theme_data.get("colors", {})
             fonts = theme_data.get("fonts", {})
+            tokens = theme_data.get("design_tokens", {})
             parts.append(
                 f"\n## THÈME ACTIF\n"
                 f"- Couleur primaire : {colors.get('primary', '#6C63FF')}\n"
@@ -1639,6 +1640,8 @@ class PresentationService:
                 f"- Couleur accent : {colors.get('accent', '#FF6584')}\n"
                 f"- Police titres : {fonts.get('heading', 'Inter')}\n"
                 f"- Police corps : {fonts.get('body', 'Inter')}\n"
+                f"- Style de cartes : {tokens.get('card_style', 'soft-elevated')}\n"
+                f"- Utilisation accent : {tokens.get('accent_usage', 'balanced')}\n"
             )
 
         icon_names = get_icon_names_for_prompt()

@@ -14,10 +14,10 @@ from app.services.presentation_template_registry import TemplateDefinition
 
 logger = logging.getLogger(__name__)
 
-# Approximate char-to-surface ratios (based on 1280x720 slide)
+# Approximate char-to-surface ratios (based on 960x540 slide)
 _AVG_CHAR_WIDTH_PX = 8  # ~14px font, Inter (default for "M")
 _AVG_LINE_HEIGHT_PX = 22
-_SLIDE_CONTENT_AREA = 1152 * 624  # Usable area (with margins)
+_SLIDE_CONTENT_AREA = 880 * 480  # Usable area (with margins)
 
 # Font-scale-aware surface factors
 _FONT_SCALE_FACTORS: dict[str, dict[str, float]] = {

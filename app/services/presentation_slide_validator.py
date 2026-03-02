@@ -58,8 +58,8 @@ COUNTABLE_GROUP_TYPES: dict[str, str] = {
 # Non-countable group types (fixed structure, not item-based)
 FIXED_STRUCTURE_TYPES = {"compare_group", "before_after_group", "pros_cons_group", "quote", "chart", "table", "columns"}
 
-MAX_TITLE_WORDS = 18
-MAX_DESCRIPTION_WORDS = 120
+MAX_TITLE_WORDS = 12
+MAX_DESCRIPTION_WORDS = 60
 
 
 @dataclass

@@ -12,7 +12,7 @@ import {
   ScatterChart, Scatter, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
   ResponsiveContainer,
 } from "recharts"
-import type { SlideNode, TextLeaf, ThemeData, SlideSizing } from "@/types"
+import type { SlideNode, TextLeaf, ThemeData, SlideSizing, DesignTokens, FooterConfig } from "@/types"
 
 // ── Constants ──
 
@@ -23,8 +23,8 @@ export const CARD_INNER_MAX: Record<string, number> = { S: 640, M: 800, L: 920 }
 
 export const FONT_SCALE_MAP: Record<string, Record<string, string>> = {
   L: { h1: "40px", h2: "35px", h3: "24px", p: "17px" },
-  M: { h1: "32px", h2: "28px", h3: "21px", p: "15px" },
-  S: { h1: "25px", h2: "21px", h3: "17px", p: "13px" },
+  M: { h1: "32px", h2: "28px", h3: "19px", p: "14px" },
+  S: { h1: "25px", h2: "21px", h3: "15px", p: "12px" },
 }
 
 export const BLOCK_SPACING_MAP: Record<string, string> = {
@@ -49,9 +49,36 @@ export const DEFAULT_THEME: ThemeData = {
   border_radius: "12px",
 }
 
+// ── Design tokens defaults & maps ──
+
+export const DEFAULT_DESIGN_TOKENS: DesignTokens = {
+  shadow_level: "soft",
+  card_style: "soft-elevated",
+  accent_usage: "balanced",
+}
+
+const SHADOW_MAP: Record<string, string> = {
+  none: "none",
+  soft: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
+  medium: "0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.08)",
+}
+
+const CARD_BORDER_MAP: Record<string, string> = {
+  flat: "none",
+  outline: "1px solid color-mix(in srgb, var(--pres-primary) 25%, transparent)",
+  "soft-elevated": "none",
+}
+
+const CARD_BG_MAP: Record<string, string> = {
+  flat: "transparent",
+  outline: "transparent",
+  "soft-elevated": "color-mix(in srgb, var(--pres-primary) 6%, transparent)",
+}
+
 // ── Theme & sizing CSS var builders ──
 
 export function buildThemeCSSVars(theme: ThemeData): React.CSSProperties {
+  const tokens = theme.design_tokens ?? DEFAULT_DESIGN_TOKENS
   return {
     "--pres-primary": theme.colors.primary,
     "--pres-secondary": theme.colors.secondary,
@@ -63,6 +90,9 @@ export function buildThemeCSSVars(theme: ThemeData): React.CSSProperties {
     "--pres-heading-font": `"${theme.fonts.heading}", system-ui, sans-serif`,
     "--pres-body-font": `"${theme.fonts.body}", system-ui, sans-serif`,
     "--pres-radius": theme.border_radius,
+    "--pres-shadow": SHADOW_MAP[tokens.shadow_level] ?? SHADOW_MAP.soft,
+    "--pres-card-border": CARD_BORDER_MAP[tokens.card_style] ?? CARD_BORDER_MAP["soft-elevated"],
+    "--pres-card-bg": CARD_BG_MAP[tokens.card_style] ?? CARD_BG_MAP["soft-elevated"],
   } as React.CSSProperties
 }
 
@@ -88,11 +118,29 @@ const ICON_ROLE_SIZES: Record<string, number> = {
   hero: 48,
 }
 
-export function SlideIcon({ iconName, role = "card" }: { iconName?: string | null; role?: string }) {
+export function SlideIcon({ iconName, role = "card", circled = false }: { iconName?: string | null; role?: string; circled?: boolean }) {
   if (!iconName) return null
   const IconComponent = (lucideIcons as Record<string, LucideIcon>)[iconName]
   if (!IconComponent) return null
   const size = ICON_ROLE_SIZES[role] ?? 24
+  if (circled) {
+    return (
+      <div
+        className="shrink-0 flex items-center justify-center rounded-full"
+        style={{
+          width: size + 16,
+          height: size + 16,
+          backgroundColor: "color-mix(in srgb, var(--pres-primary) 15%, transparent)",
+        }}
+      >
+        <IconComponent
+          size={size}
+          strokeWidth={size >= 32 ? 1.5 : 1.75}
+          style={{ color: "var(--pres-primary)" }}
+        />
+      </div>
+    )
+  }
   return (
     <IconComponent
       size={size}
@@ -210,11 +258,13 @@ export function SlideNodeRenderer({
   editable,
   onNodeChange,
   themeColors,
+  maxLines,
 }: {
   node: SlideNode
   editable: boolean
   onNodeChange?: (updated: SlideNode) => void
   themeColors: string[]
+  maxLines?: number
 }) {
   const handleChildTextChange = useCallback(
     (childIdx: number, text: string) => {
@@ -239,7 +289,7 @@ export function SlideNodeRenderer({
     [node, onNodeChange],
   )
 
-  const renderChildren = () =>
+  const renderChildren = (childMaxLines?: number) =>
     (node.children || []).map((child, i) => {
       if (isTextLeaf(child)) {
         return (
@@ -258,6 +308,7 @@ export function SlideNodeRenderer({
           editable={editable}
           onNodeChange={(updated) => handleChildNodeChange(i, updated)}
           themeColors={themeColors}
+          maxLines={childMaxLines ?? maxLines}
         />
       )
     })
@@ -312,7 +363,7 @@ export function SlideNodeRenderer({
     case "p":
       return (
         <p
-          className="leading-snug mb-1"
+          className={`leading-snug mb-1${maxLines ? ` line-clamp-${maxLines} overflow-hidden` : ""}`}
           style={{ fontSize: "var(--slide-p-size, 1em)", color: "var(--pres-text)", fontFamily: "var(--pres-body-font)" }}
         >
           {renderChildren()}
@@ -321,7 +372,7 @@ export function SlideNodeRenderer({
 
     // ── Lists ──
     case "bullet_group":
-      return <ul className="mb-1.5" style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.75rem)" }}>{renderChildren()}</ul>
+      return <ul className="mb-1.5" style={{ display: "flex", flexDirection: "column", gap: "var(--slide-block-gap, 0.5rem)" }}>{renderChildren()}</ul>
     case "bullet_item":
       return (
         <li
@@ -336,11 +387,11 @@ export function SlideNodeRenderer({
         </li>
       )
     case "icon_list":
-      return <div className="grid grid-cols-2 gap-1.5 mb-1.5">{renderChildren()}</div>
+      return <div className="grid grid-cols-2 gap-2 mb-1.5">{renderChildren()}</div>
     case "icon_list_item":
       return (
         <div
-          className="flex gap-1.5 items-start p-1.5"
+          className="flex gap-1.5 items-start p-2"
           style={{
             backgroundColor: "color-mix(in srgb, var(--pres-primary) 8%, transparent)",
             borderRadius: "var(--pres-radius)",
@@ -353,7 +404,8 @@ export function SlideNodeRenderer({
       const iconName = node.icon_name as string | undefined
       const iconRole = (node.icon_role as string) || "card"
       if (iconName) {
-        return <SlideIcon iconName={iconName} role={iconRole} />
+        const circled = iconRole === "card" || iconRole === "section"
+        return <SlideIcon iconName={iconName} role={iconRole} circled={circled} />
       }
       return <span className="text-sm" style={{ color: "var(--pres-primary)" }}>●</span>
     }
@@ -363,42 +415,43 @@ export function SlideNodeRenderer({
       const childCount = (node.children || []).filter(c => !isTextLeaf(c)).length
       const cols = childCount <= 2 ? "grid-cols-2"
         : childCount === 3 ? "grid-cols-3"
-        : childCount <= 4 ? "grid-cols-2"
+        : childCount === 4 ? "grid-cols-4"
         : "grid-cols-3"
-      return <div className={`grid ${cols} mb-1.5`} style={{ gap: "var(--slide-block-gap, 0.375rem)" }}>{renderChildren()}</div>
+      return <div className={`grid ${cols} mb-1.5`} style={{ gap: "var(--slide-block-gap, 0.5rem)" }}>{renderChildren()}</div>
     }
     case "box_item": {
       const variant = node.variant || "solid"
       if (variant === "outline") {
         return (
           <div
-            className="p-2 border-2 bg-transparent"
-            style={{ borderColor: "var(--pres-primary)", borderRadius: "var(--pres-radius)" }}
+            className="p-2.5 border-2 bg-transparent overflow-hidden"
+            style={{ borderColor: "var(--pres-primary)", borderRadius: "var(--pres-radius)", boxShadow: "var(--pres-shadow)" }}
           >
-            {renderChildren()}
+            {renderChildren(3)}
           </div>
         )
       }
       if (variant === "sideline") {
         return (
           <div
-            className="border-l-[3px] py-1.5 pl-2.5 pr-1.5"
+            className="border-l-[3px] py-2 pl-3 pr-2 overflow-hidden"
             style={{ borderLeftColor: "var(--pres-primary)" }}
           >
-            {renderChildren()}
+            {renderChildren(3)}
           </div>
         )
       }
       return (
         <div
-          className="p-2"
+          className="p-2.5 overflow-hidden"
           style={{
-            backgroundColor: "color-mix(in srgb, var(--pres-primary) 10%, transparent)",
+            backgroundColor: "var(--pres-card-bg, color-mix(in srgb, var(--pres-primary) 10%, transparent))",
             borderRadius: "var(--pres-radius)",
             borderLeft: "3px solid var(--pres-primary)",
+            boxShadow: "var(--pres-shadow)",
           }}
         >
-          {renderChildren()}
+          {renderChildren(3)}
         </div>
       )
     }
@@ -417,6 +470,7 @@ export function SlideNodeRenderer({
             borderColor: "color-mix(in srgb, var(--pres-primary) 30%, transparent)",
             borderRadius: "var(--pres-radius)",
             borderTop: "3px solid var(--pres-primary)",
+            boxShadow: "var(--pres-shadow)",
           }}
         >
           {renderChildren()}
@@ -534,9 +588,10 @@ export function SlideNodeRenderer({
         <div
           className="p-1.5 text-center w-full"
           style={{
-            backgroundColor: "color-mix(in srgb, var(--pres-primary) 15%, transparent)",
+            backgroundColor: "var(--pres-card-bg, color-mix(in srgb, var(--pres-primary) 15%, transparent))",
             borderRadius: "var(--pres-radius)",
             borderLeft: "3px solid var(--pres-primary)",
+            boxShadow: "var(--pres-shadow)",
           }}
         >
           {renderChildren()}
@@ -544,7 +599,27 @@ export function SlideNodeRenderer({
       )
 
     // ── Content ──
-    case "quote":
+    case "quote": {
+      const quoteVariant = node.variant || "large"
+      if (quoteVariant === "sidebar") {
+        return (
+          <div className="flex mb-1.5 overflow-hidden" style={{ borderRadius: "var(--pres-radius)" }}>
+            <div className="w-1.5 shrink-0" style={{ backgroundColor: "var(--pres-secondary)" }} />
+            <div
+              className="flex-1 py-3 px-4"
+              style={{ backgroundColor: "color-mix(in srgb, var(--pres-secondary) 8%, transparent)" }}
+            >
+              <div className="text-base font-serif leading-none mb-1" style={{ color: "var(--pres-secondary)" }}>&ldquo;</div>
+              <div
+                className="text-xs italic leading-relaxed"
+                style={{ color: "var(--pres-text)", fontFamily: "var(--pres-body-font)" }}
+              >
+                {renderChildren()}
+              </div>
+            </div>
+          </div>
+        )
+      }
       return (
         <blockquote className="py-2 text-center mb-1.5">
           <div className="text-xl font-serif leading-none mb-0.5" style={{ color: "var(--pres-primary)" }}>&ldquo;</div>
@@ -557,6 +632,7 @@ export function SlideNodeRenderer({
           <div className="text-xl font-serif leading-none mt-0.5" style={{ color: "var(--pres-primary)" }}>&rdquo;</div>
         </blockquote>
       )
+    }
     case "stats_group": {
       const childCount = (node.children || []).filter(c => !isTextLeaf(c)).length
       const cols = childCount <= 2 ? "grid-cols-2" : childCount === 3 ? "grid-cols-3" : "grid-cols-4"
@@ -596,6 +672,7 @@ export function SlideNodeRenderer({
           style={{
             borderColor: "color-mix(in srgb, var(--pres-primary) 25%, transparent)",
             borderRadius: "var(--pres-radius)",
+            boxShadow: "var(--pres-shadow)",
           }}
         >
           <div className="text-lg font-bold" style={{ color: "var(--pres-primary)" }}>
@@ -606,9 +683,30 @@ export function SlideNodeRenderer({
       )
     }
 
-    case "image_gallery_group":
-      return <div className="grid grid-cols-3 gap-1.5 mb-1.5">{renderChildren()}</div>
-    case "image_gallery_item":
+    case "image_gallery_group": {
+      const galleryVariant = node.variant || "3-col"
+      const isTeam = galleryVariant === "team"
+      const galleryChildCount = (node.children || []).filter(c => !isTextLeaf(c)).length
+      const galleryCols = isTeam
+        ? (galleryChildCount <= 3 ? `grid-cols-${galleryChildCount}` : galleryChildCount === 4 ? "grid-cols-4" : "grid-cols-3")
+        : "grid-cols-3"
+      return <div className={`grid ${galleryCols} gap-1.5 mb-1.5`}>{renderChildren()}</div>
+    }
+    case "image_gallery_item": {
+      const isTeamItem = node.variant === "team"
+      if (isTeamItem) {
+        return (
+          <div className="overflow-hidden flex flex-col items-center text-center">
+            <div
+              className="flex items-center justify-center rounded-full overflow-hidden w-16 h-16 mb-1 text-[10px]"
+              style={{ backgroundColor: "color-mix(in srgb, var(--pres-muted) 10%, transparent)", color: "var(--pres-muted)" }}
+            >
+              {node.query || "Photo"}
+            </div>
+            {renderChildren()}
+          </div>
+        )
+      }
       return (
         <div className="overflow-hidden border" style={{ borderRadius: "var(--pres-radius)" }}>
           <div
@@ -620,6 +718,7 @@ export function SlideNodeRenderer({
           {renderChildren()}
         </div>
       )
+    }
 
     // ── Charts (real recharts for supported types) ──
     case "chart-bar": {
@@ -752,6 +851,29 @@ export function SlideNodeRenderer({
     case "chart-heatmap":
       return <ChartPlaceholder type={node.type.replace("chart-", "")} />
 
+    // ── Badge ──
+    case "badge": {
+      const badgeColor = node.color || "primary"
+      const badgeColorMap: Record<string, string> = {
+        primary: "var(--pres-primary)",
+        accent: "var(--pres-accent)",
+        secondary: "var(--pres-secondary)",
+        muted: "var(--pres-muted)",
+      }
+      const bgRef = badgeColorMap[badgeColor] || badgeColorMap.primary
+      return (
+        <span
+          className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide mb-1"
+          style={{
+            backgroundColor: `color-mix(in srgb, ${bgRef} 15%, transparent)`,
+            color: bgRef,
+          }}
+        >
+          {renderChildren()}
+        </span>
+      )
+    }
+
     // ── Image ──
     case "img":
       return (
@@ -772,4 +894,27 @@ export function SlideNodeRenderer({
     default:
       return <div className="mb-1">{renderChildren()}</div>
   }
+}
+
+// ── Slide footer ──
+
+export function SlideFooter({ footer }: { footer?: FooterConfig | null }) {
+  if (!footer?.enabled || !footer.text) return null
+  return (
+    <div
+      className="absolute bottom-0 left-0 right-0 px-4 py-1 text-[8px] tracking-wide"
+      style={{
+        color: "var(--pres-muted)",
+        fontFamily: "var(--pres-body-font)",
+        backgroundColor: footer.style === "accent"
+          ? "color-mix(in srgb, var(--pres-secondary) 8%, transparent)"
+          : "transparent",
+        borderTop: footer.style === "accent"
+          ? "1px solid color-mix(in srgb, var(--pres-muted) 15%, transparent)"
+          : "none",
+      }}
+    >
+      {footer.text}
+    </div>
+  )
 }
