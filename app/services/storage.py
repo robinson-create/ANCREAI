@@ -79,6 +79,21 @@ class StorageService:
 
         return s3_key, content_hash, file_size
 
+    async def upload_file_raw(
+        self,
+        s3_key: str,
+        content: bytes,
+        content_type: str,
+    ) -> None:
+        """Upload raw content to an arbitrary S3 key (used for personal docs)."""
+        async with self._get_client() as client:
+            await client.put_object(
+                Bucket=self.bucket,
+                Key=s3_key,
+                Body=content,
+                ContentType=content_type,
+            )
+
     async def download_file(self, s3_key: str) -> bytes:
         """Download file from S3."""
         async with self._get_client() as client:

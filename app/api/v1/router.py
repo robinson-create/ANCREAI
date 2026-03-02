@@ -13,6 +13,7 @@ from app.api.v1 import (
     copilotkit,
     dictation,
     documents,
+    dossiers,
     folders,
     integrations,
     mail,
@@ -50,4 +51,5 @@ api_router.include_router(folders.router, prefix="/folders", tags=["folders"])
 api_router.include_router(agent_chat.router, prefix="/chat", tags=["agent-chat"])
 api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
 api_router.include_router(presentations.router, prefix="/presentations", tags=["presentations"])
+api_router.include_router(dossiers.router, prefix="/dossiers", tags=["dossiers"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

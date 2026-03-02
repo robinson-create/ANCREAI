@@ -1,5 +1,6 @@
 """FastAPI dependencies."""
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -12,8 +13,13 @@ from app.database import get_db
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.subscription import Subscription
+from app.models.org_member import OrgMember
+from app.models.assistant_permission import AssistantPermission
+from app.models.enums import OrgRole, MemberStatus
 from app.core.auth import clerk_auth
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 async def get_tenant_id(
@@ -54,7 +60,7 @@ async def get_current_tenant(
 async def get_or_create_dev_user(db: AsyncSession) -> User:
     """Get or create a dev user for local development."""
     dev_email = "dev@mecano-man.local"
-    
+
     # Check if dev user exists
     result = await db.execute(
         select(User)
@@ -62,16 +68,16 @@ async def get_or_create_dev_user(db: AsyncSession) -> User:
         .options(selectinload(User.subscription))
     )
     user = result.scalar_one_or_none()
-    
+
     if user:
         return user
-    
+
     # Create dev tenant
     from app.models.tenant import Tenant
     tenant = Tenant(name="Dev Tenant")
     db.add(tenant)
     await db.flush()
-    
+
     # Create dev user
     user = User(
         email=dev_email,
@@ -81,16 +87,29 @@ async def get_or_create_dev_user(db: AsyncSession) -> User:
     )
     db.add(user)
     await db.flush()
-    
-    # Create free subscription
+
+    # Create org membership (admin of own org)
+    org_member = OrgMember(
+        tenant_id=tenant.id,
+        user_id=user.id,
+        role=OrgRole.ADMIN.value,
+        status=MemberStatus.ACTIVE.value,
+    )
+    db.add(org_member)
+
+    # Create free subscription (dual-write: user_id + tenant_id)
     subscription = Subscription(
+        tenant_id=tenant.id,
         user_id=user.id,
         plan="free",
         status="active",
+        max_seats=1,
+        max_assistants=1,
+        max_org_documents=10,
     )
     db.add(subscription)
     await db.commit()
-    
+
     # Reload with subscription
     result = await db.execute(
         select(User)
@@ -188,8 +207,108 @@ async def get_current_user(
     return user
 
 
+# ---------------------------------------------------------------------------
+# OrgMember resolution
+# ---------------------------------------------------------------------------
+
+async def get_current_member(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> OrgMember:
+    """Resolve the OrgMember for the authenticated user in their current tenant.
+
+    During the transition period we use user.tenant_id (the legacy 1:1 link)
+    to find the membership. Once multi-org is supported, this will switch to
+    reading the tenant from a header or session.
+    """
+    result = await db.execute(
+        select(OrgMember).where(
+            OrgMember.tenant_id == user.tenant_id,
+            OrgMember.user_id == user.id,
+        )
+    )
+    member = result.scalar_one_or_none()
+
+    if not member:
+        # Fallback: auto-create for legacy users that predate the migration.
+        # This handles the edge case where the backfill missed a row.
+        logger.warning(
+            "OrgMember missing for user %s / tenant %s — creating admin fallback",
+            user.id, user.tenant_id,
+        )
+        member = OrgMember(
+            tenant_id=user.tenant_id,
+            user_id=user.id,
+            role=OrgRole.ADMIN.value,
+            status=MemberStatus.ACTIVE.value,
+        )
+        db.add(member)
+        await db.flush()
+
+    if member.status == MemberStatus.INACTIVE.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your seat has been deactivated. Contact your organization admin.",
+        )
+
+    if member.status == MemberStatus.INVITED.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your invitation is pending. Please complete the onboarding first.",
+        )
+
+    return member
+
+
+# ---------------------------------------------------------------------------
+# Permission helpers
+# ---------------------------------------------------------------------------
+
+async def require_admin(
+    member: OrgMember = Depends(get_current_member),
+) -> OrgMember:
+    """Dependency that ensures the current member is an admin."""
+    if not member.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return member
+
+
+async def check_assistant_access(
+    assistant_id: UUID,
+    member: OrgMember,
+    db: AsyncSession,
+) -> None:
+    """Verify the member has access to the given assistant.
+
+    Admins always have access. Members need an explicit AssistantPermission row.
+    Raises HTTP 403 if access is denied.
+    """
+    if member.is_admin:
+        return
+
+    result = await db.execute(
+        select(AssistantPermission.id).where(
+            AssistantPermission.assistant_id == assistant_id,
+            AssistantPermission.member_id == member.id,
+        )
+    )
+    if result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this assistant.",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Type aliases for dependency injection
+# ---------------------------------------------------------------------------
+
 TenantId = Annotated[UUID, Depends(get_tenant_id)]
 CurrentTenant = Annotated[Tenant, Depends(get_current_tenant)]
 CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentMember = Annotated[OrgMember, Depends(get_current_member)]
+AdminMember = Annotated[OrgMember, Depends(require_admin)]
 DbSession = Annotated[AsyncSession, Depends(get_db)]

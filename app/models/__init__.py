@@ -1,5 +1,6 @@
 """SQLAlchemy models package."""
 
+from app.models.enums import ContentScope, MemberStatus, OrgRole
 from app.models.tenant import Tenant
 from app.models.assistant import Assistant
 from app.models.collection import Collection, assistant_collections
@@ -7,6 +8,11 @@ from app.models.document import Document
 from app.models.chunk import Chunk
 from app.models.document_page import DocumentPage
 from app.models.message import Message
+from app.models.conversation import Conversation
+from app.models.org_member import OrgMember
+from app.models.assistant_permission import AssistantPermission
+from app.models.dossier import Dossier
+from app.models.dossier_document import DossierDocument, DossierDocumentStatus
 from app.models.usage import Usage
 from app.models.user import User
 from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
@@ -38,6 +44,11 @@ from app.models.presentation import (
 )
 
 __all__ = [
+    # Enums
+    "ContentScope",
+    "OrgRole",
+    "MemberStatus",
+    # Core
     "Tenant",
     "Assistant",
     "Collection",
@@ -46,6 +57,12 @@ __all__ = [
     "Chunk",
     "DocumentPage",
     "Message",
+    "Conversation",
+    "OrgMember",
+    "AssistantPermission",
+    "Dossier",
+    "DossierDocument",
+    "DossierDocumentStatus",
     "Usage",
     "User",
     "Subscription",

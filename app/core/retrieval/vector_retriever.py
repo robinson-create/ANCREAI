@@ -14,15 +14,17 @@ async def vector_search(
     collection_ids: list[UUID] | None,
     query_embedding: list[float],
     topk: int,
+    dossier_ids: list[UUID] | None = None,
 ) -> list[RetrievedChunk]:
     """Search chunks using Qdrant vector similarity.
 
-    Wraps the existing VectorStore.search() and maps results to RetrievedChunk.
+    Supports mixed org + personal scope via collection_ids and dossier_ids.
     """
     results = await vector_store.search(
         query_vector=query_embedding,
         tenant_id=tenant_id,
         collection_ids=collection_ids,
+        dossier_ids=dossier_ids,
         limit=topk,
         score_threshold=0.0,
     )

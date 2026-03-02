@@ -11,6 +11,8 @@ from app.config import get_settings
 from app.models.user import User
 from app.models.tenant import Tenant
 from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
+from app.models.org_member import OrgMember
+from app.models.enums import OrgRole, MemberStatus
 
 
 class ClerkAuth:
@@ -100,12 +102,27 @@ class ClerkAuth:
         )
         db.add(user)
 
-        # Create free subscription
+        # Create org membership — new user is admin of their own org
+        org_member = OrgMember(
+            id=uuid4(),
+            tenant_id=tenant.id,
+            user_id=user.id,
+            role=OrgRole.ADMIN.value,
+            status=MemberStatus.ACTIVE.value,
+            joined_at=user.created_at,
+        )
+        db.add(org_member)
+
+        # Create free subscription (dual-write: user_id + tenant_id)
         subscription = Subscription(
             id=uuid4(),
+            tenant_id=tenant.id,
             user_id=user.id,
             plan=SubscriptionPlan.FREE.value,
             status=SubscriptionStatus.ACTIVE.value,
+            max_seats=1,
+            max_assistants=1,
+            max_org_documents=10,
         )
         db.add(subscription)
 

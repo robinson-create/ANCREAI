@@ -16,6 +16,7 @@ from app.models.chunk import Chunk
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.document_page import DocumentPage
+from app.models.dossier_document import DossierDocument, DossierDocumentStatus
 from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncState, ScheduledEmail
 from app.services.embedding import embedding_service
 from app.services.mail.base import SendPayload
@@ -215,6 +216,142 @@ async def process_document(ctx: dict, document_id: str) -> dict:
     finally:
         await db.close()
 
+
+
+# ── Dossier document processing ───────────────────────────────────
+
+
+async def process_dossier_document(ctx: dict, document_id: str) -> dict:
+    """Process a personal dossier document: download, parse, chunk, embed, index.
+
+    Same pipeline as org documents but chunks are stored with scope='personal'
+    and personal metadata (user_id, dossier_id, dossier_document_id).
+    """
+    doc_uuid = UUID(document_id)
+    db = await get_db()
+
+    try:
+        result = await db.execute(
+            select(DossierDocument).where(DossierDocument.id == doc_uuid)
+        )
+        doc = result.scalar_one_or_none()
+
+        if not doc:
+            logger.error(f"DossierDocument {document_id} not found")
+            return {"error": "DossierDocument not found"}
+
+        # Update status
+        doc.status = DossierDocumentStatus.PROCESSING
+        await db.commit()
+
+        logger.info(f"Processing dossier document {document_id}: {doc.filename}")
+
+        # 1. Download from S3
+        content = await storage_service.download_file(doc.s3_key)
+
+        # 2. Parse document
+        from app.services.document_ai.document_parser import extract_document_content
+
+        parsed = await extract_document_content(content, doc.filename, doc.content_type)
+        doc.page_count = parsed.total_pages
+
+        # 3. Chunk
+        chunks = chunk_document(parsed)
+        doc.chunk_count = len(chunks)
+
+        if not chunks:
+            doc.status = DossierDocumentStatus.READY
+            doc.processed_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {"message": "No content to index", "chunks": 0}
+
+        # 4. Embed
+        chunk_texts = [c.content for c in chunks]
+        embeddings, tokens_used = await embedding_service.embed_texts(chunk_texts)
+        doc.tokens_used = tokens_used
+
+        # 5. Prepare chunks (scope='personal')
+        db_chunks = []
+        vector_chunks = []
+
+        for chunk, embedding in zip(chunks, embeddings):
+            db_chunk = Chunk(
+                scope="personal",
+                tenant_id=doc.tenant_id,
+                user_id=doc.user_id,
+                dossier_id=doc.dossier_id,
+                dossier_document_id=doc.id,
+                # document_id is NULL for personal chunks (no org Document)
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                content_hash=chunk.content_hash,
+                token_count=chunk.token_count,
+                content_tsv=sa_func.to_tsvector(settings.postgres_fts_config, chunk.content),
+                page_number=chunk.page_number,
+                start_offset=chunk.start_offset,
+                end_offset=chunk.end_offset,
+                section_title=chunk.section_title,
+            )
+            db.add(db_chunk)
+            db_chunks.append(db_chunk)
+
+            vector_chunks.append({
+                "id": str(db_chunk.id),
+                "vector": embedding,
+                "payload": {
+                    "scope": "personal",
+                    "tenant_id": str(doc.tenant_id),
+                    "user_id": str(doc.user_id),
+                    "dossier_id": str(doc.dossier_id),
+                    "dossier_document_id": str(doc.id),
+                    "document_filename": doc.filename,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "page_number": chunk.page_number,
+                    "section_title": chunk.section_title,
+                },
+            })
+
+        await db.flush()
+
+        for db_chunk, vec_chunk in zip(db_chunks, vector_chunks):
+            db_chunk.qdrant_id = vec_chunk["id"]
+            vec_chunk["id"] = str(db_chunk.id)
+
+        # 6. Index vectors
+        await vector_store.ensure_collection()
+        await vector_store.upsert_chunks(vector_chunks)
+
+        # 7. Done
+        doc.status = DossierDocumentStatus.READY
+        doc.processed_at = datetime.now(timezone.utc)
+        doc.error_message = None
+        await db.commit()
+
+        logger.info(
+            f"Dossier document {document_id} processed: "
+            f"{doc.page_count} pages, {len(chunks)} chunks, "
+            f"{tokens_used} tokens"
+        )
+        return {
+            "document_id": document_id,
+            "pages": doc.page_count,
+            "chunks": len(chunks),
+            "tokens_used": tokens_used,
+        }
+
+    except Exception as e:
+        logger.exception(f"Error processing dossier document {document_id}")
+        try:
+            doc.status = DossierDocumentStatus.FAILED
+            doc.error_message = str(e)[:2000]
+            await db.commit()
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+    finally:
+        await db.close()
 
 
 # ── Web crawl tasks ────────────────────────────────────────────────
@@ -818,6 +955,7 @@ async def startup(ctx: dict) -> None:
     """Worker startup hook."""
     logger.info("Worker starting up...")
     await vector_store.ensure_collection()
+    await vector_store.ensure_payload_indices()
 
     # Register all agent tools once at startup
     from app.core.tool_registry import register_builtin_tools
@@ -918,7 +1056,8 @@ class WorkerSettings:
     )
 
     functions = [
-        process_document, crawl_website, send_email, sync_mail_account, sync_thread, run_agent,
+        process_document, process_dossier_document, crawl_website,
+        send_email, sync_mail_account, sync_thread, run_agent,
         generate_presentation_slides_direct, generate_presentation_slides, export_presentation,
     ]
     cron_jobs = [

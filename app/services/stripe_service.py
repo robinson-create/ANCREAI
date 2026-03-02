@@ -67,6 +67,11 @@ class StripeService:
         # Ensure customer exists
         customer_id = await self.create_customer(db, user)
 
+        checkout_metadata = {
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id),
+        }
+
         session = stripe.checkout.Session.create(
             customer=customer_id,
             mode="subscription",
@@ -78,13 +83,9 @@ class StripeService:
             ],
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={
-                "user_id": str(user.id),
-            },
+            metadata=checkout_metadata,
             subscription_data={
-                "metadata": {
-                    "user_id": str(user.id),
-                }
+                "metadata": checkout_metadata,
             },
             allow_promotion_codes=True,
         )
@@ -113,6 +114,11 @@ class StripeService:
         """
         customer_id = await self.create_customer(db, user)
 
+        checkout_metadata = {
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id),
+        }
+
         session = stripe.checkout.Session.create(
             customer=customer_id,
             mode="subscription",
@@ -124,14 +130,10 @@ class StripeService:
             ],
             success_url=success_url,
             cancel_url=cancel_url,
-            metadata={
-                "user_id": str(user.id),
-            },
+            metadata=checkout_metadata,
             subscription_data={
                 "trial_period_days": trial_days,
-                "metadata": {
-                    "user_id": str(user.id),
-                },
+                "metadata": checkout_metadata,
             },
             allow_promotion_codes=True,
         )
@@ -170,12 +172,13 @@ class StripeService:
         session: stripe.checkout.Session,
     ) -> None:
         """Handle checkout.session.completed webhook event.
-        
+
         Args:
             db: Database session
             session: Stripe checkout session object
         """
         user_id = session.metadata.get("user_id")
+        tenant_id = session.metadata.get("tenant_id")
         if not user_id:
             return
 
@@ -200,6 +203,15 @@ class StripeService:
                 stripe_subscription.current_period_end, tz=timezone.utc
             )
             subscription.cancel_at_period_end = stripe_subscription.cancel_at_period_end
+
+            # Dual-write tenant_id
+            if tenant_id and not subscription.tenant_id:
+                subscription.tenant_id = UUID(tenant_id)
+
+            # Pro defaults
+            subscription.max_seats = 3
+            subscription.max_assistants = 3
+            subscription.max_org_documents = 999_999  # unlimited
 
         await db.commit()
 
@@ -277,6 +289,11 @@ class StripeService:
         subscription.current_period_start = None
         subscription.current_period_end = None
         subscription.cancel_at_period_end = False
+
+        # Reset to free tier limits
+        subscription.max_seats = 1
+        subscription.max_assistants = 1
+        subscription.max_org_documents = 10
 
         await db.commit()
 

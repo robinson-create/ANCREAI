@@ -38,12 +38,16 @@ class RetrievalService:
         collection_ids: list[UUID] | None = None,
         top_k: int | None = None,
         db: AsyncSession | None = None,
+        dossier_ids: list[UUID] | None = None,
     ) -> list[RetrievedChunk]:
         """Retrieve relevant chunks for a query.
 
         If a db session is provided, uses the full hybrid pipeline
         (keyword + vector + RRF + rerank). Otherwise falls back to
         vector-only search for backward compatibility.
+
+        Args:
+            dossier_ids: Personal dossier UUIDs to include in search scope.
         """
         if db is not None:
             from app.core.retrieval.orchestrator import retrieve_context
@@ -53,6 +57,7 @@ class RetrievalService:
                 tenant_id=tenant_id,
                 collection_ids=collection_ids,
                 query=query,
+                dossier_ids=dossier_ids,
             )
 
         # Fallback: vector-only (backward compat)
@@ -62,6 +67,7 @@ class RetrievalService:
             query_vector=query_vector,
             tenant_id=tenant_id,
             collection_ids=collection_ids,
+            dossier_ids=dossier_ids,
             limit=top_k or self.top_k,
             score_threshold=self.score_threshold,
         )

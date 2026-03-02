@@ -20,9 +20,34 @@ class QuotaService:
         self.settings = get_settings()
 
     async def get_subscription(self, db: AsyncSession, user_id: UUID) -> Subscription | None:
-        """Get user's subscription."""
+        """Get subscription by user_id (legacy — prefer get_subscription_for_tenant)."""
         result = await db.execute(
             select(Subscription).where(Subscription.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_subscription_for_tenant(
+        self, db: AsyncSession, tenant_id: UUID
+    ) -> Subscription | None:
+        """Get subscription by tenant_id (preferred).
+
+        Falls back to user_id-based lookup via the users table if tenant_id
+        column hasn't been backfilled yet.
+        """
+        # Primary: lookup by tenant_id directly
+        result = await db.execute(
+            select(Subscription).where(Subscription.tenant_id == tenant_id)
+        )
+        sub = result.scalar_one_or_none()
+        if sub:
+            return sub
+
+        # Fallback: find via user.tenant_id → subscription.user_id
+        from app.models.user import User
+        result = await db.execute(
+            select(Subscription)
+            .join(User, Subscription.user_id == User.id)
+            .where(User.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
 
@@ -62,29 +87,35 @@ class QuotaService:
         )
         return result.scalar_one() or 0
 
+    async def _resolve_subscription(
+        self, db: AsyncSession, user: User
+    ) -> Subscription | None:
+        """Resolve subscription: try tenant-based first, then user-based."""
+        return (
+            await self.get_subscription_for_tenant(db, user.tenant_id)
+            or await self.get_subscription(db, user.id)
+        )
+
     async def check_chat_allowed(
         self, db: AsyncSession, user: User
     ) -> tuple[bool, str | None]:
         """Check if user can send a chat message.
-        
+
         Returns:
             tuple of (allowed, error_message)
         """
-        subscription = await self.get_subscription(db, user.id)
+        subscription = await self._resolve_subscription(db, user)
 
         if subscription is None:
             return False, "Aucun abonnement trouvé"
 
-        # Pro users have unlimited access
-        if subscription.plan == SubscriptionPlan.PRO.value and subscription.status in (
-            SubscriptionStatus.ACTIVE.value,
-            SubscriptionStatus.TRIALING.value,
-        ):
+        # Pro orgs have unlimited access
+        if subscription.is_pro:
             return True, None
 
         # Free tier: check daily limit
         daily_usage = await self.get_daily_usage(db, user.id)
-        
+
         if daily_usage.chat_requests >= self.settings.free_daily_chat_limit:
             return (
                 False,
@@ -98,29 +129,27 @@ class QuotaService:
         self, db: AsyncSession, user: User
     ) -> tuple[bool, str | None]:
         """Check if user can upload a file.
-        
+
         Returns:
             tuple of (allowed, error_message)
         """
-        subscription = await self.get_subscription(db, user.id)
+        subscription = await self._resolve_subscription(db, user)
 
         if subscription is None:
             return False, "Aucun abonnement trouvé"
 
-        # Pro users have unlimited access
-        if subscription.plan == SubscriptionPlan.PRO.value and subscription.status in (
-            SubscriptionStatus.ACTIVE.value,
-            SubscriptionStatus.TRIALING.value,
-        ):
+        # Pro orgs have unlimited access
+        if subscription.is_pro:
             return True, None
 
-        # Free tier: check file limit
+        # Free tier: check file limit (use subscription.max_org_documents if set)
+        max_files = subscription.max_org_documents or self.settings.free_max_files
         doc_count = await self.get_document_count(db, user.tenant_id)
-        
-        if doc_count >= self.settings.free_max_files:
+
+        if doc_count >= max_files:
             return (
                 False,
-                f"Limite de fichiers atteinte ({doc_count}/{self.settings.free_max_files}). "
+                f"Limite de fichiers atteinte ({doc_count}/{max_files}). "
                 "Passez en Pro pour un accès illimité.",
             )
 
@@ -136,15 +165,19 @@ class QuotaService:
         self, db: AsyncSession, user: User
     ) -> dict:
         """Get current usage information for display.
-        
+
         Returns:
             dict with usage stats and limits
         """
-        subscription = await self.get_subscription(db, user.id)
+        subscription = await self._resolve_subscription(db, user)
         daily_usage = await self.get_daily_usage(db, user.id)
         doc_count = await self.get_document_count(db, user.tenant_id)
 
-        is_pro = subscription and subscription.plan == SubscriptionPlan.PRO.value
+        is_pro = subscription.is_pro if subscription else False
+        max_files = (
+            None if is_pro
+            else (subscription.max_org_documents if subscription else self.settings.free_max_files)
+        )
 
         return {
             "plan": subscription.plan if subscription else SubscriptionPlan.FREE.value,
@@ -158,9 +191,9 @@ class QuotaService:
                 else max(0, self.settings.free_daily_chat_limit - daily_usage.chat_requests)
             ),
             "total_files": doc_count,
-            "file_limit": None if is_pro else self.settings.free_max_files,
+            "file_limit": max_files,
             "files_remaining": (
-                None if is_pro else max(0, self.settings.free_max_files - doc_count)
+                None if is_pro else max(0, (max_files or 0) - doc_count)
             ),
         }
 

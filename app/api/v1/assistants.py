@@ -6,9 +6,11 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
-from app.deps import CurrentUser, DbSession
+from app.deps import AdminMember, CurrentMember, CurrentUser, DbSession, check_assistant_access
 from app.models.assistant import Assistant
+from app.models.assistant_permission import AssistantPermission
 from app.models.collection import Collection
+from app.models.org_member import OrgMember
 from app.models.subscription import SubscriptionPlan
 from app.integrations.nango.models import NangoConnection
 from app.schemas.assistant import (
@@ -53,14 +55,30 @@ def _assistant_query():
 @router.get("", response_model=list[AssistantReadWithCollections])
 async def list_assistants(
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
-    """List assistants for tenant with their collections and integrations."""
-    result = await db.execute(
+    """List assistants for tenant with their collections and integrations.
+
+    Admins see all assistants. Members only see those they have permission for.
+    """
+    query = (
         _assistant_query()
         .where(Assistant.tenant_id == user.tenant_id)
+    )
+
+    # Non-admin members: filter by AssistantPermission
+    if not member.is_admin:
+        query = (
+            query
+            .join(AssistantPermission, AssistantPermission.assistant_id == Assistant.id)
+            .where(AssistantPermission.member_id == member.id)
+        )
+
+    result = await db.execute(
+        query
         .order_by(Assistant.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -74,6 +92,7 @@ async def list_assistants(
 async def get_assistant(
     assistant_id: UUID,
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
 ) -> dict:
     """Get a specific assistant with its collections and integrations."""
@@ -89,6 +108,8 @@ async def get_assistant(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Assistant not found",
         )
+
+    await check_assistant_access(assistant_id, member, db)
 
     return _serialize_assistant(assistant)
 
@@ -117,6 +138,7 @@ async def _resolve_integrations(
 async def create_assistant(
     data: AssistantCreate,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> dict:
     """Create a new assistant."""
@@ -181,6 +203,7 @@ async def update_assistant(
     assistant_id: UUID,
     data: AssistantUpdate,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> dict:
     """Update an assistant."""
@@ -232,6 +255,7 @@ async def update_assistant(
 async def delete_assistant(
     assistant_id: UUID,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> None:
     """Delete an assistant."""

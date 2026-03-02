@@ -35,12 +35,15 @@ async def keyword_search(
     query: str,
     topk: int,
     fts_config: str = "simple",
+    dossier_ids: list[UUID] | None = None,
 ) -> list[RetrievedChunk]:
     """Search chunks using Postgres full-text search.
 
     Uses OR-based tsquery + ts_rank_cd for ranking.
-    Chunks matching any query word are returned; more matches = higher rank.
-    Filters on denormalized tenant_id and collection_id columns.
+    Supports mixed org + personal scope:
+    - collection_ids → org-scope chunks
+    - dossier_ids → personal-scope chunks
+    When both are provided, results from either scope are returned (OR).
     """
     if not query.strip():
         return []
@@ -54,20 +57,30 @@ async def keyword_search(
     if not or_tsquery:
         return []
 
-    # Build the collection filter clause
-    if collection_ids is not None:
-        collection_filter = "AND c.collection_id = ANY(CAST(:collection_ids AS uuid[]))"
-        params: dict = {
-            "tenant_id": str(tenant_id),
-            "collection_ids": [str(cid) for cid in collection_ids],
-            "topk": topk,
-        }
+    # Build scope filter (OR between org collections and personal dossiers)
+    params: dict = {
+        "tenant_id": str(tenant_id),
+        "topk": topk,
+    }
+
+    scope_clauses: list[str] = []
+    if collection_ids is not None and collection_ids:
+        scope_clauses.append(
+            "(c.scope = 'org' AND c.collection_id = ANY(CAST(:collection_ids AS uuid[])))"
+        )
+        params["collection_ids"] = [str(cid) for cid in collection_ids]
+
+    if dossier_ids is not None and dossier_ids:
+        scope_clauses.append(
+            "(c.scope = 'personal' AND c.dossier_id = ANY(CAST(:dossier_ids AS uuid[])))"
+        )
+        params["dossier_ids"] = [str(did) for did in dossier_ids]
+
+    if not scope_clauses:
+        # No scope filter — search all tenant chunks (backward compat)
+        scope_filter = ""
     else:
-        collection_filter = ""
-        params = {
-            "tenant_id": str(tenant_id),
-            "topk": topk,
-        }
+        scope_filter = "AND (" + " OR ".join(scope_clauses) + ")"
 
     # or_tsquery is built from sanitized words above (no user-controlled SQL).
     sql = text(f"""
@@ -82,7 +95,7 @@ async def keyword_search(
             ts_rank_cd(c.content_tsv, to_tsquery('{fts_config}', '{or_tsquery}')) AS rank
         FROM chunks c
         WHERE c.tenant_id = CAST(:tenant_id AS uuid)
-          {collection_filter}
+          {scope_filter}
           AND c.content_tsv @@ to_tsquery('{fts_config}', '{or_tsquery}')
         ORDER BY rank DESC
         LIMIT :topk
@@ -95,7 +108,7 @@ async def keyword_search(
     for row in rows:
         chunks.append(RetrievedChunk(
             chunk_id=row.chunk_id,
-            document_id=row.document_id,
+            document_id=row.document_id or "",
             document_filename="",  # Will be enriched later if needed
             content=row.content,
             page_number=row.page_number,

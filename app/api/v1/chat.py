@@ -11,7 +11,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.database import async_session_maker
-from app.deps import CurrentUser, DbSession
+from app.deps import CurrentMember, CurrentUser, DbSession, check_assistant_access
 from app.models.assistant import Assistant
 from app.models.document import Document
 from app.models.message import Message, MessageRole
@@ -145,11 +145,13 @@ async def chat(
     assistant_id: UUID,
     request: ChatRequest,
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
 ) -> ChatResponse:
     """Chat with an assistant (non-streaming)."""
+    await check_assistant_access(assistant_id, member, db)
     tenant_id = user.tenant_id
-    
+
     # Get assistant with collections and integrations
     result = await db.execute(
         select(Assistant)
@@ -260,9 +262,11 @@ async def chat_stream(
     assistant_id: UUID,
     request: ChatRequest,
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
 ) -> StreamingResponse:
     """Chat with an assistant (SSE streaming)."""
+    await check_assistant_access(assistant_id, member, db)
     tenant_id = user.tenant_id
     user_id = user.id
 
@@ -418,11 +422,14 @@ async def chat_stream(
 async def list_conversations(
     assistant_id: UUID,
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
 ) -> list[dict]:
     """List all conversations for an assistant."""
     from sqlalchemy import func, distinct
-    
+
+    await check_assistant_access(assistant_id, member, db)
+
     # Verify assistant belongs to user's tenant
     result = await db.execute(
         select(Assistant)
@@ -481,9 +488,12 @@ async def get_conversation(
     assistant_id: UUID,
     conversation_id: UUID,
     user: CurrentUser,
+    member: CurrentMember,
     db: DbSession,
 ) -> list[dict]:
     """Get conversation history."""
+    await check_assistant_access(assistant_id, member, db)
+
     # Verify assistant belongs to user's tenant
     result = await db.execute(
         select(Assistant)

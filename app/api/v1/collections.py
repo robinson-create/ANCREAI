@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
-from app.deps import CurrentUser, DbSession
+from app.deps import AdminMember, CurrentUser, DbSession
 from app.models.collection import Collection
 from app.models.document import Document
 from app.models.chunk import Chunk
@@ -111,6 +111,7 @@ async def get_collection(
 async def create_collection(
     data: CollectionCreate,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> Collection:
     """Create a new collection."""
@@ -130,6 +131,7 @@ async def update_collection(
     collection_id: UUID,
     data: CollectionUpdate,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> Collection:
     """Update a collection."""
@@ -159,6 +161,7 @@ async def update_collection(
 async def delete_collection(
     collection_id: UUID,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> None:
     """Delete a collection and all its documents."""

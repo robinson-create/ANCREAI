@@ -531,6 +531,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         db: AsyncSession | None = None,
         conversation_id: UUID | None = None,
         context_hint: str | None = None,
+        dossier_ids: list[UUID] | None = None,
     ) -> tuple[str, list[Citation], list[dict], int, int]:
         """
         Non-streaming chat with tool-calling loop.
@@ -540,12 +541,16 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         """
         # Retrieve relevant chunks (hybrid if db provided, vector-only otherwise)
         chunks = []
-        if collection_ids is not None and len(collection_ids) > 0:
+        has_sources = (collection_ids is not None and len(collection_ids) > 0) or (
+            dossier_ids is not None and len(dossier_ids) > 0
+        )
+        if has_sources:
             chunks = await self.retrieval.retrieve(
                 query=message,
                 tenant_id=tenant_id,
                 collection_ids=collection_ids,
                 db=db,
+                dossier_ids=dossier_ids,
             )
 
         # Filter out low-relevance chunks to avoid polluting general questions
@@ -742,6 +747,7 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         db: AsyncSession | None = None,
         conversation_id: UUID | None = None,
         context_hint: str | None = None,
+        dossier_ids: list[UUID] | None = None,
     ) -> AsyncGenerator[ChatStreamEvent, None]:
         """
         Streaming chat with SSE events and tool-calling loop.
@@ -751,12 +757,16 @@ Rappel : cite tes sources (nom du document et page) uniquement quand tu utilises
         """
         # Retrieve relevant chunks (hybrid if db provided, vector-only otherwise)
         chunks = []
-        if collection_ids is not None and len(collection_ids) > 0:
+        has_sources = (collection_ids is not None and len(collection_ids) > 0) or (
+            dossier_ids is not None and len(dossier_ids) > 0
+        )
+        if has_sources:
             chunks = await self.retrieval.retrieve(
                 query=message,
                 tenant_id=tenant_id,
                 collection_ids=collection_ids,
                 db=db,
+                dossier_ids=dossier_ids,
             )
 
         # Filter out low-relevance chunks to avoid polluting general questions

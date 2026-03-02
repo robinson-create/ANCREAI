@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.deps import CurrentUser, DbSession
+from app.deps import AdminMember, CurrentUser, DbSession
 from app.services.quota import quota_service
 from app.services.stripe_service import stripe_service
 
@@ -95,6 +95,7 @@ async def get_subscription(user: CurrentUser, db: DbSession) -> SubscriptionResp
 async def create_checkout(
     body: CheckoutRequest,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> CheckoutResponse:
     """Create a Stripe Checkout session for Pro subscription.
@@ -121,6 +122,7 @@ async def create_checkout(
 async def create_portal(
     body: PortalRequest,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> PortalResponse:
     """Create a Stripe Customer Portal session.

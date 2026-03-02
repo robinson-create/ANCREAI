@@ -6,7 +6,7 @@ from arq import ArqRedis, create_pool
 from fastapi import APIRouter, HTTPException, UploadFile, status
 from sqlalchemy import select
 
-from app.deps import CurrentUser, DbSession
+from app.deps import AdminMember, CurrentUser, DbSession
 from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.schemas.document import DocumentRead, DocumentUploadResponse
@@ -82,6 +82,7 @@ async def get_document(
 async def upload_document(
     collection_id: UUID,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
     file: UploadFile,
 ) -> DocumentUploadResponse:
@@ -190,6 +191,7 @@ async def upload_document(
 async def delete_document(
     document_id: UUID,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> None:
     """Delete a document and its chunks."""
@@ -232,6 +234,7 @@ async def delete_document(
 async def reprocess_document(
     document_id: UUID,
     user: CurrentUser,
+    _admin: AdminMember,
     db: DbSession,
 ) -> DocumentUploadResponse:
     """Reprocess a failed document."""
