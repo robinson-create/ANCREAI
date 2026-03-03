@@ -1,6 +1,6 @@
 """Pydantic schemas for API request/response validation."""
 
-from app.schemas.tenant import TenantCreate, TenantRead, TenantUpdate
+from app.schemas.tenant import TenantRead, TenantUpdate
 from app.schemas.assistant import AssistantCreate, AssistantRead, AssistantUpdate
 from app.schemas.collection import CollectionCreate, CollectionRead, CollectionUpdate
 from app.schemas.document import DocumentCreate, DocumentRead, DocumentStatus
@@ -35,7 +35,6 @@ from app.schemas.observability import (
 )
 
 __all__ = [
-    "TenantCreate",
     "TenantRead",
     "TenantUpdate",
     "AssistantCreate",

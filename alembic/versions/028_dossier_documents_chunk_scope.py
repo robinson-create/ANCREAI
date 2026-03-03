@@ -80,7 +80,6 @@ def upgrade() -> None:
             sa.String(20),
             nullable=False,
             server_default="org",
-            index=True,
         ),
     )
     op.create_index("ix_chunks_scope", "chunks", ["scope"])
@@ -92,7 +91,6 @@ def upgrade() -> None:
             "user_id",
             postgresql.UUID(as_uuid=True),
             nullable=True,
-            index=True,
         ),
     )
     op.create_index("ix_chunks_user_id", "chunks", ["user_id"])
@@ -103,7 +101,6 @@ def upgrade() -> None:
             "dossier_id",
             postgresql.UUID(as_uuid=True),
             nullable=True,
-            index=True,
         ),
     )
     op.create_index("ix_chunks_dossier_id", "chunks", ["dossier_id"])
@@ -115,7 +112,6 @@ def upgrade() -> None:
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("dossier_documents.id", ondelete="CASCADE"),
             nullable=True,
-            index=True,
         ),
     )
     op.create_index("ix_chunks_dossier_document_id", "chunks", ["dossier_document_id"])
@@ -136,15 +132,13 @@ def upgrade() -> None:
         """,
     )
 
-    # --- 6. Add multi-source columns to chunks ---
-    op.add_column(
-        "chunks",
-        sa.Column("source_type", sa.String(20), nullable=True),
-    )
-    op.add_column(
-        "chunks",
-        sa.Column("source_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
+    # --- 6. Add multi-source columns to chunks (idempotent — may already exist) ---
+    op.execute("""
+        ALTER TABLE chunks ADD COLUMN IF NOT EXISTS source_type VARCHAR(20);
+    """)
+    op.execute("""
+        ALTER TABLE chunks ADD COLUMN IF NOT EXISTS source_id UUID;
+    """)
 
 
 def downgrade() -> None:
