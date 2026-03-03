@@ -703,6 +703,22 @@ class PresentationService:
         )
         return list(result.scalars().all())
 
+    async def get_export(
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+        pres_id: UUID,
+        export_id: UUID,
+    ) -> PresentationExport | None:
+        result = await db.execute(
+            select(PresentationExport).where(
+                PresentationExport.id == export_id,
+                PresentationExport.presentation_id == pres_id,
+                PresentationExport.tenant_id == tenant_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     # ══════════════════════════════════════════════
     #  Internal — LLM calls with tracking
     # ══════════════════════════════════════════════

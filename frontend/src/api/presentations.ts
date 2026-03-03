@@ -141,6 +141,18 @@ export const presentationsApi = {
     return data
   },
 
+  getExportDownloadUrl: async (
+    presId: string,
+    exportId: string,
+  ): Promise<{ url: string; format: string; file_size: number | null }> => {
+    const { data } = await apiClient.get<{
+      url: string
+      format: string
+      file_size: number | null
+    }>(`/presentations/${presId}/exports/${exportId}/download`)
+    return data
+  },
+
   // ── Themes ──
 
   listThemes: async (): Promise<ThemeRead[]> => {

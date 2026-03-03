@@ -3,7 +3,6 @@ import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   ArrowLeft,
-  Loader2,
   AlertCircle,
   Download,
   Palette,
@@ -13,12 +12,6 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { usePresentationSSE } from "@/hooks/use-presentation-sse"
 import { presentationsApi } from "@/api/presentations"
@@ -28,6 +21,7 @@ import { SlidePanel } from "@/components/presentation/SlidePanel"
 import { SlideEditor } from "@/components/presentation/SlideEditor"
 // InstructionBar removed per user request
 import { ThemePanel } from "@/components/presentation/ThemePanel"
+import { ExportDialog } from "@/components/presentation/ExportDialog"
 import type {
   PresentationFull,
   PresentationStatus,
@@ -100,7 +94,7 @@ export function PresentationEditorPage() {
   // ── Local UI state ──
   const [title, setTitle] = useState("")
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null)
-  const [exportProgress, setExportProgress] = useState<number | undefined>()
+  const [showExportDialog, setShowExportDialog] = useState(false)
   // regeneratingSlideId removed — InstructionBar removed
   const [slideGenProgress, setSlideGenProgress] = useState<{ current: number; total: number } | null>(null)
   const [showThemePanel, setShowThemePanel] = useState(false)
@@ -126,8 +120,7 @@ export function PresentationEditorPage() {
   const isGenerating =
     presentation?.status === "generating_outline" ||
     presentation?.status === "outline_ready" ||
-    presentation?.status === "generating_slides" ||
-    presentation?.status === "exporting"
+    presentation?.status === "generating_slides"
 
   // Track current generation step for step-by-step display
   const [generationStep, setGenerationStep] = useState<"split" | "slides" | "finalize" | null>(null)
@@ -145,7 +138,6 @@ export function PresentationEditorPage() {
       switch (event.type) {
         case "outline_ready":
         case "generation_complete":
-        case "export_ready":
           queryClient.invalidateQueries({ queryKey: ["presentation", id] })
           if (event.type === "generation_complete") {
             setGenerationStep("finalize")
@@ -155,9 +147,6 @@ export function PresentationEditorPage() {
               setGenerationStep(null)
             }, 800)
           }
-          if (event.type === "export_ready") {
-            toast({ title: "Export terminé", description: "Votre présentation est prête." })
-          }
           break
         case "slide_generated":
           setGenerationStep("slides")
@@ -166,9 +155,6 @@ export function PresentationEditorPage() {
             total: event.payload.total as number,
           })
           queryClient.invalidateQueries({ queryKey: ["presentation", id] })
-          break
-        case "export_progress":
-          setExportProgress(event.payload.percent as number)
           break
         case "error":
           setGenerationStep(null)
@@ -239,22 +225,6 @@ export function PresentationEditorPage() {
     },
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["presentation", id] }),
-  })
-
-  const exportMutation = useMutation({
-    mutationFn: (format: "pptx" | "pdf") =>
-      presentationsApi.exportPresentation(id!, { format }),
-    onSuccess: () => {
-      setExportProgress(0)
-      queryClient.invalidateQueries({ queryKey: ["presentation", id] })
-      toast({ title: "Export lancé", description: "La génération du fichier est en cours." })
-    },
-    onError: () =>
-      toast({
-        title: "Erreur",
-        description: "Impossible de lancer l'export.",
-        variant: "destructive",
-      }),
   })
 
   // ── Handlers ──
@@ -503,29 +473,15 @@ export function PresentationEditorPage() {
 
         {/* Export button (only when ready) */}
         {presentation.status === "ready" && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5">
-                <Download className="h-3.5 w-3.5" />
-                Exporter
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => exportMutation.mutate("pptx")}>
-                PowerPoint (.pptx)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportMutation.mutate("pdf")}>
-                PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-
-        {presentation.status === "exporting" && exportProgress !== undefined && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Export {Math.round(exportProgress)}%
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => setShowExportDialog(true)}
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exporter
+          </Button>
         )}
       </div>
 
@@ -533,6 +489,12 @@ export function PresentationEditorPage() {
       <div className="flex-1 overflow-hidden flex flex-col">
         {renderPhase(presentation)}
       </div>
+
+      <ExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        presentationId={id!}
+      />
     </div>
   )
 }

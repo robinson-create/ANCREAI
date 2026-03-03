@@ -415,6 +415,26 @@ async def list_exports(
     return [ExportRead.model_validate(e) for e in exports]
 
 
+@router.get("/{pres_id}/exports/{export_id}/download")
+async def download_export(
+    pres_id: UUID,
+    export_id: UUID,
+    user: CurrentUser,
+    db: DbSession,
+) -> dict:
+    """Get a presigned URL to download a completed export."""
+    export = _ensure_found(
+        await presentation_service.get_export(db, user.tenant_id, pres_id, export_id)
+    )
+    if export.status != "done" or not export.s3_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Export non disponible.",
+        )
+    url = await storage_service.get_presigned_url(export.s3_key, expires_in=3600)
+    return {"url": url, "format": export.format, "file_size": export.file_size}
+
+
 # ══════════════════════════════════════════════
 #  Themes
 # ══════════════════════════════════════════════
