@@ -46,7 +46,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/hooks/use-toast"
 import { uploadsApi } from "@/api/uploads"
-import type { UploadDocument } from "@/types"
 
 // ── Helpers ──
 
@@ -306,7 +305,7 @@ export function UploadsPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {sortedDocs.map((doc) => {
               const FileIcon = getFileIcon(doc.content_type)
-              const statusCfg = STATUS_CONFIG[doc.status] || STATUS_CONFIG.pending
+              const statusCfg = (STATUS_CONFIG[doc.status] ?? STATUS_CONFIG.pending)!
               const StatusIcon = statusCfg.icon
               const isProcessing = doc.status === "pending" || doc.status === "processing"
 

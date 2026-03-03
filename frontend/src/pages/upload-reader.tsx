@@ -196,7 +196,7 @@ export function UploadReaderPage() {
                         <Badge variant="outline" className="text-[10px] px-2 py-0.5">
                           Page {page.page_number}
                         </Badge>
-                        {page.meta?.parser && (
+                        {!!page.meta?.parser && (
                           <span className="text-[10px] text-muted-foreground">
                             via {String(page.meta.parser)}
                           </span>
