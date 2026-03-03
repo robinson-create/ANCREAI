@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "./AppSidebar";
 import { useSearchView } from "@/contexts/search-view-context";
 import { CommandBar } from "@/components/CommandBar";
@@ -78,7 +78,7 @@ export function NewAppLayout() {
             <Button variant="ghost" size="icon" onClick={() => setMobileSidebarOpen(true)} className="shrink-0">
               <Menu className="h-5 w-5" />
             </Button>
-            <span className="font-display font-bold text-foreground text-sm">Ancre</span>
+            <Link to="/app/search" className="font-display font-bold text-foreground text-sm">Ancre</Link>
             {!hideHeader && (
               <Button
                 variant="premium"

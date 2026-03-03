@@ -30,7 +30,7 @@ const Hero = () => {
           transition={{ duration: 0.8 }}
           className="font-heading font-bold text-4xl sm:text-5xl md:text-6xl lg:text-7xl text-white mb-6"
         >
-          La plateforme qui libère <span className="text-cyan-glow">25 %</span> de votre temps quotidien
+          La plateforme qui libère <span className="text-cyan-glow whitespace-nowrap">25 %</span> de votre temps quotidien
         </motion.h1>
 
         <motion.p

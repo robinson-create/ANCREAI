@@ -16,11 +16,18 @@ export function MessageItem({ message, className }: MessageItemProps) {
   const [showCitations, setShowCitations] = useState(false);
 
   return (
-    <div className={cn("group flex gap-4", className)}>
+    <div className={cn(
+      "group flex gap-3",
+      message.role === "user" ? "flex-row-reverse" : "flex-row",
+      className
+    )}>
       {/* Avatar */}
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
+      <div className={cn(
+        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+        message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted"
+      )}>
         {message.role === "user" ? (
-          <User className="h-4 w-4 text-muted-foreground" />
+          <User className="h-4 w-4" />
         ) : (
           <Anchor
             className={cn(
@@ -35,9 +42,16 @@ export function MessageItem({ message, className }: MessageItemProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0 overflow-hidden space-y-2">
+      <div className={cn(
+        "max-w-[80%] min-w-0 overflow-hidden space-y-2",
+        message.role === "user" ? "text-right" : ""
+      )}>
         {/* Message text */}
-        <div className="prose prose-sm max-w-none break-words overflow-x-auto dark:prose-invert">
+        <div className={cn(
+          message.role === "user"
+            ? "inline-block rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm whitespace-pre-wrap text-left"
+            : "prose prose-sm max-w-none break-words overflow-x-auto dark:prose-invert"
+        )}>
           {message.role === "assistant" ? (
             <>
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -48,7 +62,7 @@ export function MessageItem({ message, className }: MessageItemProps) {
               )}
             </>
           ) : (
-            <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+            <span>{message.content}</span>
           )}
         </div>
 

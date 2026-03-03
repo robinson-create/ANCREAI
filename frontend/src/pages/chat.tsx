@@ -571,7 +571,10 @@ export function ChatPage() {
               )}
 
               {messages.map((message) => (
-                <div key={message.id} className="group flex gap-4">
+                <div key={message.id} className={cn(
+                  "group flex gap-3",
+                  message.role === "user" ? "flex-row-reverse" : "flex-row"
+                )}>
                   {/* Avatar */}
                   <div
                     className={cn(
@@ -597,8 +600,15 @@ export function ChatPage() {
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="prose prose-sm max-w-none break-words dark:prose-invert">
+                  <div className={cn(
+                    "max-w-[80%] min-w-0 space-y-2",
+                    message.role === "user" ? "text-right" : ""
+                  )}>
+                    <div className={cn(
+                      message.role === "user"
+                        ? "inline-block rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm whitespace-pre-wrap text-left"
+                        : "prose prose-sm max-w-none break-words dark:prose-invert"
+                    )}>
                       {message.role === "assistant" ? (
                         <>
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -613,7 +623,7 @@ export function ChatPage() {
                           <textarea
                             value={editContent}
                             onChange={(e) => setEditContent(e.target.value)}
-                            className="w-full rounded-md border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="w-full rounded-md border bg-background p-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                             rows={3}
                             autoFocus
                             onKeyDown={(e) => {
@@ -646,7 +656,7 @@ export function ChatPage() {
                           </div>
                         </div>
                       ) : (
-                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        <span>{message.content}</span>
                       )}
                     </div>
 

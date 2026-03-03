@@ -959,7 +959,10 @@ export function SearchPage() {
           <ScrollArea className="flex-1 p-4">
             <div className="mx-auto max-w-3xl space-y-6">
               {messages.map((message) => (
-                <div key={message.id} className="group flex gap-4">
+                <div key={message.id} className={cn(
+                  "group flex gap-3",
+                  message.role === "user" ? "flex-row-reverse" : "flex-row"
+                )}>
                   {/* Avatar */}
                   <div
                     className={cn(
@@ -985,8 +988,15 @@ export function SearchPage() {
                   </div>
 
                   {/* Content */}
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="prose prose-sm max-w-none break-words dark:prose-invert">
+                  <div className={cn(
+                    "max-w-[80%] min-w-0 space-y-2",
+                    message.role === "user" ? "text-right" : ""
+                  )}>
+                    <div className={cn(
+                      message.role === "user"
+                        ? "inline-block rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm whitespace-pre-wrap text-left"
+                        : "prose prose-sm max-w-none break-words dark:prose-invert"
+                    )}>
                       {message.role === "assistant" ? (
                         <>
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -997,7 +1007,7 @@ export function SearchPage() {
                           )}
                         </>
                       ) : (
-                        <p className="whitespace-pre-wrap">{message.content}</p>
+                        <span>{message.content}</span>
                       )}
                     </div>
 
