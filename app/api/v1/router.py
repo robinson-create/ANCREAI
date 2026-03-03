@@ -18,7 +18,9 @@ from app.api.v1 import (
     integrations,
     mail,
     onboarding,
+    personal_chat,
     presentations,
+    projects,
     settings,
     stats,
     tenants,
@@ -35,6 +37,7 @@ api_router.include_router(settings.router, prefix="/settings", tags=["settings"]
 api_router.include_router(assistants.router, prefix="/assistants", tags=["assistants"])
 api_router.include_router(collections.router, prefix="/collections", tags=["collections"])
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
+api_router.include_router(personal_chat.router, prefix="/chat/personal", tags=["personal-chat"])
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(usage.router, prefix="/usage", tags=["usage"])
 api_router.include_router(billing.router, prefix="/billing", tags=["billing"])
@@ -52,4 +55,5 @@ api_router.include_router(agent_chat.router, prefix="/chat", tags=["agent-chat"]
 api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
 api_router.include_router(presentations.router, prefix="/presentations", tags=["presentations"])
 api_router.include_router(dossiers.router, prefix="/dossiers", tags=["dossiers"])
+api_router.include_router(projects.router, prefix="/projects", tags=["projects"])
 api_router.include_router(uploads.router, prefix="/uploads", tags=["uploads"])

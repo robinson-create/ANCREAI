@@ -13,6 +13,10 @@ from app.models.org_member import OrgMember
 from app.models.assistant_permission import AssistantPermission
 from app.models.dossier import Dossier
 from app.models.dossier_document import DossierDocument, DossierDocumentStatus
+from app.models.dossier_item import DossierItem
+from app.models.project import Project
+from app.models.project_document import ProjectDocument, ProjectDocumentStatus
+from app.models.project_knowledge import ProjectKnowledge
 from app.models.usage import Usage
 from app.models.user import User
 from app.models.subscription import Subscription, SubscriptionPlan, SubscriptionStatus
@@ -63,6 +67,11 @@ __all__ = [
     "Dossier",
     "DossierDocument",
     "DossierDocumentStatus",
+    "DossierItem",
+    "Project",
+    "ProjectDocument",
+    "ProjectDocumentStatus",
+    "ProjectKnowledge",
     "Usage",
     "User",
     "Subscription",

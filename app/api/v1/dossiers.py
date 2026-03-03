@@ -19,6 +19,8 @@ from app.database import async_session_maker
 from app.deps import CurrentMember, CurrentUser, DbSession
 from app.models.dossier import Dossier
 from app.models.dossier_document import DossierDocument, DossierDocumentStatus
+from app.models.dossier_item import DossierItem
+from app.models.document import Document
 from app.models.conversation import Conversation
 from app.models.enums import ContentScope
 from app.models.message import Message, MessageRole
@@ -346,6 +348,288 @@ async def delete_dossier_document(
     await vector_store.delete_by_dossier_document(doc.id, user.tenant_id)
 
     await db.delete(doc)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Import existing document into dossier
+# ---------------------------------------------------------------------------
+
+
+class ImportDocumentRequest(BaseModel):
+    source_document_id: UUID
+
+
+@router.post(
+    "/{dossier_id}/documents/import",
+    response_model=DossierDocumentUploadResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_document_to_dossier(
+    dossier_id: UUID,
+    request: ImportDocumentRequest,
+    user: CurrentUser,
+    _member: CurrentMember,
+    db: DbSession,
+) -> DossierDocumentUploadResponse:
+    """Copy an existing upload/collection document into a personal dossier.
+
+    This downloads the file from S3 and re-uploads it under the dossier's
+    personal prefix, then queues it for chunking + embedding.
+    """
+    # Verify dossier ownership
+    result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id)
+    )
+    dossier = result.scalar_one_or_none()
+    if not dossier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dossier not found"
+        )
+    _ensure_owner(dossier, user.id)
+
+    # Look up source document (from org-level documents table)
+    src_result = await db.execute(
+        select(Document).where(Document.id == request.source_document_id)
+    )
+    src_doc = src_result.scalar_one_or_none()
+    if not src_doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Source document not found",
+        )
+
+    # Check duplicate within this dossier (by content hash)
+    dup_result = await db.execute(
+        select(DossierDocument)
+        .where(DossierDocument.dossier_id == dossier_id)
+        .where(DossierDocument.content_hash == src_doc.content_hash)
+    )
+    existing = dup_result.scalar_one_or_none()
+    if existing:
+        return DossierDocumentUploadResponse(
+            id=existing.id,
+            filename=existing.filename,
+            status=existing.status,
+            message="Document already exists in this dossier (duplicate content)",
+        )
+
+    # Download from S3
+    content = await storage_service.download_file(src_doc.s3_key)
+
+    # Upload to personal prefix
+    s3_key = f"personal/{user.id}/{dossier_id}/{src_doc.filename}"
+    await storage_service.upload_file_raw(
+        s3_key=s3_key,
+        content=content,
+        content_type=src_doc.content_type,
+    )
+
+    # Create DossierDocument
+    doc = DossierDocument(
+        dossier_id=dossier_id,
+        user_id=user.id,
+        tenant_id=user.tenant_id,
+        filename=src_doc.filename,
+        content_type=src_doc.content_type,
+        s3_key=s3_key,
+        content_hash=src_doc.content_hash,
+        file_size=src_doc.file_size,
+        status=DossierDocumentStatus.PENDING,
+    )
+    db.add(doc)
+    await db.flush()
+
+    # Queue processing
+    pool = await get_arq_pool()
+    await pool.enqueue_job("process_dossier_document", str(doc.id))
+    await pool.close()
+
+    await db.commit()
+
+    return DossierDocumentUploadResponse(
+        id=doc.id,
+        filename=src_doc.filename,
+        status=DossierDocumentStatus.PENDING,
+        message="Document imported and queued for processing",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dossier Items (generic linked items: presentations, docs, emails …)
+# ---------------------------------------------------------------------------
+
+ALLOWED_ITEM_TYPES = {
+    "document",
+    "presentation",
+    "upload",
+    "email_thread",
+    "conversation",
+}
+
+
+class DossierItemAdd(BaseModel):
+    item_type: str
+    item_id: str
+    title: str
+    subtitle: str | None = None
+
+
+class DossierItemRead(BaseModel):
+    id: UUID
+    dossier_id: UUID
+    item_type: str
+    item_id: str
+    title: str
+    subtitle: str | None
+    added_at: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.post(
+    "/{dossier_id}/items",
+    response_model=DossierItemRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_dossier_item(
+    dossier_id: UUID,
+    data: DossierItemAdd,
+    user: CurrentUser,
+    _member: CurrentMember,
+    db: DbSession,
+) -> dict:
+    """Link a generic item (presentation, document, email…) to a dossier."""
+    # Verify dossier ownership
+    result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id)
+    )
+    dossier = result.scalar_one_or_none()
+    if not dossier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dossier not found"
+        )
+    _ensure_owner(dossier, user.id)
+
+    if data.item_type not in ALLOWED_ITEM_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid item_type: {data.item_type}",
+        )
+
+    # Check duplicate
+    dup_result = await db.execute(
+        select(DossierItem)
+        .where(DossierItem.dossier_id == dossier_id)
+        .where(DossierItem.item_type == data.item_type)
+        .where(DossierItem.item_id == data.item_id)
+    )
+    existing = dup_result.scalar_one_or_none()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cet élément est déjà dans ce dossier.",
+        )
+
+    item = DossierItem(
+        dossier_id=dossier_id,
+        item_type=data.item_type,
+        item_id=data.item_id,
+        title=data.title,
+        subtitle=data.subtitle,
+    )
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+
+    return {
+        "id": item.id,
+        "dossier_id": item.dossier_id,
+        "item_type": item.item_type,
+        "item_id": item.item_id,
+        "title": item.title,
+        "subtitle": item.subtitle,
+        "added_at": item.added_at.isoformat(),
+    }
+
+
+@router.get("/{dossier_id}/items", response_model=list[DossierItemRead])
+async def list_dossier_items(
+    dossier_id: UUID,
+    user: CurrentUser,
+    _member: CurrentMember,
+    db: DbSession,
+    item_type: str | None = None,
+) -> list[dict]:
+    """List linked items in a dossier, optionally filtered by type."""
+    result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id)
+    )
+    dossier = result.scalar_one_or_none()
+    if not dossier:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dossier not found"
+        )
+    _ensure_owner(dossier, user.id)
+
+    query = (
+        select(DossierItem)
+        .where(DossierItem.dossier_id == dossier_id)
+        .order_by(DossierItem.added_at.desc())
+    )
+    if item_type:
+        query = query.where(DossierItem.item_type == item_type)
+
+    rows = await db.execute(query)
+    items = rows.scalars().all()
+
+    return [
+        {
+            "id": i.id,
+            "dossier_id": i.dossier_id,
+            "item_type": i.item_type,
+            "item_id": i.item_id,
+            "title": i.title,
+            "subtitle": i.subtitle,
+            "added_at": i.added_at.isoformat(),
+        }
+        for i in items
+    ]
+
+
+@router.delete(
+    "/{dossier_id}/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_dossier_item(
+    dossier_id: UUID,
+    item_id: UUID,
+    user: CurrentUser,
+    _member: CurrentMember,
+    db: DbSession,
+) -> None:
+    """Remove a linked item from a dossier."""
+    result = await db.execute(
+        select(DossierItem)
+        .where(DossierItem.id == item_id)
+        .where(DossierItem.dossier_id == dossier_id)
+    )
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Item not found"
+        )
+
+    # Verify dossier ownership
+    dos_result = await db.execute(
+        select(Dossier).where(Dossier.id == dossier_id)
+    )
+    dossier = dos_result.scalar_one_or_none()
+    if dossier:
+        _ensure_owner(dossier, user.id)
+
+    await db.delete(item)
     await db.commit()
 
 

@@ -10,6 +10,7 @@ from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    MatchAny,
     MatchValue,
     PointStruct,
     VectorParams,
@@ -47,6 +48,8 @@ class VectorStore:
             for field in (
                 "tenant_id", "collection_id", "document_id",
                 "scope", "user_id", "dossier_id", "dossier_document_id",
+                "project_id", "project_document_id",
+                "source_type", "source_id",
             ):
                 await self.client.create_payload_index(
                     collection_name=self.collection_name,
@@ -63,6 +66,8 @@ class VectorStore:
         for field in (
             "tenant_id", "collection_id", "document_id",
             "scope", "user_id", "dossier_id", "dossier_document_id",
+            "project_id", "project_document_id",
+            "source_type", "source_id",
         ):
             try:
                 await self.client.create_payload_index(
@@ -167,20 +172,38 @@ class VectorStore:
         tenant_id: UUID,
         collection_ids: list[UUID] | None = None,
         dossier_ids: list[UUID] | None = None,
+        project_ids: list[UUID] | None = None,
+        user_id: UUID | None = None,
         limit: int = 20,
         score_threshold: float = 0.0,
     ) -> list[dict[str, Any]]:
         """Search for similar chunks.
 
-        Supports mixed org + personal scope:
+        Supports org, personal, project, and personal-global scopes:
         - collection_ids → org-scope chunks (scope='org', collection_id IN ...)
         - dossier_ids → personal-scope chunks (scope='personal', dossier_id IN ...)
+        - project_ids → project-scope chunks (scope='project', project_id IN ...)
+        - user_id (alone) → personal-global: ALL user chunks (personal + project)
 
-        When both are provided, results from either scope are returned (OR).
+        Scopes are mutually exclusive: user_id cannot be combined with
+        collection_ids, dossier_ids, or project_ids.
 
         Returns list of dicts with id, score, payload.
         """
-        # Always filter by tenant
+        has_specific_scope = (
+            (collection_ids is not None and len(collection_ids) > 0)
+            or (dossier_ids is not None and len(dossier_ids) > 0)
+            or (project_ids is not None and len(project_ids) > 0)
+        )
+
+        # Invariant #4: scopes mutually exclusive
+        if user_id is not None and has_specific_scope:
+            raise ValueError(
+                "user_id (personal-global) cannot be combined with "
+                "collection_ids, dossier_ids, or project_ids"
+            )
+
+        # Always filter by tenant (invariant #8)
         must_conditions: list = [
             FieldCondition(
                 key="tenant_id",
@@ -188,7 +211,55 @@ class VectorStore:
             )
         ]
 
-        # Build scope filter (OR between org collections and personal dossiers)
+        # Personal-global mode: search ALL user content (personal + project)
+        if user_id is not None and not has_specific_scope:
+            # Invariant #8: tenant_id + user_id always together
+            must_conditions.append(
+                FieldCondition(
+                    key="user_id",
+                    match=MatchValue(value=str(user_id)),
+                )
+            )
+            # Invariant #5: explicit scope filter — must strict, no should
+            must_conditions.append(
+                FieldCondition(
+                    key="scope",
+                    match=MatchAny(any=["personal", "project"]),
+                )
+            )
+
+            results = await self.client.query_points(
+                collection_name=self.collection_name,
+                query=query_vector,
+                query_filter=Filter(must=must_conditions),
+                limit=limit,
+                score_threshold=score_threshold,
+            )
+
+            return [
+                {
+                    "id": str(point.id),
+                    "score": point.score,
+                    "payload": point.payload,
+                }
+                for point in results.points
+            ]
+
+        # Strict scope enforcement: when only one scope type is passed,
+        # add an explicit scope=X filter in must to prevent cross-scope leakage
+        only_project = bool(project_ids) and not collection_ids and not dossier_ids
+        only_personal = bool(dossier_ids) and not collection_ids and not project_ids
+
+        if only_project:
+            must_conditions.append(
+                FieldCondition(key="scope", match=MatchValue(value="project"))
+            )
+        elif only_personal:
+            must_conditions.append(
+                FieldCondition(key="scope", match=MatchValue(value="personal"))
+            )
+
+        # Build scope filter (OR between scope-specific id filters)
         scope_should: list = []
 
         if collection_ids is not None:
@@ -206,6 +277,15 @@ class VectorStore:
                     FieldCondition(
                         key="dossier_id",
                         match=MatchValue(value=str(did)),
+                    )
+                )
+
+        if project_ids is not None:
+            for pid in project_ids:
+                scope_should.append(
+                    FieldCondition(
+                        key="project_id",
+                        match=MatchValue(value=str(pid)),
                     )
                 )
 
@@ -277,6 +357,64 @@ class VectorStore:
                         FieldCondition(
                             key="dossier_id",
                             match=MatchValue(value=str(dossier_id)),
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
+                    ]
+                ),
+            )
+        except UnexpectedResponse as e:
+            if e.status_code == 404:
+                return
+            raise
+
+    async def delete_by_project_document(
+        self, project_document_id: UUID, tenant_id: UUID
+    ) -> None:
+        """Delete all project chunks for a project document, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_project_document",
+            "project_document_id": str(project_document_id),
+            "tenant_id": str(tenant_id),
+        })
+        try:
+            await self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="project_document_id",
+                            match=MatchValue(value=str(project_document_id)),
+                        ),
+                        FieldCondition(
+                            key="tenant_id",
+                            match=MatchValue(value=str(tenant_id)),
+                        ),
+                    ]
+                ),
+            )
+        except UnexpectedResponse as e:
+            if e.status_code == 404:
+                return
+            raise
+
+    async def delete_by_project(self, project_id: UUID, tenant_id: UUID) -> None:
+        """Delete all project chunks for an entire project, scoped to tenant."""
+        logger.info("vector_store_delete", extra={
+            "method": "delete_by_project",
+            "project_id": str(project_id),
+            "tenant_id": str(tenant_id),
+        })
+        try:
+            await self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="project_id",
+                            match=MatchValue(value=str(project_id)),
                         ),
                         FieldCondition(
                             key="tenant_id",

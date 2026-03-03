@@ -17,6 +17,10 @@ from app.models.collection import Collection
 from app.models.document import Document, DocumentStatus
 from app.models.document_page import DocumentPage
 from app.models.dossier_document import DossierDocument, DossierDocumentStatus
+from app.models.message import Message
+from app.models.project import Project
+from app.models.project_document import ProjectDocument, ProjectDocumentStatus
+from app.models.project_knowledge import ProjectKnowledge
 from app.models.mail import MailAccount, MailMessage, MailSendRequest, MailSyncState, ScheduledEmail
 from app.services.embedding import embedding_service
 from app.services.mail.base import SendPayload
@@ -392,6 +396,325 @@ async def process_dossier_document(ctx: dict, document_id: str) -> dict:
             await db.commit()
         except Exception:
             pass
+        return {"error": str(e)}
+
+    finally:
+        await db.close()
+
+
+# ── Project document tasks ─────────────────────────────────────────
+
+
+async def process_project_document(ctx: dict, document_id: str) -> dict:
+    """Process a project document: download, parse, chunk, embed, index.
+
+    Same pipeline as dossier documents but chunks are stored with scope='project'
+    and project metadata (user_id, project_id, project_document_id).
+    """
+    doc_uuid = UUID(document_id)
+    db = await get_db()
+
+    try:
+        result = await db.execute(
+            select(ProjectDocument).where(ProjectDocument.id == doc_uuid)
+        )
+        doc = result.scalar_one_or_none()
+
+        if not doc:
+            logger.error(f"ProjectDocument {document_id} not found")
+            return {"error": "ProjectDocument not found"}
+
+        # Update status
+        doc.status = ProjectDocumentStatus.PROCESSING
+        await db.commit()
+
+        logger.info("project_document_processing_started", extra={
+            "document_id": str(doc.id),
+            "project_id": str(doc.project_id),
+            "user_id": str(doc.user_id),
+            "tenant_id": str(doc.tenant_id),
+            "filename": doc.filename,
+        })
+
+        # 1. Download from S3
+        content = await storage_service.download_file(doc.s3_key)
+
+        # 2. Parse document
+        from app.services.document_ai.document_parser import extract_document_content
+
+        parsed = await extract_document_content(content, doc.filename, doc.content_type)
+        doc.page_count = parsed.total_pages
+
+        # 3. Chunk
+        chunks = chunk_document(parsed)
+        doc.chunk_count = len(chunks)
+
+        if not chunks:
+            logger.warning("project_document_no_chunks", extra={
+                "document_id": str(doc.id),
+                "project_id": str(doc.project_id),
+                "tenant_id": str(doc.tenant_id),
+            })
+            doc.status = ProjectDocumentStatus.READY
+            doc.processed_at = datetime.now(timezone.utc)
+            await db.commit()
+            return {"message": "No content to index", "chunks": 0}
+
+        # 4. Embed
+        chunk_texts = [c.content for c in chunks]
+        embeddings, tokens_used = await embedding_service.embed_texts(chunk_texts)
+        doc.tokens_used = tokens_used
+
+        # 5. Prepare chunks (scope='project')
+        db_chunks = []
+        vector_chunks = []
+
+        for chunk, embedding in zip(chunks, embeddings):
+            db_chunk = Chunk(
+                scope="project",
+                tenant_id=doc.tenant_id,
+                user_id=doc.user_id,
+                project_id=doc.project_id,
+                project_document_id=doc.id,
+                source_type="document",
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                content_hash=chunk.content_hash,
+                token_count=chunk.token_count,
+                content_tsv=sa_func.to_tsvector(settings.postgres_fts_config, chunk.content),
+                page_number=chunk.page_number,
+                start_offset=chunk.start_offset,
+                end_offset=chunk.end_offset,
+                section_title=chunk.section_title,
+            )
+            db.add(db_chunk)
+            db_chunks.append(db_chunk)
+
+            vector_chunks.append({
+                "id": str(db_chunk.id),
+                "vector": embedding,
+                "payload": {
+                    "scope": "project",
+                    "tenant_id": str(doc.tenant_id),
+                    "user_id": str(doc.user_id),
+                    "project_id": str(doc.project_id),
+                    "project_document_id": str(doc.id),
+                    "document_filename": doc.filename,
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                    "page_number": chunk.page_number,
+                    "section_title": chunk.section_title,
+                },
+            })
+
+        await db.flush()
+
+        for db_chunk, vec_chunk in zip(db_chunks, vector_chunks):
+            db_chunk.qdrant_id = vec_chunk["id"]
+            vec_chunk["id"] = str(db_chunk.id)
+
+        # 6. Index vectors
+        await vector_store.ensure_collection()
+        await vector_store.upsert_chunks(vector_chunks)
+
+        # 7. Done
+        doc.status = ProjectDocumentStatus.READY
+        doc.processed_at = datetime.now(timezone.utc)
+        doc.error_message = None
+        await db.commit()
+
+        logger.info("project_document_indexed", extra={
+            "document_id": str(doc.id),
+            "project_id": str(doc.project_id),
+            "tenant_id": str(doc.tenant_id),
+            "chunks_count": len(chunks),
+            "tokens_used": tokens_used,
+            "pages": doc.page_count,
+        })
+        return {
+            "document_id": document_id,
+            "pages": doc.page_count,
+            "chunks": len(chunks),
+            "tokens_used": tokens_used,
+        }
+
+    except Exception as e:
+        logger.exception(f"Error processing project document {document_id}")
+        try:
+            doc.status = ProjectDocumentStatus.FAILED
+            doc.error_message = str(e)[:2000]
+            await db.commit()
+        except Exception:
+            pass
+        return {"error": str(e)}
+
+    finally:
+        await db.close()
+
+
+# ── Project conversation summary tasks ─────────────────────────────
+
+MAX_SUMMARY_MESSAGES = 100
+MAX_TRANSCRIPT_CHARS = 30_000
+
+
+async def summarize_project_conversation(
+    ctx: dict, project_id: str, conversation_id: str
+) -> dict:
+    """Summarize a project conversation and index the summary into project RAG.
+
+    Steps:
+    1. Load conversation messages (capped at MAX_SUMMARY_MESSAGES)
+    2. Build transcript (capped at MAX_TRANSCRIPT_CHARS)
+    3. Call LLM to generate structured summary
+    4. Store ProjectKnowledge
+    5. Chunk + embed + index summary chunks with scope='project'
+    """
+    project_uuid = UUID(project_id)
+    conversation_uuid = UUID(conversation_id)
+    db = await get_db()
+
+    try:
+        # Load project
+        result = await db.execute(
+            select(Project).where(Project.id == project_uuid)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            return {"error": "Project not found"}
+
+        # Load messages
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_ref_id == conversation_uuid)
+            .order_by(Message.created_at.asc())
+        )
+        messages = result.scalars().all()
+
+        if not messages:
+            return {"error": "No messages in conversation"}
+
+        # Cap to last N messages
+        messages = messages[-MAX_SUMMARY_MESSAGES:]
+
+        # Build transcript
+        transcript_parts = []
+        for msg in messages:
+            role = msg.role.upper() if msg.role else "UNKNOWN"
+            transcript_parts.append(f"[{role}]: {msg.content}")
+        transcript = "\n\n".join(transcript_parts)
+
+        # Cap transcript length (keep the end = most recent)
+        if len(transcript) > MAX_TRANSCRIPT_CHARS:
+            transcript = transcript[-MAX_TRANSCRIPT_CHARS:]
+
+        # Generate summary
+        from app.services.project_summarizer import summarize_conversation
+
+        summary_text = await summarize_conversation(transcript)
+
+        if not summary_text.strip():
+            return {"error": "Empty summary generated"}
+
+        # Store ProjectKnowledge
+        knowledge = ProjectKnowledge(
+            project_id=project_uuid,
+            source_conversation_id=conversation_uuid,
+            tenant_id=project.tenant_id,
+            user_id=project.user_id,
+            title=f"Résumé conversation",
+            summary_text=summary_text,
+        )
+        db.add(knowledge)
+        await db.flush()
+
+        # Chunk the summary
+        from app.core.chunking import chunker
+
+        summary_chunks = chunker.chunk_text(summary_text)
+
+        if not summary_chunks:
+            knowledge.chunk_count = 0
+            await db.commit()
+            return {
+                "knowledge_id": str(knowledge.id),
+                "chunks": 0,
+                "message": "Summary stored but no chunks generated",
+            }
+
+        # Embed
+        chunk_texts = [c.content for c in summary_chunks]
+        embeddings, tokens_used = await embedding_service.embed_texts(chunk_texts)
+        knowledge.tokens_used = tokens_used
+        knowledge.chunk_count = len(summary_chunks)
+
+        # Prepare chunks (scope='project', source_type='conversation_summary')
+        db_chunks = []
+        vector_chunks = []
+
+        for chunk, embedding in zip(summary_chunks, embeddings):
+            db_chunk = Chunk(
+                scope="project",
+                tenant_id=project.tenant_id,
+                user_id=project.user_id,
+                project_id=project_uuid,
+                source_type="conversation_summary",
+                source_id=knowledge.id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                content_hash=chunk.content_hash,
+                token_count=chunk.token_count,
+                content_tsv=sa_func.to_tsvector(settings.postgres_fts_config, chunk.content),
+            )
+            db.add(db_chunk)
+            db_chunks.append(db_chunk)
+
+            vector_chunks.append({
+                "id": str(db_chunk.id),
+                "vector": embedding,
+                "payload": {
+                    "scope": "project",
+                    "tenant_id": str(project.tenant_id),
+                    "user_id": str(project.user_id),
+                    "project_id": str(project_uuid),
+                    "source_type": "conversation_summary",
+                    "source_id": str(knowledge.id),
+                    "document_filename": f"Summary: {knowledge.title}",
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                },
+            })
+
+        await db.flush()
+
+        for db_chunk, vec_chunk in zip(db_chunks, vector_chunks):
+            db_chunk.qdrant_id = vec_chunk["id"]
+            vec_chunk["id"] = str(db_chunk.id)
+
+        # Index vectors
+        await vector_store.ensure_collection()
+        await vector_store.upsert_chunks(vector_chunks)
+
+        await db.commit()
+
+        logger.info("project_conversation_summarized", extra={
+            "project_id": project_id,
+            "conversation_id": conversation_id,
+            "knowledge_id": str(knowledge.id),
+            "chunks_count": len(summary_chunks),
+            "tokens_used": tokens_used,
+        })
+
+        return {
+            "knowledge_id": str(knowledge.id),
+            "chunks": len(summary_chunks),
+            "tokens_used": tokens_used,
+        }
+
+    except Exception as e:
+        logger.exception(
+            f"Error summarizing project conversation {conversation_id}"
+        )
         return {"error": str(e)}
 
     finally:
@@ -1089,6 +1412,333 @@ async def send_scheduled_emails(ctx: dict) -> dict:
         return {"sent": sent_count, "failed": failed_count}
 
 
+# ── Personal memory tasks ─────────────────────────────────────────
+
+MEMORY_EXTRACTION_THRESHOLD = 10  # Extract memory every N messages
+CONSOLIDATION_MIN_SUMMARIES = 10  # Only consolidate if > N summaries exist
+
+
+async def extract_conversation_memory(
+    ctx: dict, conversation_id: str, tenant_id: str, user_id: str,
+) -> dict:
+    """Extract structured memory from a conversation and index it.
+
+    Invariants respected:
+    - #1: Never indexes raw Q/A
+    - #2: Uses structured extraction prompt
+    - #3: source_type='conversation_summary'
+    - #8: tenant_id + user_id always together
+
+    Steps:
+    1. Load conversation messages
+    2. Build transcript
+    3. Call LLM for structured extraction
+    4. Chunk + embed + index with scope='personal', source_type='conversation_summary'
+    """
+    from app.core.chunking import chunker
+    from app.models.conversation import Conversation
+    from app.services.memory_extractor import extract_memory
+
+    conversation_uuid = UUID(conversation_id)
+    tenant_uuid = UUID(tenant_id)
+    user_uuid = UUID(user_id)
+    db = await get_db()
+
+    try:
+        # Load conversation
+        result = await db.execute(
+            select(Conversation)
+            .where(Conversation.id == conversation_uuid)
+            .where(Conversation.user_id == user_uuid)
+        )
+        conv = result.scalar_one_or_none()
+        if not conv:
+            return {"error": "Conversation not found"}
+
+        # Load messages
+        result = await db.execute(
+            select(Message)
+            .where(Message.conversation_ref_id == conversation_uuid)
+            .order_by(Message.created_at.asc())
+        )
+        messages = result.scalars().all()
+
+        if not messages:
+            return {"error": "No messages in conversation"}
+
+        # Cap to last N messages
+        messages = messages[-MAX_SUMMARY_MESSAGES:]
+
+        # Build transcript
+        transcript_parts = []
+        for msg in messages:
+            role = msg.role.upper() if msg.role else "UNKNOWN"
+            transcript_parts.append(f"[{role}]: {msg.content}")
+        transcript = "\n\n".join(transcript_parts)
+
+        if len(transcript) > MAX_TRANSCRIPT_CHARS:
+            transcript = transcript[-MAX_TRANSCRIPT_CHARS:]
+
+        # Extract structured memory (invariant #1, #2)
+        memory_result = await extract_memory(transcript)
+
+        if not memory_result:
+            return {"message": "No exploitable information found"}
+
+        summary_text = memory_result["text"]
+
+        # Chunk the indexable text
+        summary_chunks = chunker.chunk_text(summary_text)
+
+        if not summary_chunks:
+            return {"message": "Summary generated but no chunks produced"}
+
+        # Embed
+        chunk_texts = [c.content for c in summary_chunks]
+        embeddings, tokens_used = await embedding_service.embed_texts(chunk_texts)
+
+        # Prepare chunks (scope='personal', source_type='conversation_summary')
+        db_chunks = []
+        vector_chunks = []
+
+        for chunk, embedding in zip(summary_chunks, embeddings):
+            db_chunk = Chunk(
+                scope="personal",
+                tenant_id=tenant_uuid,
+                user_id=user_uuid,
+                dossier_id=None,
+                source_type="conversation_summary",
+                source_id=conversation_uuid,
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                content_hash=chunk.content_hash,
+                token_count=chunk.token_count,
+                content_tsv=sa_func.to_tsvector(
+                    settings.postgres_fts_config, chunk.content,
+                ),
+            )
+            db.add(db_chunk)
+            db_chunks.append(db_chunk)
+
+            vector_chunks.append({
+                "id": str(db_chunk.id),
+                "vector": embedding,
+                "payload": {
+                    "scope": "personal",
+                    "tenant_id": str(tenant_uuid),
+                    "user_id": str(user_uuid),
+                    "source_type": "conversation_summary",
+                    "source_id": str(conversation_uuid),
+                    "document_filename": f"Memory: conversation {conversation_id[:8]}",
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                },
+            })
+
+        await db.flush()
+
+        for db_chunk, vec_chunk in zip(db_chunks, vector_chunks):
+            db_chunk.qdrant_id = vec_chunk["id"]
+            vec_chunk["id"] = str(db_chunk.id)
+
+        # Index vectors
+        await vector_store.ensure_collection()
+        await vector_store.upsert_chunks(vector_chunks)
+
+        await db.commit()
+
+        logger.info("conversation_memory_extracted", extra={
+            "conversation_id": conversation_id,
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "chunks_count": len(summary_chunks),
+            "tokens_used": tokens_used,
+        })
+
+        return {
+            "chunks": len(summary_chunks),
+            "tokens_used": tokens_used,
+        }
+
+    except Exception as e:
+        logger.exception(
+            f"Error extracting memory from conversation {conversation_id}"
+        )
+        return {"error": str(e)}
+
+    finally:
+        await db.close()
+
+
+async def consolidate_user_memory(
+    ctx: dict, tenant_id: str, user_id: str,
+) -> dict:
+    """Consolidate a user's conversation summaries into a compact memory.
+
+    Invariant #6: Without consolidation, memory degrades over time.
+
+    Steps:
+    1. Load all conversation_summary chunks for this user
+    2. If below threshold, skip
+    3. Call LLM to consolidate
+    4. Delete old summary chunks (Qdrant + DB)
+    5. Index new consolidated chunks
+    """
+    from app.core.chunking import chunker
+    from app.services.memory_consolidator import consolidate_memories
+
+    tenant_uuid = UUID(tenant_id)
+    user_uuid = UUID(user_id)
+    db = await get_db()
+
+    try:
+        # Load all conversation_summary chunks for this user
+        result = await db.execute(
+            select(Chunk)
+            .where(Chunk.tenant_id == tenant_uuid)
+            .where(Chunk.user_id == user_uuid)
+            .where(Chunk.source_type == "conversation_summary")
+            .order_by(Chunk.created_at.asc())
+        )
+        old_chunks = list(result.scalars().all())
+
+        if len(old_chunks) < CONSOLIDATION_MIN_SUMMARIES:
+            return {
+                "message": f"Only {len(old_chunks)} summary chunks, "
+                f"below threshold of {CONSOLIDATION_MIN_SUMMARIES}",
+            }
+
+        # Group chunks by source_id (each source_id = one extraction)
+        # Try to parse stored content back as structured memory;
+        # fall back to treating it as plain text entries
+        import json as _json
+        from app.services.memory_extractor import _parse_memory_json
+
+        summaries_by_source: dict[str, list[str]] = {}
+        for chunk in old_chunks:
+            key = str(chunk.source_id) if chunk.source_id else "unknown"
+            summaries_by_source.setdefault(key, []).append(chunk.content)
+
+        # Reassemble each extraction and try to parse as structured JSON
+        structured_summaries: list[dict] = []
+        for parts in summaries_by_source.values():
+            combined = "\n".join(parts)
+            parsed = _parse_memory_json(combined)
+            if parsed:
+                structured_summaries.append(parsed)
+            else:
+                # Legacy plain-text summary — wrap as a single "facts" entry
+                structured_summaries.append({"facts": [combined]})
+
+        # Consolidate (structured JSON merge)
+        consolidation_result = await consolidate_memories(structured_summaries)
+
+        if not consolidation_result:
+            return {"message": "Consolidation produced empty result, keeping originals"}
+
+        consolidated_text = consolidation_result["text"]
+
+        # Delete old chunks from Qdrant
+        old_qdrant_ids = [c.qdrant_id for c in old_chunks if c.qdrant_id]
+        if old_qdrant_ids:
+            for chunk in old_chunks:
+                # Delete individually (no batch delete by arbitrary IDs in our API)
+                if chunk.qdrant_id:
+                    try:
+                        await vector_store.client.delete(
+                            collection_name=vector_store.collection_name,
+                            points_selector={"points": [chunk.qdrant_id]},
+                        )
+                    except Exception:
+                        pass  # Best effort
+
+        # Delete old chunks from DB
+        for chunk in old_chunks:
+            await db.delete(chunk)
+        await db.flush()
+
+        # Chunk consolidated text
+        new_chunks = chunker.chunk_text(consolidated_text)
+
+        if not new_chunks:
+            await db.commit()
+            return {"message": "Consolidated but no chunks produced"}
+
+        # Embed
+        chunk_texts = [c.content for c in new_chunks]
+        embeddings, tokens_used = await embedding_service.embed_texts(chunk_texts)
+
+        # Store new chunks
+        db_chunks = []
+        vector_chunks = []
+
+        for chunk, embedding in zip(new_chunks, embeddings):
+            db_chunk = Chunk(
+                scope="personal",
+                tenant_id=tenant_uuid,
+                user_id=user_uuid,
+                dossier_id=None,
+                source_type="conversation_summary",
+                chunk_index=chunk.chunk_index,
+                content=chunk.content,
+                content_hash=chunk.content_hash,
+                token_count=chunk.token_count,
+                content_tsv=sa_func.to_tsvector(
+                    settings.postgres_fts_config, chunk.content,
+                ),
+            )
+            db.add(db_chunk)
+            db_chunks.append(db_chunk)
+
+            vector_chunks.append({
+                "id": str(db_chunk.id),
+                "vector": embedding,
+                "payload": {
+                    "scope": "personal",
+                    "tenant_id": str(tenant_uuid),
+                    "user_id": str(user_uuid),
+                    "source_type": "conversation_summary",
+                    "document_filename": "Consolidated memory",
+                    "chunk_index": chunk.chunk_index,
+                    "content": chunk.content,
+                },
+            })
+
+        await db.flush()
+
+        for db_chunk, vec_chunk in zip(db_chunks, vector_chunks):
+            db_chunk.qdrant_id = vec_chunk["id"]
+            vec_chunk["id"] = str(db_chunk.id)
+
+        await vector_store.ensure_collection()
+        await vector_store.upsert_chunks(vector_chunks)
+
+        await db.commit()
+
+        logger.info("user_memory_consolidated", extra={
+            "tenant_id": tenant_id,
+            "user_id": user_id,
+            "old_chunks": len(old_chunks),
+            "new_chunks": len(new_chunks),
+            "tokens_used": tokens_used,
+        })
+
+        return {
+            "old_chunks": len(old_chunks),
+            "new_chunks": len(new_chunks),
+            "tokens_used": tokens_used,
+        }
+
+    except Exception as e:
+        logger.exception(
+            f"Error consolidating memory for user {user_id}"
+        )
+        return {"error": str(e)}
+
+    finally:
+        await db.close()
+
+
 class WorkerSettings:
     """Arq worker settings."""
 
@@ -1100,9 +1750,12 @@ class WorkerSettings:
     )
 
     functions = [
-        process_document, process_dossier_document, crawl_website,
+        process_document, process_dossier_document,
+        process_project_document, summarize_project_conversation,
+        crawl_website,
         send_email, sync_mail_account, sync_thread, run_agent,
         generate_presentation_slides_direct, generate_presentation_slides, export_presentation,
+        extract_conversation_memory, consolidate_user_memory,
     ]
     cron_jobs = [
         cron(

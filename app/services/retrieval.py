@@ -39,6 +39,8 @@ class RetrievalService:
         top_k: int | None = None,
         db: AsyncSession | None = None,
         dossier_ids: list[UUID] | None = None,
+        project_ids: list[UUID] | None = None,
+        user_id: UUID | None = None,
     ) -> list[RetrievedChunk]:
         """Retrieve relevant chunks for a query.
 
@@ -48,6 +50,8 @@ class RetrievalService:
 
         Args:
             dossier_ids: Personal dossier UUIDs to include in search scope.
+            project_ids: Project UUIDs to include in search scope.
+            user_id: User UUID for personal-global search (all user content).
         """
         if db is not None:
             from app.core.retrieval.orchestrator import retrieve_context
@@ -58,6 +62,8 @@ class RetrievalService:
                 collection_ids=collection_ids,
                 query=query,
                 dossier_ids=dossier_ids,
+                project_ids=project_ids,
+                user_id=user_id,
             )
 
         # Fallback: vector-only (backward compat)
@@ -68,6 +74,8 @@ class RetrievalService:
             tenant_id=tenant_id,
             collection_ids=collection_ids,
             dossier_ids=dossier_ids,
+            project_ids=project_ids,
+            user_id=user_id,
             limit=top_k or self.top_k,
             score_threshold=self.score_threshold,
         )

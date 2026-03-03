@@ -1,10 +1,12 @@
 """Chunk model.
 
-Chunks carry an explicit `scope` discriminator so that org-level and
-personal-level chunks are structurally separated in the DB.  A CHECK
-constraint enforces the invariant:
-  scope='org'      → collection_id set, user_id/dossier_id NULL
-  scope='personal' → user_id + dossier_id set, collection_id NULL
+Chunks carry an explicit `scope` discriminator so that org-level,
+personal-level, and project-level chunks are structurally separated
+in the DB.  A CHECK constraint enforces the invariant:
+  scope='org'      → collection_id set, user_id/dossier_id/project_id NULL
+  scope='personal' → user_id set, collection_id/project_id NULL
+                     (dossier_id optional — NULL for memory/summary chunks)
+  scope='project'  → project_id + user_id set, collection_id/dossier_id NULL
 """
 
 from datetime import datetime
@@ -23,17 +25,21 @@ if TYPE_CHECKING:
 
 
 class Chunk(Base):
-    """Chunk represents an indexed text segment (org or personal scope)."""
+    """Chunk represents an indexed text segment (org, personal, or project scope)."""
 
     __tablename__ = "chunks"
     __table_args__ = (
         CheckConstraint(
             """
             (scope = 'org' AND collection_id IS NOT NULL
-                          AND user_id IS NULL AND dossier_id IS NULL)
+                          AND user_id IS NULL AND dossier_id IS NULL
+                          AND project_id IS NULL)
             OR
-            (scope = 'personal' AND user_id IS NOT NULL AND dossier_id IS NOT NULL
-                                AND collection_id IS NULL)
+            (scope = 'personal' AND user_id IS NOT NULL
+                                AND collection_id IS NULL AND project_id IS NULL)
+            OR
+            (scope = 'project' AND project_id IS NOT NULL AND user_id IS NOT NULL
+                               AND collection_id IS NULL AND dossier_id IS NULL)
             """,
             name="ck_chunks_scope_coherence",
         ),
@@ -73,7 +79,18 @@ class Chunk(Base):
         index=True,
     )
 
-    # Multi-source support (document, email, etc.)
+    # --- Project scope fields ---
+    project_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True, index=True,
+    )
+    project_document_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("project_documents.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+
+    # Multi-source support (document, email, conversation_summary, etc.)
     source_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
     source_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
 

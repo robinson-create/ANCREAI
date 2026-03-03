@@ -57,7 +57,7 @@ export const toolCallSchema = z.object({
   provider: z.string(),
   tool: z.string(),
   arguments: z.record(z.unknown()).nullish(),
-  status: z.enum(["success", "error"]).nullish(),
+  status: z.enum(["success", "error", "calling"]).nullish(),
   summary: z.string().nullish(),
 })
 export type ToolCallPayload = z.infer<typeof toolCallSchema>

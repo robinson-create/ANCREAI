@@ -551,3 +551,6 @@ export interface PresentationSSEEvent {
   type: PresentationSSEEventType
   payload: Record<string, unknown>
 }
+
+// Dossier types
+export * from "./dossier"

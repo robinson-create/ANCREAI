@@ -4,10 +4,11 @@ from enum import Enum
 
 
 class ContentScope(str, Enum):
-    """Explicit scope for content: org-level or personal."""
+    """Explicit scope for content: org-level, personal, or project."""
 
     ORG = "org"
     PERSONAL = "personal"
+    PROJECT = "project"
 
 
 class OrgRole(str, Enum):

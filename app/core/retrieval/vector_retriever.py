@@ -15,16 +15,21 @@ async def vector_search(
     query_embedding: list[float],
     topk: int,
     dossier_ids: list[UUID] | None = None,
+    project_ids: list[UUID] | None = None,
+    user_id: UUID | None = None,
 ) -> list[RetrievedChunk]:
     """Search chunks using Qdrant vector similarity.
 
-    Supports mixed org + personal scope via collection_ids and dossier_ids.
+    Supports org, personal, project, and personal-global scopes via
+    collection_ids, dossier_ids, project_ids, and user_id.
     """
     results = await vector_store.search(
         query_vector=query_embedding,
         tenant_id=tenant_id,
         collection_ids=collection_ids,
         dossier_ids=dossier_ids,
+        project_ids=project_ids,
+        user_id=user_id,
         limit=topk,
         score_threshold=0.0,
     )

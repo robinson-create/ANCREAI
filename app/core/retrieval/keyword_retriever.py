@@ -36,14 +36,20 @@ async def keyword_search(
     topk: int,
     fts_config: str = "simple",
     dossier_ids: list[UUID] | None = None,
+    project_ids: list[UUID] | None = None,
+    user_id: UUID | None = None,
 ) -> list[RetrievedChunk]:
     """Search chunks using Postgres full-text search.
 
     Uses OR-based tsquery + ts_rank_cd for ranking.
-    Supports mixed org + personal scope:
+    Supports org, personal, project, and personal-global scopes:
     - collection_ids → org-scope chunks
     - dossier_ids → personal-scope chunks
-    When both are provided, results from either scope are returned (OR).
+    - project_ids → project-scope chunks
+    - user_id (alone) → personal-global: ALL user chunks (personal + project)
+
+    Scopes are mutually exclusive: user_id cannot be combined with
+    collection_ids, dossier_ids, or project_ids.
     """
     if not query.strip():
         return []
@@ -64,6 +70,20 @@ async def keyword_search(
     }
 
     scope_clauses: list[str] = []
+
+    has_specific_scope = (
+        (collection_ids is not None and len(collection_ids) > 0)
+        or (dossier_ids is not None and len(dossier_ids) > 0)
+        or (project_ids is not None and len(project_ids) > 0)
+    )
+
+    # Invariant #4: scopes mutually exclusive
+    if user_id is not None and has_specific_scope:
+        raise ValueError(
+            "user_id (personal-global) cannot be combined with "
+            "collection_ids, dossier_ids, or project_ids"
+        )
+
     if collection_ids is not None and collection_ids:
         scope_clauses.append(
             "(c.scope = 'org' AND c.collection_id = ANY(CAST(:collection_ids AS uuid[])))"
@@ -75,6 +95,19 @@ async def keyword_search(
             "(c.scope = 'personal' AND c.dossier_id = ANY(CAST(:dossier_ids AS uuid[])))"
         )
         params["dossier_ids"] = [str(did) for did in dossier_ids]
+
+    if project_ids is not None and project_ids:
+        scope_clauses.append(
+            "(c.scope = 'project' AND c.project_id = ANY(CAST(:project_ids AS uuid[])))"
+        )
+        params["project_ids"] = [str(pid) for pid in project_ids]
+
+    # Personal-global: all user chunks (personal + project), invariants #5, #7, #8
+    if user_id is not None and not scope_clauses:
+        scope_clauses.append(
+            "(c.user_id = CAST(:user_id AS uuid) AND c.scope IN ('personal', 'project'))"
+        )
+        params["user_id"] = str(user_id)
 
     if not scope_clauses:
         logger.warning("keyword_search_no_scope", extra={

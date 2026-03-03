@@ -27,12 +27,16 @@ async def retrieve_context(
     query: str,
     include_web: bool = False,
     dossier_ids: list[UUID] | None = None,
+    project_ids: list[UUID] | None = None,
+    user_id: UUID | None = None,
 ) -> list[RetrievedChunk]:
     """Full hybrid retrieval pipeline: keyword + vector [+ web] -> RRF -> rerank.
 
-    Supports mixed org + personal scope:
+    Supports org, personal, project, and personal-global scopes:
     - collection_ids → org-scope chunks
     - dossier_ids → personal-scope chunks (user's dossiers)
+    - project_ids → project-scope chunks (user's projects)
+    - user_id (alone) → personal-global: ALL user chunks (personal + project)
 
     Steps:
     1) Embed query
@@ -55,6 +59,8 @@ async def retrieve_context(
         topk=settings.hybrid_keyword_topk,
         fts_config=settings.postgres_fts_config,
         dossier_ids=dossier_ids,
+        project_ids=project_ids,
+        user_id=user_id,
     )
     vector_task = vector_search(
         tenant_id=tenant_id,
@@ -62,6 +68,8 @@ async def retrieve_context(
         query_embedding=query_embedding,
         topk=settings.hybrid_vector_topk,
         dossier_ids=dossier_ids,
+        project_ids=project_ids,
+        user_id=user_id,
     )
 
     tasks: list = [keyword_task, vector_task]

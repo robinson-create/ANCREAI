@@ -5,10 +5,13 @@
 ## Fonctionnalités
 
 - **Multi-tenant** — Isolation complète par tenant (données, fichiers, vecteurs, quotas)
-- **Multi-assistants** — Créez plusieurs assistants avec leurs propres collections de documents et connecteurs
+- **3 scopes RAG** — Org (assistants partagés), Personal (dossiers privés), Project (espaces projet collaboratifs)
+- **Chat personnel global** — Assistant personnel qui cherche dans TOUS les contenus d'un utilisateur (dossiers + projets) sans configuration
 - **RAG Hybride** — Recherche keyword (PostgreSQL FTS) + vectorielle (Qdrant) fusionnée par RRF + reranking
+- **Mémoire structurée** — Extraction automatique de faits/décisions/préférences depuis les conversations, indexés pour le RAG
 - **Streaming** — Réponses en temps réel via SSE avec tool-calling itératif
 - **Citations** — Sources citées avec nom de fichier, numéro de page et extrait
+- **Présentations** — Génération de slides par IA avec 12 templates (Presenton)
 - **Documents** — Éditeur de documents structurés avec IA (contrats, devis, NDA…)
 - **Emails** — Compositeur d'emails assisté par IA avec contexte RAG
 - **Email Suggestion** — L'assistant propose de transformer une réponse actionnable en email via un bloc CTA (suivi, synthèse, relance, proposition)
@@ -44,7 +47,44 @@
 
 ## Architecture RAG
 
+### Les 3 scopes RAG
+
+ANCRE supporte 3 scopes de contenu mutuellement exclusifs, plus un mode **personnel global** qui agrège les scopes personal + project d'un utilisateur :
+
+| Scope | Identifiant | Filtrage | Cas d'usage |
+|-------|------------|----------|-------------|
+| **Org** | `assistant_id` → `collection_ids` | `tenant_id` + `collection_id` | Assistants d'entreprise partagés (plan Org) |
+| **Personal** | `dossier_id` | `tenant_id` + `user_id` + `dossier_id` | Dossiers personnels thématiques (plan Premium) |
+| **Project** | `project_id` | `tenant_id` + `user_id` + `project_id` | Espaces projet avec documents et résumés |
+| **Personal Global** | `user_id` (seul) | `tenant_id` + `user_id` + `scope IN (personal, project)` | Chat global — cherche dans TOUT le contenu de l'utilisateur (plan Free) |
+
+#### Invariants de scope
+
+1. **Scopes mutuellement exclusifs au runtime** — exactement un de `assistant_id` / `dossier_id` / `project_id` / `user_id` global. Erreur si combinés.
+2. **Double filtre `tenant_id` + `user_id`** — jamais `user_id` seul, toujours combiné avec `tenant_id` (Qdrant ET PostgreSQL).
+3. **Filtrage scope explicite** dans Qdrant — `scope IN ('personal','project')` toujours dans les filtres, même si `user_id` suffirait.
+4. **CHECK constraints DB** — La table `chunks` et la table `conversations` ont des contraintes CHECK qui empêchent les combinaisons incohérentes.
+
+#### Modèle de données par scope
+
+```
+Scope ORG:
+  Chunk → scope='org', collection_id=X, tenant_id=T
+          user_id=NULL, dossier_id=NULL, project_id=NULL
+
+Scope PERSONAL:
+  Chunk → scope='personal', user_id=U, tenant_id=T
+          dossier_id=D (ou NULL pour les chunks mémoire)
+          collection_id=NULL, project_id=NULL
+
+Scope PROJECT:
+  Chunk → scope='project', user_id=U, project_id=P, tenant_id=T
+          collection_id=NULL, dossier_id=NULL
+```
+
 ### Pipeline d'ingestion
+
+Chaque scope a son propre pipeline d'ingestion, mais tous partagent les mêmes étapes de base :
 
 ```
 Upload fichier (.pdf, .docx, .pptx, .md, .txt, .html)
@@ -53,23 +93,38 @@ Upload fichier (.pdf, .docx, .pptx, .md, .txt, .html)
   Validation (quota, doublon SHA256, taille max)
        │
        ▼
-  Stockage S3 : {tenant_id}/{collection_id}/{filename}
+  Stockage S3 :
+    Org     → {tenant_id}/{collection_id}/{filename}
+    Personal → personal/{user_id}/{dossier_id}/{filename}
+    Project  → projects/{user_id}/{project_id}/{filename}
        │
        ▼
   Worker Arq (background)
        │
-       ├─► Parse document (Mistral OCR pour les PDFs, python-docx, etc.)
+       ├─► Parse document (Docling pipeline ou Mistral OCR fallback)
        ├─► Découpage en chunks (taille fixe ~800 tokens, overlap 100 tokens)
        │     └─ Split sur frontières de phrases (sentence-aware)
        ├─► Génération embeddings batch (Mistral Embed, 1024 dim)
        ├─► Indexation PostgreSQL (TSVECTOR + GIN index pour FTS)
+       │     └─ Champs dénormalisés : tenant_id, collection_id/dossier_id/project_id, user_id, scope
        └─► Indexation Qdrant (vecteurs cosine)
+              └─ Payload : scope, tenant_id, user_id, collection_id/dossier_id/project_id, source_type
               │
               ▼
         status = "ready"
 ```
 
+#### Source types
+
+| `source_type` | Origine | Scope |
+|---------------|---------|-------|
+| `document` (ou NULL) | Document uploadé | org, personal, project |
+| `conversation_summary` | Résumé structuré extrait d'une conversation | personal, project |
+| `project_summary` | Résumé de conversation projet (ProjectKnowledge) | project |
+
 ### Pipeline de recherche (retrieval)
+
+Le pipeline est identique quel que soit le scope — seul le **filtre** change :
 
 ```
 Question utilisateur
@@ -81,7 +136,12 @@ Question utilisateur
        ▼                                        ▼
   Recherche Keyword (PostgreSQL FTS)     Recherche Vectorielle (Qdrant)
     - to_tsquery() avec logique OR         - Cosine similarity
-    - Filtre: tenant_id + collection_ids   - Filtre: tenant_id + collection_ids
+    - Filtre selon le scope :               - Filtre selon le scope :
+      Org:     tenant_id + collection_ids      tenant_id + collection_id
+      Personal: tenant_id + dossier_ids         tenant_id + dossier_id
+      Project:  tenant_id + project_ids         tenant_id + project_id
+      Global:   tenant_id + user_id             tenant_id + user_id
+                + scope IN (personal,project)    + scope IN (personal,project)
     - Ranking: ts_rank_cd()                - Top-K résultats
     - Top-40 candidats                     - Top-40 candidats
        │                                        │
@@ -102,30 +162,104 @@ Question utilisateur
             (chunks avec source, page, extrait)
 ```
 
-### Flow complet d'un message
+### Flow complet d'un message (par scope)
+
+#### Scope Org (assistant partagé)
 
 ```
-Message utilisateur
+POST /api/v1/chat/{assistant_id}/stream
        │
        ▼
   1. Chargement assistant (collections + intégrations)
-  2. Vérification quota (Free tier: 100 requêtes/jour)
-  3. Historique conversation (si include_history=true)
-  4. Retrieval hybride (keyword + vector → RRF → rerank)
-  5. Construction du prompt système :
-       - Instructions de l'assistant (system_prompt)
-       - Contexte RAG (chunks avec métadonnées)
-       - Instructions pour les outils (blocks UI + intégrations)
-  6. Appel LLM (Mistral Medium) avec tool-calling :
-       - Boucle itérative (max 5 tours) :
-         · Si outil "block" → Generative UI (KPI, tableau, étapes, callout)
-         · Si outil "suggestEmail" → Crée un EmailDraftBundle en DB + bloc CTA
-         · Si outil "integration" → Appel API externe via Nango
-         · Sinon → Réponse texte
-  7. Streaming SSE des tokens vers le frontend
-  8. Sauvegarde en DB (messages, citations, blocks, tokens)
-  9. Extraction des citations (top-5 chunks, score > 0)
+  2. Vérification quota
+  3. Historique conversation
+  4. Retrieval hybride → filtre collection_ids de l'assistant
+  5. Construction prompt : system_prompt assistant + contexte RAG + outils
+  6. Appel LLM (Mistral) avec tool-calling itératif
+  7. Streaming SSE → sauvegarde messages/citations/blocks
 ```
+
+#### Scope Personal (dossier)
+
+```
+POST /api/v1/dossiers/{dossier_id}/chat/stream
+       │
+       ▼
+  1. Vérification ownership dossier (user_id)
+  2. Vérification quota
+  3. Historique conversation (scopée au dossier)
+  4. Retrieval hybride → filtre dossier_id
+  5. Prompt système personnel + contexte RAG
+  6. Streaming SSE → sauvegarde
+```
+
+#### Scope Personal Global (tous les contenus d'un user)
+
+```
+POST /api/v1/chat/personal/stream
+       │
+       ▼
+  1. Auth utilisateur (pas de dossier_id, pas d'assistant_id)
+  2. Vérification quota
+  3. Conversation : scope='personal', dossier_id=NULL
+  4. Retrieval hybride → filtre user_id + scope IN ('personal','project')
+     → cherche dans TOUS les dossiers + TOUS les projets + mémoire
+  5. Prompt système personnel global
+  6. Streaming SSE → sauvegarde
+  7. Toutes les 10 messages → extraction mémoire automatique (worker Arq)
+```
+
+#### Scope Project
+
+```
+POST /api/v1/projects/{project_id}/chat/stream
+       │
+       ▼
+  1. Vérification ownership projet (user_id)
+  2. Vérification quota
+  3. Historique conversation (scopée au projet)
+  4. Retrieval hybride → filtre project_id
+  5. Prompt système projet + contexte RAG
+  6. Streaming SSE → sauvegarde
+  7. Toutes les 5 messages → résumé projet automatique (ProjectKnowledge)
+```
+
+### Mémoire structurée (Personal Global)
+
+Le chat personnel global dispose d'un système de mémoire persistante qui transforme les conversations en connaissances indexables :
+
+```
+Conversation (10+ messages)
+       │
+       ▼  Worker Arq : extract_conversation_memory
+  Extraction structurée (LLM)
+    → Prompt forçant : objectifs, décisions, contraintes, faits, hypothèses, préférences
+    → Sortie JSON structurée :
+      {
+        "goals": ["..."],
+        "decisions": ["..."],
+        "constraints": ["..."],
+        "facts": ["..."],
+        "hypotheses": ["..."],
+        "preferences": ["..."]
+      }
+       │
+       ▼
+  Conversion en texte indexable (sections + bullet points)
+       │
+       ▼
+  Chunking + Embedding + Indexation
+    → scope='personal', source_type='conversation_summary'
+    → dossier_id=NULL (chunks mémoire indépendants)
+    → Qdrant : tenant_id + user_id + scope='personal'
+    → PostgreSQL : FTS via content_tsv
+```
+
+#### Invariants mémoire
+
+1. **Jamais d'indexation brute** — seuls les résumés structurés sont indexés, jamais les Q/R bruts
+2. **source_type explicite** — `conversation_summary` sur chaque chunk mémoire
+3. **Consolidation périodique** — quand > 10 résumés existent, un worker les fusionne en une mémoire consolidée (merge JSON + déduplification + résolution de conflits)
 
 ### Email Suggestion (chat → email)
 
@@ -156,13 +290,17 @@ Réponse assistant (contenu actionnable: synthèse, suivi, relance…)
 
 | Niveau | Mécanisme |
 |--------|-----------|
-| **Multi-tenant** | `tenant_id` sur tous les modèles (assistant, collection, chunk, connexion) |
-| **Entre assistants** | Scoping par `collection_ids` — chaque assistant ne cherche que dans ses collections |
+| **Multi-tenant** | `tenant_id` sur tous les modèles — filtre systématique dans Qdrant ET PostgreSQL |
+| **Scope Org** | `assistant_id` → `collection_ids` — chaque assistant ne cherche que dans ses collections |
+| **Scope Personal** | `user_id` + `dossier_id` — un user ne voit que ses propres dossiers |
+| **Scope Project** | `user_id` + `project_id` — un user ne voit que ses propres projets |
+| **Scope Personal Global** | `user_id` + `scope IN (personal, project)` — agrège tout le contenu du user |
+| **CHECK constraints** | Contraintes PostgreSQL empêchant les combinaisons incohérentes (ex: scope=org + user_id) |
 | **Collections partagées** | Deux assistants d'un même tenant peuvent partager une collection (M:N) |
 | **Connecteurs** | Liés par assistant (max 2), scopés par tenant |
-| **Vector store** | Filtrage Qdrant par `tenant_id` + `collection_ids` dans le payload |
-| **Full-Text Search** | `WHERE tenant_id = ? AND collection_id = ANY(?)` avec champs dénormalisés |
-| **Stockage S3** | Clé : `{tenant_id}/{collection_id}/{filename}` |
+| **Vector store** | Payload indexé : `tenant_id`, `collection_id`, `user_id`, `dossier_id`, `project_id`, `scope`, `source_type` |
+| **Full-Text Search** | Index composite `(tenant_id, user_id, scope) WHERE user_id IS NOT NULL` pour les scopes personal/project |
+| **Stockage S3** | Clé selon scope : `{tenant_id}/{collection_id}/...` (org), `personal/{user_id}/...` (personal), `projects/{user_id}/...` (project) |
 
 ### Connecteurs disponibles (Nango)
 
@@ -205,17 +343,39 @@ Chaque connecteur est invoqué par le LLM via **function calling**. L'appel tran
 
 ```
 ├── app/                         # Backend FastAPI
-│   ├── api/v1/                 # Routes API (chat, assistants, documents, dictation…)
+│   ├── api/v1/                 # Routes API
+│   │   ├── chat.py             # Chat org (assistants)
+│   │   ├── personal_chat.py    # Chat personnel global
+│   │   ├── dossiers.py         # Dossiers + chat personal
+│   │   ├── projects.py         # Projets + chat project
+│   │   ├── assistants.py       # CRUD assistants
+│   │   └── ...                 # documents, dictation, mail, billing…
 │   ├── core/                   # Auth, chunking, parsing, vector store
-│   │   └── retrieval/          # Pipeline hybride (orchestrator, keyword, vector, RRF, reranker)
-│   ├── models/                 # Modèles SQLAlchemy (assistant, message, chunk, document…)
+│   │   ├── vector_store.py     # Client Qdrant (search multi-scope)
+│   │   └── retrieval/          # Pipeline hybride
+│   │       ├── orchestrator.py # Combine keyword + vector → RRF → rerank
+│   │       ├── keyword_retriever.py  # PostgreSQL FTS (multi-scope)
+│   │       └── vector_retriever.py   # Qdrant (multi-scope)
+│   ├── models/                 # Modèles SQLAlchemy
+│   │   ├── chunk.py            # Chunks avec scope + CHECK constraint
+│   │   ├── conversation.py     # Conversations avec scope + CHECK constraint
+│   │   ├── dossier.py          # Dossiers personnels
+│   │   ├── project.py          # Projets
+│   │   └── ...                 # assistant, message, document…
 │   ├── schemas/                # Schémas Pydantic
-│   ├── services/               # Logique métier (chat, retrieval, embedding, transcription…)
+│   ├── services/               # Logique métier
+│   │   ├── chat.py             # ChatService (user_id pour personal global)
+│   │   ├── retrieval.py        # RetrievalService (multi-scope)
+│   │   ├── memory_extractor.py # Extraction mémoire JSON structurée
+│   │   ├── memory_consolidator.py # Consolidation mémoire périodique
+│   │   ├── memory_prompts.py   # Prompts extraction + consolidation
+│   │   └── ...                 # embedding, transcription, presentation…
 │   ├── integrations/           # Nango (OAuth tools, executor, registry)
-│   └── workers/                # Workers Arq (ingestion async)
+│   └── workers/                # Workers Arq
+│       └── tasks.py            # Ingestion + extraction mémoire + consolidation
 ├── frontend/                   # Frontend React + Vite
 │   └── src/
-│       ├── api/                # Clients API (chat, assistants, dictation…)
+│       ├── api/                # Clients API (chat, assistants, dossiers…)
 │       ├── components/         # Composants UI (blocks, documents, layout…)
 │       ├── hooks/              # Hooks React (auth, dictation…)
 │       ├── lib/                # Utilitaires (dictation adapter, cn…)
@@ -377,13 +537,52 @@ Ou utiliser le script fourni (si présent) : `make start` / `./start-dev.sh`.
 | `PATCH` | `/api/v1/assistants/{id}` | Modifier un assistant |
 | `DELETE` | `/api/v1/assistants/{id}` | Supprimer un assistant |
 
-### Chat
+### Chat Org (assistants)
 | Méthode | Endpoint | Description |
 |---------|----------|-------------|
 | `POST` | `/api/v1/chat/{assistant_id}` | Chat (réponse complète) |
 | `POST` | `/api/v1/chat/{assistant_id}/stream` | Chat (SSE streaming) |
 | `GET` | `/api/v1/chat/{assistant_id}/conversations` | Lister les conversations |
 | `GET` | `/api/v1/chat/{assistant_id}/conversations/{id}` | Historique conversation |
+
+### Chat Personnel Global
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `POST` | `/api/v1/chat/personal/stream` | Chat global personnel (SSE) — RAG sur tous les dossiers + projets du user |
+| `GET` | `/api/v1/chat/personal/conversations` | Lister les conversations personnelles globales |
+| `GET` | `/api/v1/chat/personal/conversations/{id}` | Historique d'une conversation globale |
+
+### Dossiers (scope personal)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `POST` | `/api/v1/dossiers` | Créer un dossier personnel |
+| `GET` | `/api/v1/dossiers` | Lister les dossiers du user |
+| `GET` | `/api/v1/dossiers/{id}` | Détails d'un dossier |
+| `PATCH` | `/api/v1/dossiers/{id}` | Modifier un dossier |
+| `DELETE` | `/api/v1/dossiers/{id}` | Supprimer un dossier |
+| `POST` | `/api/v1/dossiers/{id}/documents` | Uploader un document dans un dossier |
+| `GET` | `/api/v1/dossiers/{id}/documents` | Lister les documents d'un dossier |
+| `DELETE` | `/api/v1/dossiers/{id}/documents/{doc_id}` | Supprimer un document |
+| `POST` | `/api/v1/dossiers/{id}/documents/import` | Importer un document existant dans un dossier |
+| `POST` | `/api/v1/dossiers/{id}/chat/stream` | Chat dans un dossier (SSE) — RAG scopé au dossier |
+| `GET` | `/api/v1/dossiers/{id}/conversations` | Lister les conversations d'un dossier |
+| `GET` | `/api/v1/dossiers/{id}/conversations/{conv_id}` | Historique conversation dossier |
+| `POST` | `/api/v1/dossiers/{id}/items` | Lier un élément (présentation, email…) au dossier |
+| `GET` | `/api/v1/dossiers/{id}/items` | Lister les éléments liés |
+| `DELETE` | `/api/v1/dossiers/{id}/items/{item_id}` | Supprimer un lien |
+
+### Projets (scope project)
+| Méthode | Endpoint | Description |
+|---------|----------|-------------|
+| `POST` | `/api/v1/projects` | Créer un projet |
+| `GET` | `/api/v1/projects` | Lister les projets du user |
+| `GET` | `/api/v1/projects/{id}` | Détails d'un projet |
+| `PATCH` | `/api/v1/projects/{id}` | Modifier un projet |
+| `DELETE` | `/api/v1/projects/{id}` | Supprimer un projet |
+| `POST` | `/api/v1/projects/{id}/documents` | Uploader un document projet |
+| `GET` | `/api/v1/projects/{id}/documents` | Lister les documents projet |
+| `POST` | `/api/v1/projects/{id}/chat/stream` | Chat dans un projet (SSE) — RAG scopé au projet |
+| `GET` | `/api/v1/projects/{id}/conversations` | Lister les conversations projet |
 
 ### Dictée vocale
 | Méthode | Endpoint | Description |
