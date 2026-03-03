@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Loader2, FolderPlus } from "lucide-react"
+import { Loader2, FolderPlus, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -42,6 +42,12 @@ export function AddToFolderDialog({
     enabled: open,
   })
 
+  const { data: containingFolderIds = [] } = useQuery({
+    queryKey: ["containing-folders", itemId],
+    queryFn: () => foldersApi.getContainingFolders(itemId),
+    enabled: open && !!itemId,
+  })
+
   const addMutation = useMutation({
     mutationFn: ({ folderId }: { folderId: string }) =>
       foldersApi.addItem(folderId, { item_type: itemType, item_id: itemId }),
@@ -49,8 +55,8 @@ export function AddToFolderDialog({
       queryClient.invalidateQueries({ queryKey: ["folders"] })
       queryClient.invalidateQueries({ queryKey: ["folder-items", folderId] })
       queryClient.invalidateQueries({ queryKey: ["folder", folderId] })
+      queryClient.invalidateQueries({ queryKey: ["containing-folders", itemId] })
       toast({ title: "Ajouté au dossier" })
-      onOpenChange(false)
       onSuccess?.()
     },
     onError: (err: Error & { response?: { data?: { detail?: string } } }) => {
@@ -74,9 +80,9 @@ export function AddToFolderDialog({
       queryClient.invalidateQueries({ queryKey: ["folders"] })
       queryClient.invalidateQueries({ queryKey: ["folder-items", folder.id] })
       queryClient.invalidateQueries({ queryKey: ["folder", folder.id] })
+      queryClient.invalidateQueries({ queryKey: ["containing-folders", itemId] })
       toast({ title: "Dossier créé et élément ajouté" })
       setCreateOpen(false)
-      onOpenChange(false)
       onSuccess?.()
     },
     onError: (err: Error) => {
@@ -111,27 +117,41 @@ export function AddToFolderDialog({
               </div>
             ) : (
               <div className="space-y-1 max-h-[240px] overflow-auto">
-                {folders.map((f) => (
-                  <button
-                    key={f.id}
-                    onClick={() => addMutation.mutate({ folderId: f.id })}
-                    disabled={addMutation.isPending}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent text-left transition-colors"
-                  >
-                    {f.color && (
-                      <div
-                        className="w-3 h-3 rounded-full shrink-0"
-                        style={{ backgroundColor: f.color }}
-                      />
-                    )}
-                    <span className="flex-1 truncate text-sm font-medium">
-                      {f.name}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {f.item_counts.conversation + f.item_counts.document + f.item_counts.email_thread} élément(s)
-                    </span>
-                  </button>
-                ))}
+                {folders.map((f) => {
+                  const alreadyAdded = containingFolderIds.includes(f.id)
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => !alreadyAdded && addMutation.mutate({ folderId: f.id })}
+                      disabled={addMutation.isPending || alreadyAdded}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                        alreadyAdded
+                          ? "bg-muted/50 cursor-default"
+                          : "hover:bg-accent"
+                      }`}
+                    >
+                      {f.color && (
+                        <div
+                          className="w-3 h-3 rounded-full shrink-0"
+                          style={{ backgroundColor: f.color }}
+                        />
+                      )}
+                      <span className={`flex-1 truncate text-sm font-medium ${alreadyAdded ? "text-muted-foreground" : ""}`}>
+                        {f.name}
+                      </span>
+                      {alreadyAdded ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                          <Check className="h-3 w-3" />
+                          Ajouté
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground shrink-0">
+                          {f.item_counts.conversation + f.item_counts.document + f.item_counts.email_thread + (f.item_counts.presentation || 0) + (f.item_counts.upload || 0)} élément(s)
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             )}
           </div>

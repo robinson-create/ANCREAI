@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
-import { Plus, Folder as FolderIcon, MessageSquare, FileText, Mail } from "lucide-react"
+import { Plus, Folder as FolderIcon, MessageSquare, FileText, Mail, Presentation, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { foldersApi } from "@/api/folders"
 import { FolderCreateDialog } from "./FolderCreateDialog"
@@ -129,7 +129,9 @@ function FolderCard({ folder, onClick }: { folder: FolderType; onClick: () => vo
   const total =
     folder.item_counts.conversation +
     folder.item_counts.document +
-    folder.item_counts.email_thread
+    folder.item_counts.email_thread +
+    (folder.item_counts.presentation || 0) +
+    (folder.item_counts.upload || 0)
 
   return (
     <button
@@ -167,6 +169,18 @@ function FolderCard({ folder, onClick }: { folder: FolderType; onClick: () => vo
               <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
                 <Mail className="h-2.5 w-2.5" />
                 {folder.item_counts.email_thread}
+              </span>
+            )}
+            {(folder.item_counts.presentation || 0) > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <Presentation className="h-2.5 w-2.5" />
+                {folder.item_counts.presentation}
+              </span>
+            )}
+            {(folder.item_counts.upload || 0) > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <Upload className="h-2.5 w-2.5" />
+                {folder.item_counts.upload}
               </span>
             )}
             {total === 0 && (

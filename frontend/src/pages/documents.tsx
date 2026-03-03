@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Clock,
   Copy,
-  Archive,
   Trash2,
   MoreVertical,
   Construction,
@@ -75,6 +74,7 @@ import { contactsApi } from "@/api/contacts"
 import { uploadsApi } from "@/api/uploads"
 import { useDocumentGeneration } from "@/contexts/document-generation-context"
 import { AddToFolderDialog } from "@/components/folders/AddToFolderDialog"
+import { ExportDialog } from "@/components/presentation/ExportDialog"
 import { DictationTextarea } from "@/components/dictation/DictationTextarea"
 import type { WorkspaceDocumentListItem, PresentationListItem } from "@/types"
 
@@ -94,14 +94,12 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "Brouillon",
   validated: "Validé",
   sent: "Envoyé",
-  archived: "Archivé",
 }
 
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
   draft: "outline",
   validated: "default",
   sent: "secondary",
-  archived: "destructive",
 }
 
 const PRES_STATUS_LABELS: Record<string, string> = {
@@ -284,7 +282,8 @@ export function DocumentsPage() {
   // ── Delete state ──
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; kind: "document" | "presentation" } | null>(null)
-  const [addToFolderTarget, setAddToFolderTarget] = useState<{ id: string; title: string } | null>(null)
+  const [addToFolderTarget, setAddToFolderTarget] = useState<{ id: string; title: string; kind: "document" | "presentation" | "upload" } | null>(null)
+  const [exportPresId, setExportPresId] = useState<string | null>(null)
   const [showUpgradeDialog, setShowUpgradeDialog] = useState(false)
   const [uploadedForFolder, setUploadedForFolder] = useState<{ id: string; title: string } | null>(null)
 
@@ -309,17 +308,6 @@ export function DocumentsPage() {
     },
     onError: () => {
       toast({ title: "Erreur", description: "Impossible de dupliquer le document.", variant: "destructive" })
-    },
-  })
-
-  const archiveMutation = useMutation({
-    mutationFn: (docId: string) => workspaceDocumentsApi.update(docId, { status: "archived" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["workspace-documents"] })
-      toast({ title: "Document archivé" })
-    },
-    onError: () => {
-      toast({ title: "Erreur", description: "Impossible d'archiver le document.", variant: "destructive" })
     },
   })
 
@@ -727,6 +715,10 @@ export function DocumentsPage() {
                           <Download className="h-4 w-4 mr-2" />
                           Télécharger
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAddToFolderTarget({ id: doc.id, title: doc.filename, kind: "upload" })}>
+                          <FolderPlus className="h-4 w-4 mr-2" />
+                          Ajouter à un dossier
+                        </DropdownMenuItem>
                         {doc.status === "failed" && (
                           <DropdownMenuItem onClick={() => reprocessUploadMutation.mutate(doc.id)}>
                             <RotateCcw className="h-4 w-4 mr-2" />
@@ -858,10 +850,22 @@ export function DocumentsPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    {item.kind === "document" && (
-                      <DropdownMenuItem onClick={() => setAddToFolderTarget({ id: item.id, title: item.title })}>
-                        <FolderPlus className="h-4 w-4 mr-2" />
-                        Ajouter à un dossier
+                    {item.kind === "document" ? (
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          const { url } = await workspaceDocumentsApi.exportPdf(item.id)
+                          window.open(url, "_blank")
+                        } catch {
+                          toast({ variant: "destructive", title: "Erreur", description: "Impossible de télécharger." })
+                        }
+                      }}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Télécharger
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => setExportPresId(item.id)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Télécharger
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem
@@ -876,12 +880,10 @@ export function DocumentsPage() {
                       <Copy className="h-4 w-4 mr-2" />
                       Dupliquer
                     </DropdownMenuItem>
-                    {item.kind === "document" && item.status !== "archived" && (
-                      <DropdownMenuItem onClick={() => archiveMutation.mutate(item.id)}>
-                        <Archive className="h-4 w-4 mr-2" />
-                        Archiver
-                      </DropdownMenuItem>
-                    )}
+                    <DropdownMenuItem onClick={() => setAddToFolderTarget({ id: item.id, title: item.title, kind: item.kind })}>
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      Ajouter à un dossier
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="text-destructive"
@@ -1053,17 +1055,24 @@ export function DocumentsPage() {
       <AddToFolderDialog
         open={!!addToFolderTarget}
         onOpenChange={(open) => !open && setAddToFolderTarget(null)}
-        itemType="document"
+        itemType={addToFolderTarget?.kind ?? "document"}
         itemId={addToFolderTarget?.id ?? ""}
         itemTitle={addToFolderTarget?.title}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}
+      />
+
+      {/* Presentation export dialog */}
+      <ExportDialog
+        open={!!exportPresId}
+        onOpenChange={(open) => !open && setExportPresId(null)}
+        presentationId={exportPresId ?? ""}
       />
 
       {/* Prompt to add uploaded document to a folder */}
       <AddToFolderDialog
         open={!!uploadedForFolder}
         onOpenChange={(open) => !open && setUploadedForFolder(null)}
-        itemType="document"
+        itemType="upload"
         itemId={uploadedForFolder?.id ?? ""}
         itemTitle={uploadedForFolder?.title}
         onSuccess={() => queryClient.invalidateQueries({ queryKey: ["folders"] })}

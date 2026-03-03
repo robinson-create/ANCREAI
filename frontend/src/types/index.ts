@@ -317,14 +317,14 @@ export interface Folder {
   name: string
   description: string | null
   color: string | null
-  item_counts: { conversation: number; document: number; email_thread: number }
+  item_counts: { conversation: number; document: number; email_thread: number; presentation: number; upload: number }
   created_at: string
   updated_at: string
 }
 
 export interface FolderItem {
   id: string
-  item_type: "conversation" | "document" | "email_thread"
+  item_type: "conversation" | "document" | "email_thread" | "presentation" | "upload"
   item_id: string
   title: string
   subtitle: string | null
@@ -345,7 +345,7 @@ export interface FolderUpdate {
 }
 
 export interface FolderItemAdd {
-  item_type: "conversation" | "document" | "email_thread"
+  item_type: "conversation" | "document" | "email_thread" | "presentation" | "upload"
   item_id: string
 }
 

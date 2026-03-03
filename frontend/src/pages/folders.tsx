@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Loader2,
   ArrowLeft,
+  Upload,
+  Presentation,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,6 +30,8 @@ const ITEM_TABS = [
   { value: "all", label: "Tout" },
   { value: "conversation", label: "Conversations" },
   { value: "document", label: "Documents" },
+  { value: "presentation", label: "Présentations" },
+  { value: "upload", label: "Uploads" },
   { value: "email_thread", label: "Emails" },
 ] as const;
 
@@ -53,6 +57,10 @@ function itemIcon(type: FolderItem["item_type"]) {
       return <MessageSquare className="h-4 w-4 text-violet-500" />;
     case "document":
       return <FileText className="h-4 w-4 text-blue-500" />;
+    case "presentation":
+      return <Presentation className="h-4 w-4 text-orange-500" />;
+    case "upload":
+      return <Upload className="h-4 w-4 text-sky-500" />;
     case "email_thread":
       return <Mail className="h-4 w-4 text-emerald-500" />;
     default:
@@ -66,6 +74,10 @@ function itemBg(type: FolderItem["item_type"]) {
       return "bg-violet-500/10";
     case "document":
       return "bg-blue-500/10";
+    case "presentation":
+      return "bg-orange-500/10";
+    case "upload":
+      return "bg-sky-500/10";
     case "email_thread":
       return "bg-emerald-500/10";
     default:
@@ -150,6 +162,7 @@ export function FoldersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["folder-items", selectedFolderId] });
       queryClient.invalidateQueries({ queryKey: ["folder", selectedFolderId] });
+      queryClient.invalidateQueries({ queryKey: ["folders"] });
     },
   });
 
@@ -169,6 +182,10 @@ export function FoldersPage() {
         navigate(`/app/search?conversation=${item.item_id}`);
       } else if (item.item_type === "document") {
         navigate(`/app/documents/${item.item_id}`);
+      } else if (item.item_type === "presentation") {
+        navigate(`/app/presentations/${item.item_id}`);
+      } else if (item.item_type === "upload") {
+        navigate(`/app/uploads/${item.item_id}`);
       } else if (item.item_type === "email_thread") {
         navigate(`/app/email?thread=${item.item_id}`);
       }
@@ -195,7 +212,9 @@ export function FoldersPage() {
   const totalItems = selectedFolder
     ? (selectedFolder.item_counts?.conversation || 0) +
       (selectedFolder.item_counts?.document || 0) +
-      (selectedFolder.item_counts?.email_thread || 0)
+      (selectedFolder.item_counts?.email_thread || 0) +
+      (selectedFolder.item_counts?.presentation || 0) +
+      (selectedFolder.item_counts?.upload || 0)
     : 0;
 
   return (
@@ -339,7 +358,9 @@ export function FoldersPage() {
                   const count =
                     (folder.item_counts?.conversation || 0) +
                     (folder.item_counts?.document || 0) +
-                    (folder.item_counts?.email_thread || 0);
+                    (folder.item_counts?.email_thread || 0) +
+                    (folder.item_counts?.presentation || 0) +
+                    (folder.item_counts?.upload || 0);
                   return (
                     <button
                       key={folder.id}
@@ -382,6 +403,16 @@ export function FoldersPage() {
                             {(folder.item_counts.email_thread || 0) > 0 && (
                               <Badge variant="outline" className="text-[9px] px-1.5 py-0">
                                 {folder.item_counts.email_thread} email
+                              </Badge>
+                            )}
+                            {(folder.item_counts.presentation || 0) > 0 && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {folder.item_counts.presentation} prés
+                              </Badge>
+                            )}
+                            {(folder.item_counts.upload || 0) > 0 && (
+                              <Badge variant="outline" className="text-[9px] px-1.5 py-0">
+                                {folder.item_counts.upload} upload
                               </Badge>
                             )}
                           </div>
@@ -488,7 +519,7 @@ export function FoldersPage() {
                         </span>
                         <ChevronRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                       </button>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <div className="flex items-center gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"

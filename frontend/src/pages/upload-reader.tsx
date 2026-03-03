@@ -1,6 +1,8 @@
 import { useCallback } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import {
   ArrowLeft,
   Download,
@@ -61,7 +63,7 @@ export function UploadReaderPage() {
           variant="ghost"
           size="icon"
           className="h-8 w-8 shrink-0"
-          onClick={() => navigate("/app/uploads")}
+          onClick={() => navigate(-1)}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -128,8 +130,8 @@ export function UploadReaderPage() {
           <div className="flex flex-col items-center justify-center h-full gap-3">
             <AlertCircle className="h-8 w-8 text-destructive" />
             <p className="text-sm text-destructive">Document introuvable.</p>
-            <Button variant="outline" size="sm" onClick={() => navigate("/app/uploads")}>
-              Retour aux uploads
+            <Button variant="outline" size="sm" onClick={() => navigate("/app/documents")}>
+              Retour aux documents
             </Button>
           </div>
         )}
@@ -202,8 +204,22 @@ export function UploadReaderPage() {
                           </span>
                         )}
                       </div>
-                      <div className="prose prose-sm max-w-none dark:prose-invert font-body text-sm leading-relaxed whitespace-pre-wrap">
-                        {page.text}
+                      <div className="prose prose-sm max-w-none dark:prose-invert font-body text-sm leading-relaxed">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            img: ({ src, alt }) => (
+                              <img
+                                src={src}
+                                alt={alt || ""}
+                                className="max-w-full rounded my-2"
+                                loading="lazy"
+                              />
+                            ),
+                          }}
+                        >
+                          {page.text}
+                        </ReactMarkdown>
                       </div>
                     </div>
                   </div>

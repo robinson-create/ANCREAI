@@ -155,7 +155,11 @@ async def _try_mistral_ocr(
             ParsedPage(
                 page_number=p["page"],
                 content=p["text"],
-                metadata={**(p.get("meta") or {}), "parser": "mistral_ocr"},
+                metadata={
+                    **(p.get("meta") or {}),
+                    "parser": "mistral_ocr",
+                    **({"images": p["images"]} if p.get("images") else {}),
+                },
             )
             for p in ocr_pages
             if p["text"].strip()

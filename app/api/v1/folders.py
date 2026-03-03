@@ -9,9 +9,11 @@ from sqlalchemy.orm import selectinload
 
 from app.deps import CurrentUser, DbSession
 from app.models.assistant import Assistant
+from app.models.document import Document
 from app.models.folder import Folder, FolderItem
 from app.models.mail import MailAccount, MailMessage
 from app.models.message import Message
+from app.models.presentation import Presentation
 from app.models.workspace_document import WorkspaceDocument
 from app.schemas.folder import (
     FolderCreate,
@@ -26,7 +28,7 @@ router = APIRouter()
 
 def _item_counts(items: list[FolderItem]) -> dict[str, int]:
     """Count items by type."""
-    counts = {"conversation": 0, "document": 0, "email_thread": 0}
+    counts = {"conversation": 0, "document": 0, "email_thread": 0, "presentation": 0, "upload": 0}
     for item in items:
         if item.item_type in counts:
             counts[item.item_type] += 1
@@ -64,6 +66,24 @@ async def list_folders(
     ]
 
 
+@router.get("/containing/{item_id}", response_model=list[str])
+async def get_folders_containing_item(
+    item_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> list[str]:
+    """Return folder IDs that contain a given item."""
+    result = await db.execute(
+        select(FolderItem.folder_id)
+        .join(Folder)
+        .where(
+            FolderItem.item_id == item_id,
+            Folder.tenant_id == user.tenant_id,
+        )
+    )
+    return [str(row[0]) for row in result.all()]
+
+
 @router.post("", response_model=FolderRead, status_code=status.HTTP_201_CREATED)
 async def create_folder(
     data: FolderCreate,
@@ -85,7 +105,7 @@ async def create_folder(
         name=folder.name,
         description=folder.description,
         color=folder.color,
-        item_counts={"conversation": 0, "document": 0, "email_thread": 0},
+        item_counts={"conversation": 0, "document": 0, "email_thread": 0, "presentation": 0, "upload": 0},
         created_at=folder.created_at,
         updated_at=folder.updated_at,
     )
@@ -277,6 +297,82 @@ async def list_folder_items(
                 subtitle = f"{doc.doc_type} · {doc.status}"
                 date_val = doc.updated_at
             else:
+                # Fallback: might be an upload stored with old "document" type
+                upload_fallback = await db.execute(
+                    select(Document).where(Document.id == doc_uuid)
+                )
+                upload_doc = upload_fallback.scalar_one_or_none()
+                if upload_doc:
+                    # Auto-fix the item_type
+                    fi.item_type = "upload"
+                    await db.flush()
+                    title = upload_doc.filename or "Sans titre"
+                    subtitle = f"{upload_doc.content_type} · {upload_doc.status.value if hasattr(upload_doc.status, 'value') else upload_doc.status}"
+                    date_val = upload_doc.updated_at
+                else:
+                    subtitle = "Supprimé"
+
+        elif fi.item_type == "presentation":
+            try:
+                pres_uuid = UUID(fi.item_id)
+            except ValueError:
+                subtitle = "ID invalide"
+                enriched.append(
+                    FolderItemRead(
+                        id=fi.id,
+                        item_type=fi.item_type,
+                        item_id=fi.item_id,
+                        title="Présentation",
+                        subtitle=subtitle,
+                        date=fi.added_at,
+                        added_at=fi.added_at,
+                    )
+                )
+                continue
+            pres_result = await db.execute(
+                select(Presentation)
+                .where(
+                    Presentation.id == pres_uuid,
+                    Presentation.tenant_id == user.tenant_id,
+                )
+            )
+            pres = pres_result.scalar_one_or_none()
+            if pres:
+                title = pres.title or "Sans titre"
+                subtitle = f"Présentation · {pres.status}"
+                date_val = pres.updated_at
+            else:
+                subtitle = "Supprimé"
+
+        elif fi.item_type == "upload":
+            try:
+                upload_uuid = UUID(fi.item_id)
+            except ValueError:
+                subtitle = "ID invalide"
+                enriched.append(
+                    FolderItemRead(
+                        id=fi.id,
+                        item_type=fi.item_type,
+                        item_id=fi.item_id,
+                        title="Upload",
+                        subtitle=subtitle,
+                        date=fi.added_at,
+                        added_at=fi.added_at,
+                    )
+                )
+                continue
+            upload_result = await db.execute(
+                select(Document)
+                .where(
+                    Document.id == upload_uuid,
+                )
+            )
+            upload_doc = upload_result.scalar_one_or_none()
+            if upload_doc:
+                title = upload_doc.filename or "Sans titre"
+                subtitle = f"{upload_doc.content_type} · {upload_doc.status.value if hasattr(upload_doc.status, 'value') else upload_doc.status}"
+                date_val = upload_doc.updated_at
+            else:
                 subtitle = "Supprimé"
 
         elif fi.item_type == "email_thread":
@@ -344,28 +440,35 @@ async def add_folder_item(
             detail="Dossier introuvable.",
         )
 
-    # Check if already in folder
-    existing = await db.execute(
+    # Check if already in folder (by item_id only — UUIDs are globally unique)
+    existing_result = await db.execute(
         select(FolderItem).where(
             FolderItem.folder_id == folder_id,
-            FolderItem.item_type == data.item_type,
             FolderItem.item_id == data.item_id,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cet élément est déjà dans ce dossier.",
+    existing_fi = existing_result.scalar_one_or_none()
+    if existing_fi:
+        # If stored with a different type (e.g. "document" → "upload"), fix it silently
+        if existing_fi.item_type != data.item_type:
+            existing_fi.item_type = data.item_type
+            await db.flush()
+            await db.refresh(existing_fi)
+            fi = existing_fi
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cet élément est déjà dans ce dossier.",
+            )
+    else:
+        fi = FolderItem(
+            folder_id=folder_id,
+            item_type=data.item_type,
+            item_id=data.item_id,
         )
-
-    fi = FolderItem(
-        folder_id=folder_id,
-        item_type=data.item_type,
-        item_id=data.item_id,
-    )
-    db.add(fi)
-    await db.flush()
-    await db.refresh(fi)
+        db.add(fi)
+        await db.flush()
+        await db.refresh(fi)
 
     # Enrich for response (simplified)
     return FolderItemRead(

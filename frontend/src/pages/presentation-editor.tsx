@@ -93,6 +93,7 @@ export function PresentationEditorPage() {
 
   // ── Local UI state ──
   const [title, setTitle] = useState("")
+  const titleRef = useRef("")
   const [selectedSlideId, setSelectedSlideId] = useState<string | null>(null)
   const [showExportDialog, setShowExportDialog] = useState(false)
   // regeneratingSlideId removed — InstructionBar removed
@@ -103,6 +104,7 @@ export function PresentationEditorPage() {
   // Sync title from server on first load + when status transitions to ready
   if (presentation && !titleInitialized.current) {
     setTitle(presentation.title)
+    titleRef.current = presentation.title
     titleInitialized.current = true
   }
   // Auto-select first slide when slides become available
@@ -114,6 +116,7 @@ export function PresentationEditorPage() {
   // Sync title when it changes from server (e.g. after outline generation sets a title)
   if (presentation && titleInitialized.current && title === "Sans titre" && presentation.title !== "Sans titre") {
     setTitle(presentation.title)
+    titleRef.current = presentation.title
   }
 
   // ── SSE for generation tracking ──
@@ -182,8 +185,13 @@ export function PresentationEditorPage() {
   const titleMutation = useMutation({
     mutationFn: (newTitle: string) =>
       presentationsApi.update(id!, { title: newTitle }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ["presentation", id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["presentation", id] })
+      queryClient.invalidateQueries({ queryKey: ["presentations"] })
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de renommer la présentation." })
+    },
   })
 
   // outlineSaveMutation and generateSlidesMutation removed — auto-chain handles both
@@ -230,10 +238,11 @@ export function PresentationEditorPage() {
   // ── Handlers ──
 
   const handleTitleBlur = useCallback(() => {
-    if (title !== presentation?.title) {
-      titleMutation.mutate(title)
+    const currentTitle = titleRef.current
+    if (currentTitle && currentTitle !== presentation?.title) {
+      titleMutation.mutate(currentTitle)
     }
-  }, [title, presentation?.title, titleMutation])
+  }, [presentation?.title, titleMutation])
 
   const handleSlideUpdate = useCallback(
     (slideId: string, update: SlideUpdate) => {
@@ -444,8 +453,17 @@ export function PresentationEditorPage() {
 
         <Input
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => {
+            setTitle(e.target.value)
+            titleRef.current = e.target.value
+          }}
           onBlur={handleTitleBlur}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              ;(e.target as HTMLInputElement).blur()
+            }
+          }}
           className="text-base font-semibold border-0 shadow-none bg-transparent h-auto py-1 px-2 focus-visible:ring-1 max-w-sm"
           placeholder="Sans titre"
         />

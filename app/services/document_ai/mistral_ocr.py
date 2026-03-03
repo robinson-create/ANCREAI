@@ -76,6 +76,7 @@ async def ocr_document(
     if is_image:
         payload = {
             "model": model,
+            "include_image_base64": True,
             "document": {
                 "type": "image_url",
                 "image_url": data_uri,
@@ -84,6 +85,7 @@ async def ocr_document(
     else:
         payload = {
             "model": model,
+            "include_image_base64": True,
             "document": {
                 "type": "document_url",
                 "document_url": data_uri,
@@ -110,19 +112,21 @@ async def ocr_document(
 
     data = response.json()
 
-    # Parse response: Mistral OCR returns {"pages": [{"index": 0, "markdown": "..."}]}
+    # Parse response: Mistral OCR returns {"pages": [{"index": 0, "markdown": "...", "images": [...]}]}
     pages = []
     for page_data in data.get("pages", []):
         page_index = page_data.get("index", 0)
         markdown_text = page_data.get("markdown", "")
+        page_images = page_data.get("images", [])
 
         pages.append({
             "page": page_index + 1,  # 1-based
             "text": markdown_text,
+            "images": page_images,  # [{id: "img-0.jpeg", image_base64: "data:..."}]
             "meta": {
                 k: v
                 for k, v in page_data.items()
-                if k not in ("index", "markdown")
+                if k not in ("index", "markdown", "images")
             } or None,
         })
 

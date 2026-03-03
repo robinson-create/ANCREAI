@@ -30,7 +30,7 @@ class FolderRead(BaseModel):
     name: str
     description: str | None
     color: str | None
-    item_counts: dict[str, int] = Field(default_factory=lambda: {"conversation": 0, "document": 0, "email_thread": 0})
+    item_counts: dict[str, int] = Field(default_factory=lambda: {"conversation": 0, "document": 0, "email_thread": 0, "presentation": 0, "upload": 0})
     created_at: datetime
     updated_at: datetime
 
@@ -38,7 +38,7 @@ class FolderRead(BaseModel):
 class FolderItemAdd(BaseModel):
     """Add an item to a folder."""
 
-    item_type: Literal["conversation", "document", "email_thread"]
+    item_type: Literal["conversation", "document", "email_thread", "presentation", "upload"]
     item_id: str = Field(..., min_length=1, max_length=255)
 
 
@@ -46,7 +46,7 @@ class FolderItemRead(BaseModel):
     """Folder item with enriched metadata."""
 
     id: UUID
-    item_type: Literal["conversation", "document", "email_thread"]
+    item_type: Literal["conversation", "document", "email_thread", "presentation", "upload"]
     item_id: str
     title: str
     subtitle: str | None = None

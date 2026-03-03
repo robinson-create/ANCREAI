@@ -6,6 +6,8 @@ import {
   MessageSquare,
   FileText,
   Mail,
+  Presentation,
+  Upload,
   Loader2,
   Trash2,
   Pencil,
@@ -22,6 +24,8 @@ const TABS = [
   { value: "all", label: "Tout" },
   { value: "conversation", label: "Conversations" },
   { value: "document", label: "Documents" },
+  { value: "presentation", label: "Présentations" },
+  { value: "upload", label: "Uploads" },
   { value: "email_thread", label: "Emails" },
 ] as const
 
@@ -47,6 +51,10 @@ function itemIcon(type: FolderItem["item_type"]) {
       return FileText
     case "email_thread":
       return Mail
+    case "presentation":
+      return Presentation
+    case "upload":
+      return Upload
     default:
       return FileText
   }
@@ -110,6 +118,7 @@ export function FolderDetailPanel({ folderId, onClose }: FolderDetailPanelProps)
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["folder-items", folderId] })
       queryClient.invalidateQueries({ queryKey: ["folder", folderId] })
+      queryClient.invalidateQueries({ queryKey: ["folders"] })
     },
   })
 
@@ -121,6 +130,12 @@ export function FolderDetailPanel({ folderId, onClose }: FolderDetailPanelProps)
       onClose()
     } else if (item.item_type === "document") {
       navigate(`/app/documents/${item.item_id}`)
+      onClose()
+    } else if (item.item_type === "presentation") {
+      navigate(`/app/presentations/${item.item_id}`)
+      onClose()
+    } else if (item.item_type === "upload") {
+      navigate(`/app/uploads/${item.item_id}`)
       onClose()
     } else if (item.item_type === "email_thread") {
       navigate(`/app/email?account_id=${accountIdParam || ""}&thread=${item.item_id}`)
@@ -248,7 +263,7 @@ export function FolderDetailPanel({ folderId, onClose }: FolderDetailPanelProps)
                         {formatRelativeDate(item.date)}
                       </div>
                     </button>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
                         size="icon"

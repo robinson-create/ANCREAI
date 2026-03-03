@@ -48,4 +48,10 @@ export const foldersApi = {
   removeItem: async (folderId: string, folderItemId: string): Promise<void> => {
     await apiClient.delete(`/folders/${folderId}/items/${folderItemId}`)
   },
+
+  /** Return folder IDs that already contain this item. */
+  getContainingFolders: async (itemId: string): Promise<string[]> => {
+    const { data } = await apiClient.get<string[]>(`/folders/containing/${itemId}`)
+    return data
+  },
 }

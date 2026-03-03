@@ -4,6 +4,7 @@ from uuid import UUID
 
 from arq import ArqRedis, create_pool
 from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 
 from app.deps import CurrentUser, DbSession
@@ -95,6 +96,21 @@ async def list_uploads(
     return [UploadDocumentRead.from_document(doc) for doc in documents]
 
 
+async def _resolve_page_images(text: str, meta: dict | None) -> str:
+    """Replace markdown image references with presigned S3 URLs."""
+    if not meta or "image_keys" not in meta:
+        return text
+    import re
+    image_keys: dict[str, str] = meta["image_keys"]
+    for img_id, s3_key in image_keys.items():
+        try:
+            presigned = await storage_service.get_presigned_url(s3_key, expires_in=3600)
+            text = text.replace(f"]({img_id})", f"]({presigned})")
+        except Exception:
+            pass
+    return text
+
+
 @router.get("/{document_id}", response_model=UploadDocumentDetail)
 async def get_upload(
     document_id: UUID,
@@ -110,14 +126,14 @@ async def get_upload(
         .where(DocumentPage.document_id == document_id)
         .order_by(DocumentPage.page_number)
     )
-    pages = [
-        UploadPageRead(
+    pages = []
+    for p in pages_result.scalars().all():
+        resolved_text = await _resolve_page_images(p.text, p.meta)
+        pages.append(UploadPageRead(
             page_number=p.page_number,
-            text=p.text,
+            text=resolved_text,
             meta=p.meta,
-        )
-        for p in pages_result.scalars().all()
-    ]
+        ))
 
     detail = UploadDocumentRead.from_document(doc)
     return UploadDocumentDetail(
@@ -141,14 +157,30 @@ async def get_upload_pages(
         .order_by(DocumentPage.page_number)
     )
 
-    return [
-        UploadPageRead(
+    pages = []
+    for p in result.scalars().all():
+        resolved_text = await _resolve_page_images(p.text, p.meta)
+        pages.append(UploadPageRead(
             page_number=p.page_number,
-            text=p.text,
+            text=resolved_text,
             meta=p.meta,
-        )
-        for p in result.scalars().all()
-    ]
+        ))
+    return pages
+
+
+@router.get("/{document_id}/images/{image_id:path}", response_class=RedirectResponse)
+async def get_document_image(
+    document_id: UUID,
+    image_id: str,
+    user: CurrentUser,
+    db: DbSession,
+) -> RedirectResponse:
+    """Get a presigned URL for an OCR-extracted image and redirect to it."""
+    await _get_upload_document(document_id, user.tenant_id, db)
+
+    s3_key = f"doc-images/{document_id}/{image_id}"
+    url = await storage_service.get_presigned_url(s3_key, expires_in=3600)
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/{document_id}/download-url", response_model=UploadDownloadUrlResponse)

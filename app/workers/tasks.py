@@ -106,14 +106,44 @@ async def process_document(ctx: dict, document_id: str) -> dict:
             f"Parsed with {parsed.parser_used}: {parsed.total_pages} pages"
         )
 
-        # 2b. Store document pages (for citations)
+        # 2b. Store document pages (for citations) + upload OCR images to S3
         for page in parsed.pages:
+            page_meta = dict(page.metadata) if page.metadata else {}
+            page_images = page_meta.pop("images", None)
+
+            # Upload OCR-extracted images to S3
+            if page_images:
+                image_keys: dict[str, str] = {}
+                for img in page_images:
+                    img_id = img.get("id", "")
+                    img_b64 = img.get("image_base64", "")
+                    if not img_id or not img_b64:
+                        continue
+                    try:
+                        # Decode data URI: "data:image/jpeg;base64,..."
+                        if img_b64.startswith("data:"):
+                            header, b64_data = img_b64.split(",", 1)
+                            # Extract MIME from header
+                            img_mime = header.split(":")[1].split(";")[0] if ":" in header else "image/jpeg"
+                        else:
+                            b64_data = img_b64
+                            img_mime = "image/jpeg"
+                        import base64 as b64mod
+                        img_bytes = b64mod.b64decode(b64_data)
+                        s3_key = f"doc-images/{doc_uuid}/{img_id}"
+                        await storage_service.upload_file_raw(s3_key, img_bytes, img_mime)
+                        image_keys[img_id] = s3_key
+                    except Exception as e:
+                        logger.warning("Failed to store OCR image %s for doc %s: %s", img_id, document_id, e)
+                if image_keys:
+                    page_meta["image_keys"] = image_keys
+
             doc_page = DocumentPage(
                 document_id=doc_uuid,
                 tenant_id=tenant_id,
                 page_number=page.page_number,
                 text=page.content,
-                meta=page.metadata or None,
+                meta=page_meta or None,
             )
             db.add(doc_page)
 
