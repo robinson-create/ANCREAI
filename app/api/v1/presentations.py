@@ -388,12 +388,20 @@ async def export_presentation(
     user: CurrentUser,
     db: DbSession,
 ) -> dict:
-    """Create an export job (PPTX or PDF)."""
+    """Create an export job (PPTX or PDF).
+
+    Returns cached export immediately if content + format + renderer_version match.
+    """
     export = _ensure_found(
         await presentation_service.create_export(
             db, user.tenant_id, pres_id, request
         )
     )
+
+    # Cache hit — return directly without enqueuing a job
+    if export.status == "done":
+        return {"export_id": str(export.id), "status": "done", "cached": True}
+
     redis = await _get_redis()
     job = await redis.enqueue_job(
         "export_presentation",
@@ -432,7 +440,17 @@ async def download_export(
             detail="Export non disponible.",
         )
     url = await storage_service.get_presigned_url(export.s3_key, expires_in=3600)
-    return {"url": url, "format": export.format, "file_size": export.file_size}
+
+    # Include presentation title for download filename
+    pres = await presentation_service.get(db, user.tenant_id, pres_id)
+    filename = (pres.title if pres else "presentation") or "presentation"
+
+    return {
+        "url": url,
+        "format": export.format,
+        "file_size": export.file_size,
+        "filename": filename,
+    }
 
 
 # ══════════════════════════════════════════════

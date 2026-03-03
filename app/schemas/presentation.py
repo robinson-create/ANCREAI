@@ -310,6 +310,7 @@ class ExportRead(BaseModel):
     presentation_version: int
     slide_count: int
     error_message: str | None = None
+    renderer_version: str | None = None
     created_at: datetime
 
 

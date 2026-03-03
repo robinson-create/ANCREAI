@@ -561,6 +561,14 @@ class PresentationService:
             pres.slide_order = slide_ids
             pres.status = PresentationStatus.READY.value
             pres.version = pres.version + 1
+
+            # Auto-set title from first slide if still default
+            if pres.title == "Sans titre" and deck:
+                first_content = deck[0].get("content_json", {})
+                auto_title = first_content.get("title") or first_content.get("heading")
+                if auto_title:
+                    pres.title = auto_title[:500]
+
             await db.flush()
 
             return slides
@@ -640,6 +648,18 @@ class PresentationService:
     #  Export — create export record, actual work done in Arq
     # ══════════════════════════════════════════════
 
+    async def _get_renderer_version(self) -> str | None:
+        """Fetch renderer_version from slide-export-service /health endpoint."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(f"{settings.slide_export_service_url}/health")
+                if resp.status_code == 200:
+                    return resp.json().get("renderer_version")
+        except Exception:
+            pass
+        return None
+
     async def create_export(
         self,
         db: AsyncSession,
@@ -662,6 +682,26 @@ class PresentationService:
         payload_json = json.dumps(slides_data, sort_keys=True, default=str)
         payload_hash = hashlib.sha256(payload_json.encode()).hexdigest()
 
+        # Get renderer version for cache key
+        renderer_version = await self._get_renderer_version()
+
+        # Check cache: same content + format + renderer_version → reuse existing export
+        cache_filters = [
+            PresentationExport.presentation_id == pres_id,
+            PresentationExport.payload_hash == payload_hash,
+            PresentationExport.format == request.format,
+            PresentationExport.status == "done",
+        ]
+        if renderer_version:
+            cache_filters.append(PresentationExport.renderer_version == renderer_version)
+
+        existing = await db.execute(select(PresentationExport).where(*cache_filters))
+        cached = existing.scalar_one_or_none()
+        if cached:
+            logger.info("Export cache hit: %s (hash=%s, format=%s, renderer=%s)",
+                        cached.id, payload_hash[:8], request.format, renderer_version)
+            return cached
+
         # Get theme snapshot
         theme_snapshot = None
         if pres.theme_id:
@@ -678,6 +718,7 @@ class PresentationService:
             payload_hash=payload_hash,
             slide_count=len(pres.slides),
             theme_snapshot=theme_snapshot,
+            renderer_version=renderer_version,
         )
         db.add(export)
         await db.flush()

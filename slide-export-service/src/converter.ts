@@ -2,11 +2,14 @@
  * Slide converter — orchestrates pptxgenjs to build the full deck.
  */
 
-import PptxGenJS from "pptxgenjs";
-import type { ExportRequest, ResolvedSlide, ResolvedBox } from "./types";
-import { addTextBox, addBulletGroup } from "./modules/text";
-import { addImage } from "./modules/images";
-import { addShape } from "./modules/shapes";
+import PptxGenJSImport from "pptxgenjs";
+import type { ExportRequest, ResolvedSlide, ResolvedBox } from "./types.js";
+import { addTextBox, addBulletGroup } from "./modules/text.js";
+import { addImage } from "./modules/images.js";
+import { addShape } from "./modules/shapes.js";
+
+// Handle both ESM default export and CJS module.exports
+const PptxGenJS = (PptxGenJSImport as any).default ?? PptxGenJSImport;
 
 /** Convert a resolved export request into a pptxgenjs presentation buffer. */
 export async function convertToBuffer(
@@ -43,7 +46,7 @@ export async function convertToBuffer(
 
     // Render each box based on node_type
     for (const box of slide.boxes) {
-      renderBox(pptSlide, box, request);
+      await renderBox(pptSlide, box, request);
     }
   }
 
@@ -53,11 +56,11 @@ export async function convertToBuffer(
 }
 
 /** Dispatch a single box to the correct renderer. */
-function renderBox(
+async function renderBox(
   pptSlide: PptxGenJS.Slide,
   box: ResolvedBox,
   request: ExportRequest,
-): void {
+): Promise<void> {
   switch (box.node_type) {
     case "text":
       if (box.content.type === "bullet_group") {
@@ -68,7 +71,7 @@ function renderBox(
       break;
 
     case "image":
-      addImage(pptSlide, box, request.theme, request.assets);
+      await addImage(pptSlide, box, request.theme, request.assets);
       break;
 
     case "shape":

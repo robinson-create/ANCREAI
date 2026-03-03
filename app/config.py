@@ -142,7 +142,8 @@ class Settings(BaseSettings):
     web_cache_ttl_hours: int = 24  # TTL for cached web results
 
     # --- Presentations ---
-    pptx_exporter_url: str = "http://localhost:4100"
+    slide_export_service_url: str = "http://localhost:4100"
+    pptx_exporter_url: str = ""  # deprecated alias — use slide_export_service_url
 
     # --- Agent runtime ---
     agent_stream_ttl: int = 600  # Redis stream TTL in seconds

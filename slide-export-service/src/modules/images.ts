@@ -2,16 +2,43 @@
  * Image rendering module — root images, inline images → pptxgenjs image objects.
  */
 
+import http from "node:http";
+import https from "node:https";
 import PptxGenJS from "pptxgenjs";
-import type { ResolvedBox, ThemeProperties, AssetManifest } from "../types";
+import type { ResolvedBox, ThemeProperties, AssetManifest } from "../types.js";
+
+/** Download an image URL to a base64 data URI. Works with both http and https. */
+async function fetchImageAsBase64(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const client = url.startsWith("https") ? https : http;
+    client
+      .get(url, (res) => {
+        if (res.statusCode !== 200) {
+          resolve(null);
+          res.resume();
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on("data", (chunk: Buffer) => chunks.push(chunk));
+        res.on("end", () => {
+          const buffer = Buffer.concat(chunks);
+          const contentType = res.headers["content-type"] ?? "image/jpeg";
+          const base64 = `data:${contentType};base64,${buffer.toString("base64")}`;
+          resolve(base64);
+        });
+        res.on("error", () => resolve(null));
+      })
+      .on("error", () => resolve(null));
+  });
+}
 
 /** Add an image box to a slide. */
-export function addImage(
+export async function addImage(
   pptSlide: PptxGenJS.Slide,
   box: ResolvedBox,
   theme: ThemeProperties,
   assets: AssetManifest[],
-): void {
+): Promise<void> {
   const content = box.content;
 
   // Find the image URL — either from assets manifest or directly
@@ -33,7 +60,14 @@ export function addImage(
   }
 
   if (!imageUrl) {
-    // No image available — add a placeholder rectangle
+    addPlaceholder(pptSlide, box, theme);
+    return;
+  }
+
+  // Pre-download image to base64 (avoids Node.js http/https protocol issues)
+  const base64Data = await fetchImageAsBase64(imageUrl);
+
+  if (!base64Data) {
     addPlaceholder(pptSlide, box, theme);
     return;
   }
@@ -46,7 +80,7 @@ export function addImage(
 
   try {
     pptSlide.addImage({
-      path: imageUrl,
+      data: base64Data,
       x: box.x,
       y: box.y,
       w: box.w,
@@ -54,7 +88,6 @@ export function addImage(
       sizing,
     });
   } catch {
-    // If image fails, add placeholder
     addPlaceholder(pptSlide, box, theme);
   }
 }

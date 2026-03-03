@@ -3,7 +3,7 @@
  */
 
 import PptxGenJS from "pptxgenjs";
-import type { ResolvedBox, ThemeProperties } from "../types";
+import type { ResolvedBox, ThemeProperties } from "../types.js";
 
 /** Add a background/fill shape to a slide. */
 export function addShape(

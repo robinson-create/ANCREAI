@@ -20,9 +20,11 @@ from app.schemas.presentation import (
     GenerateOutlineRequest,
     GenerateSlidesRequest,
 )
+from app.models.presentation import PresentationAsset
 from app.services.presentation import presentation_service
 from app.services.presentation_events import PresentationEventPublisher
-from app.services.presentation_layout import PageSize, resolve_layout
+from app.services.presentation_layout import PageSize, resolve_layout, content_json_to_plate_nodes
+from app.services.storage import storage_service
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -219,7 +221,93 @@ async def generate_presentation_slides(
 
 
 # ══════════════════════════════════════════════
-#  Export (PPTX via Node microservice, PDF later)
+#  Export helpers
+# ══════════════════════════════════════════════
+
+
+async def _resolve_slide_image_urls(
+    db: AsyncSession,
+    tenant_id: UUID,
+    slides: list,
+) -> None:
+    """Resolve presigned S3 URLs for images in slide content_json (in-place).
+
+    Handles both root_image.asset_id and content_json __asset_id__ fields.
+    """
+    asset_ids: list[UUID] = []
+
+    for slide in slides:
+        # root_image
+        root_img = slide.root_image
+        if root_img and isinstance(root_img, dict) and root_img.get("asset_id"):
+            try:
+                asset_ids.append(UUID(root_img["asset_id"]))
+            except (ValueError, TypeError):
+                pass
+
+        # content_json __asset_id__ fields
+        content = slide.content_json
+        if content and isinstance(content, dict):
+            for _key, value in content.items():
+                if isinstance(value, dict) and value.get("__asset_id__"):
+                    try:
+                        asset_ids.append(UUID(value["__asset_id__"]))
+                    except (ValueError, TypeError):
+                        pass
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            for _sk, sv in item.items():
+                                if isinstance(sv, dict) and sv.get("__asset_id__"):
+                                    try:
+                                        asset_ids.append(UUID(sv["__asset_id__"]))
+                                    except (ValueError, TypeError):
+                                        pass
+
+    if not asset_ids:
+        return
+
+    result = await db.execute(
+        select(PresentationAsset)
+        .where(PresentationAsset.id.in_(asset_ids))
+        .where(PresentationAsset.tenant_id == tenant_id)
+    )
+    assets_by_id = {str(a.id): a for a in result.scalars().all()}
+
+    for slide in slides:
+        # root_image
+        root_img = slide.root_image
+        if root_img and isinstance(root_img, dict) and root_img.get("asset_id"):
+            asset = assets_by_id.get(root_img["asset_id"])
+            if asset and asset.s3_key:
+                root_img["url"] = await storage_service.get_presigned_url(
+                    asset.s3_key, expires_in=3600,
+                )
+
+        # content_json __asset_id__ → __image_url__
+        content = slide.content_json
+        if content and isinstance(content, dict):
+            for _key, value in content.items():
+                if isinstance(value, dict) and value.get("__asset_id__"):
+                    asset = assets_by_id.get(value["__asset_id__"])
+                    if asset and asset.s3_key:
+                        value["__image_url__"] = await storage_service.get_presigned_url(
+                            asset.s3_key, expires_in=3600,
+                        )
+                elif isinstance(value, list):
+                    for item in value:
+                        if isinstance(item, dict):
+                            for _sk, sv in item.items():
+                                if isinstance(sv, dict) and sv.get("__asset_id__"):
+                                    asset = assets_by_id.get(sv["__asset_id__"])
+                                    if asset and asset.s3_key:
+                                        sv["__image_url__"] = await storage_service.get_presigned_url(
+                                            asset.s3_key, expires_in=3600,
+                                        )
+
+
+# ══════════════════════════════════════════════
+#  Export (PPTX via Node microservice, PDF via React SSR + Playwright)
 # ══════════════════════════════════════════════
 
 
@@ -232,7 +320,7 @@ async def export_presentation(
 
     1. Load presentation + slides + theme
     2. Resolve layouts to bounding boxes
-    3. POST to pptx-exporter Node service
+    3. POST to slide-export-service
     4. Update export record with S3 key
 
     Args:
@@ -292,64 +380,103 @@ async def export_presentation(
 
         await publisher.export_progress(pres.id, 10)
 
-        # Resolve layouts
-        page = PageSize()
-        resolved_slides = []
-        for slide in slides:
-            boxes = resolve_layout(
-                theme_data,
-                {
-                    "content_json": slide.content_json if isinstance(slide.content_json, list) else [],
-                    "layout_type": slide.layout_type,
-                    "root_image": slide.root_image,
-                    "bg_color": slide.bg_color,
-                },
-                page,
-            )
-            resolved_slides.append({
-                "id": str(slide.id),
-                "position": slide.position,
-                "layout_type": slide.layout_type,
-                "bg_color": slide.bg_color,
-                "boxes": [
-                    {
-                        "x": box.x,
-                        "y": box.y,
-                        "w": box.w,
-                        "h": box.h,
-                        "node_type": box.node_type,
-                        "content": box.content,
-                        "font_size_pt": box.font_size_pt,
-                        "truncated": box.truncated,
-                    }
-                    for box in boxes
-                ],
-            })
-
-        await publisher.export_progress(pres.id, 30)
-
-        # POST to pptx-exporter Node service
-        exporter_url = getattr(settings, "pptx_exporter_url", "http://localhost:4100")
+        exporter_url = settings.slide_export_service_url
         t0 = time.monotonic()
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            resp = await client.post(
-                f"{exporter_url}/export",
-                json={
-                    "schema_version": 1,
-                    "presentation_id": str(pres.id),
-                    "tenant_id": str(tenant_uuid),
-                    "export_id": str(export_uuid),
-                    "theme": theme_data,
-                    "page_size": {
-                        "width": page.width,
-                        "height": page.height,
-                        "margin": page.margin,
+        if export.format == "pdf":
+            # ── PDF: send raw content_json to Node for React SSR + Playwright ──
+            # Resolve presigned URLs for images in content_json
+            await _resolve_slide_image_urls(db, tenant_uuid, slides)
+
+            slides_data = []
+            for slide in slides:
+                slides_data.append({
+                    "layoutType": slide.layout_type,
+                    "data": slide.content_json if isinstance(slide.content_json, dict) else {},
+                })
+
+            await publisher.export_progress(pres.id, 30)
+
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    f"{exporter_url}/export-pdf",
+                    json={
+                        "presentation_id": str(pres.id),
+                        "tenant_id": str(tenant_uuid),
+                        "export_id": str(export_uuid),
+                        "slides": slides_data,
+                        "theme": theme_data,
                     },
-                    "slides": resolved_slides,
-                    "assets": [],  # TODO: resolve asset presigned URLs
-                },
-            )
+                )
+        else:
+            # ── PPTX: resolve_layout() → ResolvedBox[] → POST /export ──
+            # Resolve presigned URLs for images in content_json
+            await _resolve_slide_image_urls(db, tenant_uuid, slides)
+
+            page = PageSize()
+            resolved_slides = []
+            for slide in slides:
+                # Convert new JSON template dict format to Plate nodes
+                if isinstance(slide.content_json, dict) and slide.content_json:
+                    plate_nodes, extracted_image, pptx_layout = content_json_to_plate_nodes(
+                        slide.layout_type, slide.content_json,
+                    )
+                    root_image = slide.root_image or extracted_image
+                else:
+                    plate_nodes = slide.content_json if isinstance(slide.content_json, list) else []
+                    root_image = slide.root_image
+                    pptx_layout = slide.layout_type
+
+                boxes = resolve_layout(
+                    theme_data,
+                    {
+                        "content_json": plate_nodes,
+                        "layout_type": pptx_layout,
+                        "root_image": root_image,
+                        "bg_color": slide.bg_color,
+                    },
+                    page,
+                )
+                resolved_slides.append({
+                    "id": str(slide.id),
+                    "position": slide.position,
+                    "layout_type": slide.layout_type,
+                    "bg_color": slide.bg_color,
+                    "boxes": [
+                        {
+                            "x": box.x,
+                            "y": box.y,
+                            "w": box.w,
+                            "h": box.h,
+                            "node_type": box.node_type,
+                            "content": box.content,
+                            "font_size_pt": box.font_size_pt,
+                            "truncated": box.truncated,
+                        }
+                        for box in boxes
+                    ],
+                })
+
+            await publisher.export_progress(pres.id, 30)
+
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    f"{exporter_url}/export",
+                    json={
+                        "schema_version": 1,
+                        "presentation_id": str(pres.id),
+                        "tenant_id": str(tenant_uuid),
+                        "export_id": str(export_uuid),
+                        "theme": theme_data,
+                        "page_size": {
+                            "width": page.width,
+                            "height": page.height,
+                            "margin": page.margin,
+                        },
+                        "slides": resolved_slides,
+                        "assets": [],  # TODO: resolve asset presigned URLs
+                    },
+                )
 
         duration_ms = int((time.monotonic() - t0) * 1000)
 

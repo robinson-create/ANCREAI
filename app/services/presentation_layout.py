@@ -16,6 +16,26 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
+# ── Template → PPTX layout mapping ──
+
+# Maps template IDs (new JSON format) to PPTX zone layout names
+# used by _compute_zones().
+TEMPLATE_PPTX_LAYOUT: dict[str, str] = {
+    "general-intro-slide": "right-fit",
+    "basic-info-slide": "right-fit",
+    "bullet-icons-only-slide": "right",
+    "bullet-with-icons-slide": "right",
+    "chart-with-bullets-slide": "accent-top",
+    "metrics-slide": "accent-top",
+    "metrics-with-image-slide": "left-fit",
+    "numbered-bullets-slide": "right",
+    "quote-slide": "background",
+    "table-info-slide": "accent-top",
+    "table-of-contents-slide": "accent-top",
+    "team-slide": "accent-top",
+}
+
+
 # ── Constants ──
 
 PT_PER_PX = 72 / 96  # 0.75
@@ -281,6 +301,136 @@ def _compute_zones(
         txt = (m, m + ch * 0.42, cw, ch * 0.58)
 
     return img, txt
+
+
+# ── JSON template → Plate nodes converter ──
+
+
+def _plate(node_type: str, text: str) -> dict:
+    """Create a Plate-like node."""
+    return {"type": node_type, "children": [{"text": text}]}
+
+
+def _bullet_group(items: list[dict]) -> dict:
+    """Create a bullet_group node from a list of bullet items."""
+    children = []
+    for item in items:
+        item_children = []
+        if item.get("title"):
+            item_children.append(_plate("h4", item["title"]))
+        desc = item.get("description") or item.get("subtitle") or ""
+        if desc:
+            item_children.append(_plate("p", desc))
+        if item_children:
+            children.append({"type": "bullet_item", "children": item_children})
+    return {"type": "bullet_group", "children": children}
+
+
+def content_json_to_plate_nodes(
+    layout_type: str, content: dict[str, Any]
+) -> tuple[list[dict], dict | None, str]:
+    """Convert new JSON template content_json dict to Plate-like node list.
+
+    Returns:
+        (nodes, root_image, pptx_layout_type)
+        - nodes: list of Plate-like dicts for resolve_layout
+        - root_image: image dict (with url/asset_id) or None
+        - pptx_layout_type: one of "vertical"/"left"/"right"/etc.
+    """
+    nodes: list[dict] = []
+    root_image: dict | None = None
+    pptx_layout = TEMPLATE_PPTX_LAYOUT.get(layout_type, "vertical")
+
+    # Extract image (most templates have an "image" or "backgroundImage" field)
+    img = content.get("image") or content.get("backgroundImage")
+    if isinstance(img, dict) and (img.get("__image_url__") or img.get("asset_id") or img.get("url")):
+        root_image = {
+            "url": img.get("__image_url__") or img.get("url"),
+            "asset_id": img.get("asset_id") or img.get("__asset_id__"),
+        }
+
+    # Title / heading
+    title = content.get("title") or content.get("heading")
+    if title:
+        nodes.append(_plate("h1", title))
+
+    # Description
+    desc = content.get("description") or content.get("companyDescription")
+    if desc:
+        nodes.append(_plate("p", desc))
+
+    # Presenter info (intro slide)
+    if content.get("presenterName"):
+        nodes.append(_plate("p", content["presenterName"]))
+    if content.get("presentationDate"):
+        nodes.append(_plate("p", content["presentationDate"]))
+
+    # Quote
+    if content.get("quote"):
+        nodes.append({"type": "quote", "children": [{"text": content["quote"]}]})
+        if content.get("author"):
+            nodes.append(_plate("p", f"— {content['author']}"))
+
+    # Bullet points
+    bullets = content.get("bulletPoints")
+    if isinstance(bullets, list) and bullets:
+        nodes.append(_bullet_group(bullets))
+
+    # Metrics
+    metrics = content.get("metrics")
+    if isinstance(metrics, list) and metrics:
+        for m in metrics:
+            value = m.get("value", "")
+            label = m.get("label", "")
+            m_desc = m.get("description", "")
+            nodes.append(_plate("h3", str(value)))
+            caption = label
+            if m_desc:
+                caption += f" — {m_desc}"
+            nodes.append(_plate("p", caption))
+
+    # Chart data (text fallback)
+    chart = content.get("chartData")
+    if isinstance(chart, dict) and chart.get("data"):
+        chart_type = chart.get("type", "chart")
+        nodes.append(_plate("h4", f"Chart ({chart_type})"))
+        for dp in chart["data"]:
+            name = dp.get("name", "")
+            val = dp.get("value", "")
+            nodes.append(_plate("p", f"{name}: {val}"))
+
+    # Table data
+    table = content.get("tableData")
+    if isinstance(table, dict) and table.get("headers"):
+        headers = table["headers"]
+        rows = table.get("rows", [])
+        nodes.append(_plate("h4", " | ".join(str(h) for h in headers)))
+        for row in rows:
+            nodes.append(_plate("p", " | ".join(str(c) for c in row)))
+
+    # Table of contents sections
+    sections = content.get("sections")
+    if isinstance(sections, list) and sections:
+        for s in sections:
+            num = s.get("number", "")
+            sec_title = s.get("title", "")
+            page = s.get("pageNumber", "")
+            nodes.append(_plate("p", f"{num}. {sec_title}  ·  p.{page}"))
+
+    # Team members
+    members = content.get("teamMembers")
+    if isinstance(members, list) and members:
+        for m in members:
+            name = m.get("name", "")
+            position = m.get("position", "")
+            m_desc = m.get("description", "")
+            nodes.append(_plate("h4", name))
+            if position:
+                nodes.append(_plate("p", position))
+            if m_desc:
+                nodes.append(_plate("p", m_desc))
+
+    return nodes, root_image, pptx_layout
 
 
 # ── Main resolver ──

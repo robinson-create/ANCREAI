@@ -144,11 +144,12 @@ export const presentationsApi = {
   getExportDownloadUrl: async (
     presId: string,
     exportId: string,
-  ): Promise<{ url: string; format: string; file_size: number | null }> => {
+  ): Promise<{ url: string; format: string; file_size: number | null; filename: string }> => {
     const { data } = await apiClient.get<{
       url: string
       format: string
       file_size: number | null
+      filename: string
     }>(`/presentations/${presId}/exports/${exportId}/download`)
     return data
   },

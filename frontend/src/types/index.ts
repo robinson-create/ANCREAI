@@ -533,6 +533,7 @@ export interface ExportRead {
   presentation_version: number
   slide_count: number
   error_message?: string | null
+  renderer_version?: string | null
   created_at: string
 }
 

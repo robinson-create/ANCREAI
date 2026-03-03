@@ -240,6 +240,7 @@ class PresentationExport(Base):
     slide_count: Mapped[int] = mapped_column(Integer, nullable=False)
     theme_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    renderer_version: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),

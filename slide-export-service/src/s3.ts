@@ -1,5 +1,5 @@
 /**
- * S3 upload utility — uploads the generated PPTX buffer to S3/MinIO.
+ * S3 upload utility — uploads generated files (PPTX/PDF) to S3/MinIO.
  */
 
 import {
@@ -28,17 +28,25 @@ export interface UploadResult {
   file_size: number;
 }
 
+const CONTENT_TYPES: Record<string, string> = {
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  pdf: "application/pdf",
+};
+
 /** Upload a buffer to S3 and return the key + size. */
 export async function uploadToS3(
   buffer: Buffer,
   s3Key: string,
+  contentType?: string,
 ): Promise<UploadResult> {
+  const ext = s3Key.split(".").pop()?.toLowerCase() ?? "pptx";
+  const resolvedContentType = contentType ?? CONTENT_TYPES[ext] ?? CONTENT_TYPES.pptx;
+
   const params: PutObjectCommandInput = {
     Bucket: BUCKET,
     Key: s3Key,
     Body: buffer,
-    ContentType:
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ContentType: resolvedContentType,
     ContentDisposition: `attachment; filename="${s3Key.split("/").pop()}"`,
   };
 

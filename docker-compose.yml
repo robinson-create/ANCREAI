@@ -124,12 +124,12 @@ services:
       timeout: 5s
       retries: 5
 
-  # --- PPTX Exporter (Node microservice) ---
-  pptx-exporter:
+  # --- Slide Export Service (PPTX + PDF) ---
+  slide-export-service:
     build:
-      context: ./pptx-exporter
+      context: ./slide-export-service
       dockerfile: Dockerfile
-    container_name: mecano-pptx-exporter
+    container_name: mecano-slide-export-service
     environment:
       PORT: "4100"
       S3_ENDPOINT: http://minio:9000

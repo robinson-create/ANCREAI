@@ -17,7 +17,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Badge } from "@/components/ui/badge"
 import { usePresentationSSE } from "@/hooks/use-presentation-sse"
 import { presentationsApi } from "@/api/presentations"
 import type { PresentationSSEEvent } from "@/types"
@@ -46,8 +45,13 @@ export function ExportDialog({
       presentationsApi.exportPresentation(presentationId, { format: fmt }),
     onSuccess: (data) => {
       setExportId(data.export_id)
-      setPhase("exporting")
-      setProgress(0)
+      if (data.status === "done") {
+        // Cache hit — export already available, skip to download
+        setPhase("done")
+      } else {
+        setPhase("exporting")
+        setProgress(0)
+      }
     },
     onError: () => {
       setPhase("error")
@@ -81,11 +85,27 @@ export function ExportDialog({
   const handleDownload = async () => {
     if (!exportId) return
     try {
-      const { url } = await presentationsApi.getExportDownloadUrl(
+      const data = await presentationsApi.getExportDownloadUrl(
         presentationId,
         exportId,
       )
-      window.open(url, "_blank")
+      // Download with proper filename derived from presentation title
+      const sanitized = (data.filename || "presentation")
+        .replace(/[/\\?%*:|"<>]/g, "-")
+        .trim()
+      const ext = data.format === "pdf" ? "pdf" : "pptx"
+      const filename = `${sanitized}.${ext}`
+
+      const resp = await fetch(data.url)
+      const blob = await resp.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(blobUrl)
     } catch {
       setPhase("error")
       setErrorMessage("Impossible de récupérer le lien de téléchargement.")
@@ -93,16 +113,14 @@ export function ExportDialog({
   }
 
   const handleClose = (isOpen: boolean) => {
-    if (!isOpen && phase !== "exporting") {
+    if (!isOpen) {
       setPhase("select")
       setFormat("pptx")
       setProgress(0)
       setExportId(null)
       setErrorMessage(null)
     }
-    if (phase !== "exporting") {
-      onOpenChange(isOpen)
-    }
+    onOpenChange(isOpen)
   }
 
   return (
@@ -138,23 +156,19 @@ export function ExportDialog({
                 </div>
               </button>
 
-              {/* PDF option — disabled */}
+              {/* PDF option */}
               <button
                 type="button"
-                disabled
-                className="flex items-center gap-3 rounded-lg border border-border p-3 text-left opacity-50 cursor-not-allowed"
+                onClick={() => setFormat("pdf")}
+                className={`flex items-center gap-3 rounded-lg border p-3 text-left transition-colors ${
+                  format === "pdf"
+                    ? "border-primary bg-primary/5"
+                    : "border-border hover:bg-muted/50"
+                }`}
               >
                 <FileText className="h-5 w-5 shrink-0 text-red-500" />
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    PDF
-                    <Badge
-                      variant="secondary"
-                      className="text-[10px] px-1.5 py-0"
-                    >
-                      Bientôt
-                    </Badge>
-                  </div>
+                  <div className="text-sm font-medium">PDF</div>
                   <div className="text-xs text-muted-foreground">
                     Document non modifiable
                   </div>
@@ -193,6 +207,12 @@ export function ExportDialog({
                 Génération du fichier... {Math.round(progress)}%
               </p>
             </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => handleClose(false)}>
+                Annuler
+              </Button>
+            </DialogFooter>
           </>
         )}
 

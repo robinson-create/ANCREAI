@@ -3,7 +3,7 @@
  */
 
 import PptxGenJS from "pptxgenjs";
-import type { ResolvedBox, ThemeProperties } from "../types";
+import type { ResolvedBox, ThemeProperties } from "../types.js";
 
 // Font fallback map
 const FONT_FALLBACKS: Record<string, string> = {
