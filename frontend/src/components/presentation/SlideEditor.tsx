@@ -96,7 +96,7 @@ export function SlideEditor({
       const { width, height } = entry.contentRect
       const sx = (width - 48) / SLIDE_REF_WIDTH
       const sy = (height - 48) / SLIDE_REF_HEIGHT
-      setScaleFactor(Math.min(sx, sy, 1.5))
+      setScaleFactor(Math.min(sx, sy, 1))
     })
     obs.observe(el)
     return () => obs.disconnect()

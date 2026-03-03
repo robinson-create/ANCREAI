@@ -438,6 +438,13 @@ export function SearchPage() {
     });
   }, []);
 
+  // Reset carousel scroll to start when recent files change
+  useEffect(() => {
+    if (carouselRef.current) {
+      carouselRef.current.scrollLeft = 0;
+    }
+  }, [recentFiles]);
+
   // Auto-select first assistant (only if context doesn't already have one)
   useEffect(() => {
     if (assistants.length === 0) return;
