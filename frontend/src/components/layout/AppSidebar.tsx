@@ -11,6 +11,7 @@ import {
   Plus,
   Users,
   House,
+  Building2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,10 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { useClerk } from "@clerk/clerk-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { foldersApi } from "@/api/folders";
+import { organizationApi } from "@/api/organization";
+import { assistantsApi } from "@/api/assistants";
 import { FolderCreateDialog } from "@/components/folders/FolderCreateDialog";
 import { useToast } from "@/hooks/use-toast";
 
@@ -42,6 +45,32 @@ export function AppSidebar() {
   const [createOpen, setCreateOpen] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Check if current user is admin (stats endpoint is admin-only)
+  const { isSuccess: isAdmin } = useQuery({
+    queryKey: ["org-stats"],
+    queryFn: organizationApi.getStats,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch tenant info (for feature gating — accessible to all members)
+  const { data: tenant } = useQuery({
+    queryKey: ["tenant"],
+    queryFn: organizationApi.getTenant,
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Fetch assistants (visible to the current user)
+  const { data: assistants = [] } = useQuery({
+    queryKey: ["assistants"],
+    queryFn: assistantsApi.list,
+    staleTime: 60 * 1000,
+  });
+
+  // Dossiers visible only if Pro + feature enabled
+  const dossiersEnabled = tenant?.is_pro && tenant?.features?.dossiers;
 
   const createMutation = useMutation({
     mutationFn: (name: string) => foldersApi.create({ name }),
@@ -103,60 +132,115 @@ export function AppSidebar() {
           })}
         </nav>
 
-        {/* Dossiers section */}
-        <div className="border-t border-sidebar-border py-3 px-2 flex flex-col items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10"
-                onClick={() => setCreateOpen(true)}
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="right">Nouveau dossier</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                to="/app/folders"
-                className={cn(
-                  "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
-                  location.pathname === "/app/folders"
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <Folder className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Dossiers</TooltipContent>
-          </Tooltip>
-        </div>
+        {/* Assistants section */}
+        {assistants.length > 0 && (
+          <div className="border-t border-sidebar-border py-3 px-2 flex flex-col items-center gap-1">
+            {assistants.map((assistant) => {
+              const active =
+                location.pathname === "/app/search" &&
+                new URLSearchParams(location.search).get("assistant") === assistant.id;
+              return (
+                <Tooltip key={assistant.id}>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={`/app/search?assistant=${assistant.id}`}
+                      className={cn(
+                        "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-primary uppercase">
+                          {assistant.name.charAt(0)}
+                        </span>
+                      </div>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">{assistant.name}</TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Dossiers section — only if Pro + feature enabled */}
+        {dossiersEnabled && (
+          <div className="border-t border-sidebar-border py-3 px-2 flex flex-col items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10"
+                  onClick={() => setCreateOpen(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Nouveau dossier</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/app/folders"
+                  className={cn(
+                    "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
+                    location.pathname === "/app/folders"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Folder className="h-4 w-4" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Dossiers</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
 
         {/* Spacer */}
         <div className="flex-1" />
 
         {/* Bottom section */}
         <div className="border-t border-sidebar-border p-2 flex flex-col items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Link
-                to="/app/assistants"
-                className={cn(
-                  "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
-                  (location.pathname === "/app/assistants" || location.pathname.startsWith("/app/assistant"))
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                )}
-              >
-                <Bot className="h-4 w-4" />
-              </Link>
-            </TooltipTrigger>
-            <TooltipContent side="right">Assistant</TooltipContent>
-          </Tooltip>
+          {isAdmin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/app/organization"
+                  className={cn(
+                    "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
+                    location.pathname === "/app/organization"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Building2 className="h-4 w-4" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Entreprise</TooltipContent>
+            </Tooltip>
+          )}
+          {isAdmin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  to="/app/assistants"
+                  className={cn(
+                    "flex items-center justify-center h-10 w-10 rounded-md transition-colors",
+                    location.pathname === "/app/assistants"
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                      : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Bot className="h-4 w-4" />
+                </Link>
+              </TooltipTrigger>
+              <TooltipContent side="right">Gérer les assistants</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Link

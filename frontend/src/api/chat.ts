@@ -215,6 +215,129 @@ export const chatApi = {
     return () => controller.abort()
   },
 
+  // Personal chat stream (mini RAG — no assistant)
+  personalStream: (
+    data: { message: string; conversation_id?: string; include_history?: boolean },
+    onToken: (token: string) => void,
+    onComplete: (response: {
+      conversationId: string
+      citations: ChatResponse["citations"]
+      tokensInput: number
+      tokensOutput: number
+    }) => void,
+    onError: (error: string) => void,
+    onConversationId?: (conversationId: string) => void,
+    onBlock?: (block: Block) => void,
+  ): (() => void) => {
+    const base = import.meta.env.VITE_API_BASE_URL || window.location.origin
+    const url = new URL("/api/v1/chat/personal/stream", base)
+
+    const controller = new AbortController()
+
+    ;(async () => {
+      const token = await getCurrentAuthToken()
+      if (!token) {
+        onError("Authentication token not available")
+        return
+      }
+
+      fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal,
+      })
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        const reader = response.body?.getReader()
+        const decoder = new TextDecoder()
+
+        let conversationId = ""
+        let citations: ChatResponse["citations"] = []
+        let tokensInput = 0
+        let tokensOutput = 0
+        let completed = false
+
+        const handleEvent = (eventType: string, eventData: string) => {
+          switch (eventType) {
+            case "conversation_id":
+              conversationId = eventData
+              if (onConversationId) onConversationId(conversationId)
+              break
+            case "token":
+              onToken(eventData)
+              break
+            case "block":
+              if (onBlock) {
+                try { onBlock(JSON.parse(eventData)) } catch { /* ignore */ }
+              }
+              break
+            case "citations":
+              try { citations = JSON.parse(eventData) } catch { /* ignore */ }
+              break
+            case "done":
+              try {
+                const doneData = JSON.parse(eventData)
+                tokensInput = doneData.tokens_input || 0
+                tokensOutput = doneData.tokens_output || 0
+              } catch { /* ignore */ }
+              completed = true
+              onComplete({ conversationId, citations, tokensInput, tokensOutput })
+              break
+            case "error":
+              completed = true
+              onError(eventData)
+              break
+          }
+        }
+
+        const parseSSEFrame = (frame: string) => {
+          if (!frame.trim()) return
+          const lines = frame.split("\n")
+          let eventType = ""
+          const dataLines: string[] = []
+          for (const line of lines) {
+            if (line.startsWith("event:")) eventType = line.slice(6).trim()
+            else if (line.startsWith("data:")) {
+              const raw = line.slice(5)
+              dataLines.push(raw.startsWith(" ") ? raw.slice(1) : raw)
+            }
+          }
+          if (eventType) handleEvent(eventType, dataLines.join("\n"))
+        }
+
+        const processStream = async () => {
+          if (!reader) return
+          let buffer = ""
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const messages = buffer.split("\n\n")
+            buffer = messages.pop() || ""
+            for (const message of messages) parseSSEFrame(message)
+          }
+          const remaining = decoder.decode()
+          if (remaining) buffer += remaining
+          if (buffer.trim()) {
+            for (const frame of buffer.split("\n\n")) parseSSEFrame(frame)
+          }
+        }
+
+        processStream()
+          .catch((err) => { if (err.name !== "AbortError" && !completed) onError(err.message) })
+          .finally(() => { if (!completed) onComplete({ conversationId, citations, tokensInput, tokensOutput }) })
+      })
+      .catch((err) => { if (err.name !== "AbortError") onError(err.message) })
+    })()
+
+    return () => controller.abort()
+  },
+
   getConversation: async (
     assistantId: string,
     conversationId: string
@@ -236,6 +359,25 @@ export const chatApi = {
   }>> => {
     const response = await apiClient.get(
       `/chat/${assistantId}/conversations`
+    )
+    return response.data
+  },
+
+  // Personal conversations
+  listPersonalConversations: async (): Promise<Array<{
+    id: string
+    title: string
+    message_count: number
+    created_at: string
+    updated_at: string
+  }>> => {
+    const response = await apiClient.get("/chat/personal/conversations")
+    return response.data
+  },
+
+  getPersonalConversation: async (conversationId: string): Promise<Message[]> => {
+    const response = await apiClient.get<Message[]>(
+      `/chat/personal/conversations/${conversationId}`
     )
     return response.data
   },

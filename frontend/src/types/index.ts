@@ -552,5 +552,64 @@ export interface PresentationSSEEvent {
   payload: Record<string, unknown>
 }
 
+// Organization / Member types
+export type OrgRole = "admin" | "member"
+export type MemberStatus = "invited" | "active" | "inactive"
+
+export interface OrgMember {
+  id: string
+  tenant_id: string
+  user_id: string
+  role: OrgRole
+  status: MemberStatus
+  invited_by: string | null
+  invited_at: string | null
+  joined_at: string | null
+  created_at: string
+  updated_at: string
+  email: string | null
+  name: string | null
+}
+
+export interface TenantWithMeta {
+  id: string
+  name: string
+  settings: Record<string, unknown> | null
+  max_assistants: number
+  max_ingestion_tokens: number
+  max_chat_tokens: number
+  max_storage_bytes: number
+  created_at: string
+  updated_at: string
+  member_count: number
+  plan: string
+  is_pro: boolean
+  features: Record<string, boolean>
+}
+
+export interface TenantStats {
+  members_count: number
+  active_members_count: number
+  invited_members_count: number
+  assistants_count: number
+  documents_count: number
+  collections_count: number
+  plan: string
+  is_pro: boolean
+  max_seats: number
+  max_assistants: number
+  features: Record<string, boolean>
+}
+
+export interface AssistantPermission {
+  id: string
+  member_id: string
+  user_id: string
+  email: string | null
+  name: string | null
+  role: string
+  created_at: string
+}
+
 // Dossier types
 export * from "./dossier"

@@ -161,6 +161,44 @@ class QuotaService:
         daily_usage.chat_requests += 1
         await db.commit()
 
+    async def check_feature_allowed(
+        self, db: AsyncSession, user: User, feature_name: str
+    ) -> tuple[bool, str | None]:
+        """Check if a feature is enabled for the user's organization.
+
+        Requires BOTH:
+        - Active Pro subscription
+        - Feature flag enabled in tenant.settings.features
+
+        Returns:
+            tuple of (allowed, error_message)
+        """
+        subscription = await self._resolve_subscription(db, user)
+
+        if not subscription or not subscription.is_pro:
+            return (
+                False,
+                f"La fonctionnalité '{feature_name}' nécessite un abonnement Pro.",
+            )
+
+        from app.models.tenant import Tenant
+
+        result = await db.execute(
+            select(Tenant).where(Tenant.id == user.tenant_id)
+        )
+        tenant = result.scalar_one_or_none()
+        if not tenant:
+            return False, "Tenant introuvable."
+
+        features = (tenant.settings or {}).get("features", {})
+        if not features.get(feature_name, False):
+            return (
+                False,
+                f"La fonctionnalité '{feature_name}' n'est pas activée pour votre organisation.",
+            )
+
+        return True, None
+
     async def get_usage_info(
         self, db: AsyncSession, user: User
     ) -> dict:

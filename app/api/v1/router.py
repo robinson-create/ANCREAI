@@ -17,6 +17,7 @@ from app.api.v1 import (
     folders,
     integrations,
     mail,
+    members,
     onboarding,
     personal_chat,
     presentations,
@@ -33,6 +34,8 @@ from app.api.v1 import (
 api_router = APIRouter()
 
 api_router.include_router(tenants.router, prefix="/tenants", tags=["tenants"])
+api_router.include_router(members.router, prefix="/tenants/me/members", tags=["members"])
+api_router.include_router(members.invitation_router, prefix="/invitations", tags=["invitations"])
 api_router.include_router(settings.router, prefix="/settings", tags=["settings"])
 api_router.include_router(assistants.router, prefix="/assistants", tags=["assistants"])
 api_router.include_router(collections.router, prefix="/collections", tags=["collections"])

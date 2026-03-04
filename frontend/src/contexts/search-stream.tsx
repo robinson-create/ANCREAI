@@ -134,86 +134,122 @@ export function SearchStreamProvider({ children }: { children: ReactNode }) {
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
       setIsSearching(true);
-      const startStream = (forceFreshConversation: boolean) => {
-        abortRef.current = chatApi.stream(
-          assistantId,
-          {
-            message: userText,
-            conversation_id: forceFreshConversation
-              ? undefined
-              : (conversationIdRef.current || undefined),
-            include_history: forceFreshConversation
-              ? false
-              : !!conversationIdRef.current,
-            attachment_ids: attachmentIds?.length ? attachmentIds : undefined,
-          },
-          (token) => {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, content: msg.content + token }
-                  : msg,
-              ),
-            );
-          },
-          (response) => {
-            setConversationId(response.conversationId);
-            conversationIdRef.current = response.conversationId;
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, isStreaming: false, citations: response.citations }
-                  : msg,
-              ),
-            );
-            setIsSearching(false);
-            onConversationListChanged?.();
-          },
-          (error) => {
-            if (!forceFreshConversation && isInvalidAssistantHistoryError(error)) {
-              console.warn(
-                "Search stream fallback: restarting without history due to invalid assistant message",
-                error,
-              );
-              setConversationId(null);
-              conversationIdRef.current = null;
-              setConversationTitle(userText.slice(0, 60));
-              isNewConversationRef.current = true;
-              startStream(true);
-              return;
-            }
 
-            console.error("Search error:", error);
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessageId
-                  ? {
-                      ...msg,
-                      content: "Une erreur s'est produite. Réessayez.",
-                      isStreaming: false,
-                    }
-                  : msg,
-              ),
-            );
-            setIsSearching(false);
-          },
-          (newConversationId) => {
-            if (isNewConversationRef.current) {
-              setConversationId(newConversationId);
-              conversationIdRef.current = newConversationId;
-              onConversationListChanged?.();
-            }
-          },
-          (block: Block) => {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessageId
-                  ? { ...msg, blocks: [...(msg.blocks || []), block] }
-                  : msg,
-              ),
-            );
-          },
+      const isPersonal = assistantId === "personal";
+
+      const onToken = (token: string) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, content: msg.content + token }
+              : msg,
+          ),
         );
+      };
+
+      const onComplete = (response: {
+        conversationId: string;
+        citations: import("@/types").ChatResponse["citations"];
+        tokensInput: number;
+        tokensOutput: number;
+      }) => {
+        setConversationId(response.conversationId);
+        conversationIdRef.current = response.conversationId;
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, isStreaming: false, citations: response.citations }
+              : msg,
+          ),
+        );
+        setIsSearching(false);
+        onConversationListChanged?.();
+      };
+
+      const onBlock = (block: Block) => {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantMessageId
+              ? { ...msg, blocks: [...(msg.blocks || []), block] }
+              : msg,
+          ),
+        );
+      };
+
+      const startStream = (forceFreshConversation: boolean) => {
+        const convId = forceFreshConversation
+          ? undefined
+          : (conversationIdRef.current || undefined);
+        const includeHistory = forceFreshConversation
+          ? false
+          : !!conversationIdRef.current;
+
+        const onError = (error: string) => {
+          if (!forceFreshConversation && isInvalidAssistantHistoryError(error)) {
+            console.warn(
+              "Search stream fallback: restarting without history due to invalid assistant message",
+              error,
+            );
+            setConversationId(null);
+            conversationIdRef.current = null;
+            setConversationTitle(userText.slice(0, 60));
+            isNewConversationRef.current = true;
+            startStream(true);
+            return;
+          }
+
+          console.error("Search error:", error);
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? {
+                    ...msg,
+                    content: "Une erreur s'est produite. Réessayez.",
+                    isStreaming: false,
+                  }
+                : msg,
+            ),
+          );
+          setIsSearching(false);
+        };
+
+        const onConversationId = (newConversationId: string) => {
+          if (isNewConversationRef.current) {
+            setConversationId(newConversationId);
+            conversationIdRef.current = newConversationId;
+            onConversationListChanged?.();
+          }
+        };
+
+        if (isPersonal) {
+          abortRef.current = chatApi.personalStream(
+            {
+              message: userText,
+              conversation_id: convId,
+              include_history: includeHistory,
+            },
+            onToken,
+            onComplete,
+            onError,
+            onConversationId,
+            onBlock,
+          );
+        } else {
+          abortRef.current = chatApi.stream(
+            assistantId,
+            {
+              message: userText,
+              conversation_id: convId,
+              include_history: includeHistory,
+              attachment_ids: attachmentIds?.length ? attachmentIds : undefined,
+            },
+            onToken,
+            onComplete,
+            onError,
+            onConversationId,
+            onBlock,
+          );
+        }
       };
 
       startStream(false);
@@ -236,7 +272,9 @@ export function SearchStreamProvider({ children }: { children: ReactNode }) {
       }
 
       abortStream();
-      const history = await chatApi.getConversation(assistantId, convId);
+      const history = assistantId === "personal"
+        ? await chatApi.getPersonalConversation(convId)
+        : await chatApi.getConversation(assistantId, convId);
       setMessages(
         history.map((msg) => ({
           id: msg.id,

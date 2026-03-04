@@ -306,13 +306,39 @@ export function SearchPage() {
   >([]);
 
   const fetchAllConversations = useCallback(async () => {
-    if (assistants.length === 0) return;
-    const results = await Promise.allSettled(
-      assistants.map(async (a: Assistant) => {
+    const personalAssistant: Assistant = {
+      id: "personal",
+      tenant_id: "",
+      name: "Recherche personnelle",
+      system_prompt: null,
+      model: "",
+      settings: {},
+      created_at: "",
+      updated_at: "",
+      collection_ids: [],
+      integration_ids: [],
+    };
+
+    const allPromises = [
+      // Personal conversations
+      chatApi.listPersonalConversations().then((convos) =>
+        convos.map((c) => ({
+          id: c.id,
+          title: c.title,
+          started_at: c.created_at,
+          last_message_at: c.updated_at,
+          message_count: c.message_count,
+          assistant: personalAssistant,
+        }))
+      ),
+      // Assistant conversations
+      ...assistants.map(async (a: Assistant) => {
         const convos = await chatApi.listConversations(a.id);
         return convos.map((c) => ({ ...c, assistant: a }));
-      })
-    );
+      }),
+    ];
+
+    const results = await Promise.allSettled(allPromises);
     const all = results
       .filter((r) => r.status === "fulfilled")
       .flatMap((r) => (r as PromiseFulfilledResult<Array<{ id: string; title: string; started_at: string; last_message_at: string; message_count: number; assistant: Assistant }>>).value)
@@ -355,15 +381,18 @@ export function SearchPage() {
       });
     }
     for (const convo of allConversations) {
+      const isPersonalConvo = convo.assistant.id === "personal";
       items.push({
         id: `convo-${convo.id}`,
         type: "conversation",
         title: convo.title || "Nouvelle discussion",
-        subtitle: convo.assistant.name,
+        subtitle: isPersonalConvo ? "Recherche personnelle" : convo.assistant.name,
         date: formatRelativeDate(convo.last_message_at),
         sortDate: new Date(convo.last_message_at).getTime(),
         status: `${convo.message_count} msg`,
-        path: `/app/search?assistant=${convo.assistant.id}&conversation=${convo.id}`,
+        path: isPersonalConvo
+          ? `/app/search?conversation=${convo.id}`
+          : `/app/search?assistant=${convo.assistant.id}&conversation=${convo.id}`,
         folderItemType: "conversation",
         folderItemId: convo.id,
       });
@@ -445,29 +474,31 @@ export function SearchPage() {
     }
   }, [recentFiles]);
 
-  // Auto-select first assistant (only if context doesn't already have one)
+  // Select assistant from URL param, or default to personal search
   useEffect(() => {
-    if (assistants.length === 0) return;
     const paramAssistant = searchParams.get("assistant");
     if (paramAssistant && assistants.some((a: Assistant) => a.id === paramAssistant)) {
-      setSelectedAssistantId(paramAssistant);
-    } else if (!selectedAssistantId && assistants[0]) {
-      setSelectedAssistantId(assistants[0].id);
+      if (selectedAssistantId !== paramAssistant) {
+        resetConversation();
+        setSelectedAssistantId(paramAssistant);
+      }
+    } else if (selectedAssistantId !== "personal") {
+      setSelectedAssistantId("personal");
     }
-  }, [assistants, selectedAssistantId, searchParams, setSelectedAssistantId]);
+  }, [assistants, selectedAssistantId, searchParams, setSelectedAssistantId, resetConversation]);
 
   // Auto-load conversation from URL param
   useEffect(() => {
     const paramConversation = searchParams.get("conversation");
     const paramAssistant = searchParams.get("assistant");
+    const effectiveAssistant = paramAssistant || "personal";
     if (
       paramConversation &&
-      paramAssistant &&
-      selectedAssistantId === paramAssistant &&
+      selectedAssistantId === effectiveAssistant &&
       !initialLoadDone.current
     ) {
       initialLoadDone.current = true;
-      loadConversation(paramConversation, paramAssistant, "Conversation")
+      loadConversation(paramConversation, effectiveAssistant, "Conversation")
         .then(() => {
           setSearchParams({}, { replace: true });
         })
@@ -514,7 +545,7 @@ export function SearchPage() {
   }, []);
 
   const handleSearch = useCallback(() => {
-    if (!query.trim() || !selectedAssistantId) return;
+    if (!query.trim()) return;
 
     // If we're on the list view, the user wants a fresh conversation
     // (not a follow-up to the previous one still in context).
@@ -528,7 +559,7 @@ export function SearchPage() {
     setQuery("");
     setAttachments([]);
     sendMessage(
-      selectedAssistantId,
+      selectedAssistantId || "personal",
       userText,
       fetchAllConversations,
       currentAttachmentIds.length > 0 ? currentAttachmentIds : undefined,
@@ -710,7 +741,7 @@ export function SearchPage() {
                       <Square className="h-4 w-4" />
                     </Button>
                   ) : (
-                    <Button variant="premium" size="icon" className="h-9 w-9 rounded-full" disabled={!query.trim() || !selectedAssistantId} onClick={handleSearch}>
+                    <Button variant="premium" size="icon" className="h-9 w-9 rounded-full" disabled={!query.trim()} onClick={handleSearch}>
                       <SendHorizontal className="h-4 w-4" />
                     </Button>
                   )}
@@ -1168,7 +1199,7 @@ export function SearchPage() {
                       size="icon"
                       className="h-8 w-8 rounded-full"
                       onClick={handleSearch}
-                      disabled={!query.trim() || !selectedAssistantId}
+                      disabled={!query.trim()}
                     >
                       <Send className="h-4 w-4" />
                     </Button>

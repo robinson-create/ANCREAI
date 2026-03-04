@@ -7,21 +7,22 @@ their own dossiers. There is no admin override — dossiers are private.
 import asyncio
 import json
 import logging
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from arq import ArqRedis, create_pool
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
 
+from app.core.vector_store import vector_store
 from app.database import async_session_maker
 from app.deps import CurrentMember, CurrentUser, DbSession
+from app.models.conversation import Conversation
+from app.models.document import Document
 from app.models.dossier import Dossier
 from app.models.dossier_document import DossierDocument, DossierDocumentStatus
 from app.models.dossier_item import DossierItem
-from app.models.document import Document
-from app.models.conversation import Conversation
 from app.models.enums import ContentScope
 from app.models.message import Message, MessageRole
 from app.schemas.dossier import (
@@ -32,16 +33,29 @@ from app.schemas.dossier import (
     DossierReadWithStats,
     DossierUpdate,
 )
-from app.core.vector_store import vector_store
 from app.services.chat import chat_service
+from app.services.quota import quota_service
 from app.services.storage import storage_service
 from app.services.usage import usage_service
-from app.services.quota import quota_service
 from app.workers.settings import redis_settings
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+async def require_feature_dossiers(
+    user: CurrentUser,
+    db: DbSession,
+) -> None:
+    """Gate dossier access behind Pro subscription + admin feature toggle."""
+    allowed, error = await quota_service.check_feature_allowed(db, user, "dossiers")
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=error,
+        )
+
+
+router = APIRouter(dependencies=[Depends(require_feature_dossiers)])
 
 
 async def get_arq_pool() -> ArqRedis:

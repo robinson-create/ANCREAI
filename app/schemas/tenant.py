@@ -45,3 +45,28 @@ class TenantRead(TenantBase):
     max_storage_bytes: int
     created_at: datetime
     updated_at: datetime
+
+
+class TenantReadWithMeta(TenantRead):
+    """Extended tenant read with member count, plan info, and features."""
+
+    member_count: int = 0
+    plan: str = "free"
+    is_pro: bool = False
+    features: dict = {}
+
+
+class TenantStats(BaseModel):
+    """Detailed stats for the tenant dashboard."""
+
+    members_count: int = 0
+    active_members_count: int = 0
+    invited_members_count: int = 0
+    assistants_count: int = 0
+    documents_count: int = 0
+    collections_count: int = 0
+    plan: str = "free"
+    is_pro: bool = False
+    max_seats: int = 1
+    max_assistants: int = 1
+    features: dict = {}

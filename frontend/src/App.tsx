@@ -38,6 +38,7 @@ import { PresentationEditorPage } from "@/pages/presentation-editor"
 import { UploadReaderPage } from "@/pages/upload-reader"
 import { FoldersPage } from "@/pages/folders"
 import { DossierPage } from "@/pages/dossier-page"
+import { OrganizationPage } from "@/pages/organization"
 
 function App() {
   return (
@@ -126,6 +127,7 @@ function App() {
           <Route path="/app/uploads/:id" element={<UploadReaderPage />} />
           <Route path="/app/folders" element={<FoldersPage />} />
           <Route path="/app/dossier/:id" element={<DossierPage />} />
+          <Route path="/app/organization" element={<OrganizationPage />} />
           <Route path="/app/calendar" element={<CalendarPage />} />
         </Route>
       </Routes>

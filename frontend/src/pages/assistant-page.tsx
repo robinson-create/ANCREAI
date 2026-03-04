@@ -16,6 +16,8 @@ import {
   AlertCircle,
   Save,
   ArrowLeft,
+  Users,
+  UserMinus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,11 +27,12 @@ import { useToast } from "@/hooks/use-toast";
 import { assistantsApi } from "@/api/assistants";
 import { collectionsApi } from "@/api/collections";
 import { documentsApi } from "@/api/documents";
+import { organizationApi } from "@/api/organization";
 import {
   integrationsApi,
   type NangoConnection,
 } from "@/api/integrations";
-import type { Document as DocType } from "@/types";
+import type { Document as DocType, OrgMember, AssistantPermission } from "@/types";
 
 // ── Provider display names ──
 const PROVIDER_NAMES: Record<string, string> = {
@@ -121,6 +124,39 @@ const AssistantPage = () => {
   const { data: nangoConnections = [] } = useQuery({
     queryKey: ["nango-connections"],
     queryFn: integrationsApi.listConnections,
+  });
+
+  // ── Fetch permissions & members (admin only) ──
+  const { data: permissions = [] } = useQuery({
+    queryKey: ["assistant-permissions", id],
+    queryFn: () => organizationApi.listPermissions(id!),
+    enabled: !!id,
+  });
+
+  const { data: orgMembers = [] } = useQuery({
+    queryKey: ["members"],
+    queryFn: organizationApi.listMembers,
+  });
+
+  const setPermissionsMutation = useMutation({
+    mutationFn: (memberIds: string[]) =>
+      organizationApi.setPermissions(id!, memberIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assistant-permissions", id] });
+      toast({ title: "Permissions mises à jour" });
+    },
+    onError: () => {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de modifier les permissions." });
+    },
+  });
+
+  const removePermissionMutation = useMutation({
+    mutationFn: (memberId: string) =>
+      organizationApi.removePermission(id!, memberId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["assistant-permissions", id] });
+      toast({ title: "Accès retiré" });
+    },
   });
 
   // ── Config state ──
@@ -632,6 +668,87 @@ const AssistantPage = () => {
               </div>
             )}
           </section>
+
+          {/* ── Permissions (accès membres) ── */}
+          {orgMembers.length > 1 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-primary" />
+                <h3 className="font-display font-semibold text-foreground text-sm">
+                  Accès des membres
+                </h3>
+                <Badge variant="secondary" className="text-xs">
+                  {permissions.length} membre{permissions.length !== 1 ? "s" : ""}
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Les admins ont toujours accès. Ajoutez des membres pour leur donner accès à cet assistant.
+              </p>
+
+              {/* Current permissions */}
+              {permissions.length > 0 && (
+                <div className="space-y-1">
+                  {permissions.map((perm: AssistantPermission) => (
+                    <div
+                      key={perm.id}
+                      className="flex items-center justify-between py-2 px-3 rounded-lg border border-border"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-[10px] font-bold text-primary uppercase">
+                            {(perm.name || perm.email || "?").charAt(0)}
+                          </span>
+                        </div>
+                        <span className="text-sm truncate">
+                          {perm.name || perm.email}
+                        </span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                        onClick={() => removePermissionMutation.mutate(perm.member_id)}
+                        disabled={removePermissionMutation.isPending}
+                      >
+                        <UserMinus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add members (show non-admin members not already permitted) */}
+              {(() => {
+                const permittedMemberIds = new Set(permissions.map((p: AssistantPermission) => p.member_id));
+                const availableMembers = orgMembers.filter(
+                  (m: OrgMember) =>
+                    m.role !== "admin" &&
+                    m.status === "active" &&
+                    !permittedMemberIds.has(m.id)
+                );
+                if (availableMembers.length === 0) return null;
+                return (
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableMembers.map((m: OrgMember) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          const newIds = [...permissions.map((p: AssistantPermission) => p.member_id), m.id];
+                          setPermissionsMutation.mutate(newIds);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-dashed border-border text-muted-foreground hover:border-primary/30 hover:text-primary transition-all"
+                        disabled={setPermissionsMutation.isPending}
+                      >
+                        <Plus className="h-3 w-3" />
+                        {m.name || m.email}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
+            </section>
+          )}
 
           {/* ── Save button ── */}
           <div className="sticky bottom-0 bg-surface pt-4 pb-2">

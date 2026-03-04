@@ -3,22 +3,25 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 
 from app.deps import AdminMember, CurrentMember, CurrentUser, DbSession, check_assistant_access
+from app.integrations.nango.models import NangoConnection
 from app.models.assistant import Assistant
 from app.models.assistant_permission import AssistantPermission
 from app.models.collection import Collection
+from app.models.enums import MemberStatus
 from app.models.org_member import OrgMember
 from app.models.subscription import SubscriptionPlan
-from app.integrations.nango.models import NangoConnection
+from app.models.user import User
 from app.schemas.assistant import (
     AssistantCreate,
     AssistantRead,
     AssistantReadWithCollections,
     AssistantUpdate,
 )
+from app.schemas.member import PermissionAdd, PermissionBulkSet, PermissionMemberRead
 from app.services.quota import quota_service
 
 router = APIRouter()
@@ -273,4 +276,202 @@ async def delete_assistant(
         )
 
     await db.delete(assistant)
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Permission management (admin-only)
+# ---------------------------------------------------------------------------
+
+
+async def _get_tenant_assistant(
+    assistant_id: UUID, tenant_id: UUID, db: DbSession
+) -> Assistant:
+    """Fetch assistant ensuring tenant isolation. Raises 404 if not found."""
+    result = await db.execute(
+        select(Assistant).where(
+            Assistant.id == assistant_id,
+            Assistant.tenant_id == tenant_id,
+        )
+    )
+    assistant = result.scalar_one_or_none()
+    if not assistant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assistant not found",
+        )
+    return assistant
+
+
+def _permission_to_read(
+    perm: AssistantPermission, member: OrgMember, user: User
+) -> dict:
+    """Flatten a permission + member + user into PermissionMemberRead-compatible dict."""
+    return {
+        "id": perm.id,
+        "member_id": member.id,
+        "user_id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "role": member.role,
+        "created_at": perm.created_at,
+    }
+
+
+async def _list_permissions(
+    assistant_id: UUID, tenant_id: UUID, db: DbSession
+) -> list[dict]:
+    """Return current permissions for an assistant as dicts."""
+    result = await db.execute(
+        select(AssistantPermission, OrgMember, User)
+        .join(OrgMember, AssistantPermission.member_id == OrgMember.id)
+        .join(User, OrgMember.user_id == User.id)
+        .where(
+            AssistantPermission.assistant_id == assistant_id,
+            OrgMember.tenant_id == tenant_id,
+        )
+        .order_by(AssistantPermission.created_at.desc())
+    )
+    return [_permission_to_read(p, m, u) for p, m, u in result.all()]
+
+
+@router.get(
+    "/{assistant_id}/permissions",
+    response_model=list[PermissionMemberRead],
+)
+async def list_assistant_permissions(
+    assistant_id: UUID,
+    user: CurrentUser,
+    _admin: AdminMember,
+    db: DbSession,
+) -> list[dict]:
+    """List members with access to this assistant."""
+    await _get_tenant_assistant(assistant_id, user.tenant_id, db)
+    return await _list_permissions(assistant_id, user.tenant_id, db)
+
+
+@router.put(
+    "/{assistant_id}/permissions",
+    response_model=list[PermissionMemberRead],
+)
+async def set_assistant_permissions(
+    assistant_id: UUID,
+    data: PermissionBulkSet,
+    user: CurrentUser,
+    _admin: AdminMember,
+    db: DbSession,
+) -> list[dict]:
+    """Replace all permissions for an assistant (bulk set)."""
+    await _get_tenant_assistant(assistant_id, user.tenant_id, db)
+
+    # Validate all member_ids are active members in the tenant
+    if data.member_ids:
+        valid_result = await db.execute(
+            select(OrgMember.id).where(
+                OrgMember.id.in_(data.member_ids),
+                OrgMember.tenant_id == user.tenant_id,
+                OrgMember.status == MemberStatus.ACTIVE.value,
+            )
+        )
+        valid_ids = set(valid_result.scalars().all())
+        invalid = set(data.member_ids) - valid_ids
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Membres invalides ou inactifs: {[str(i) for i in invalid]}",
+            )
+
+    # Delete existing permissions
+    await db.execute(
+        delete(AssistantPermission).where(
+            AssistantPermission.assistant_id == assistant_id
+        )
+    )
+
+    # Insert new permissions
+    for mid in data.member_ids:
+        db.add(AssistantPermission(assistant_id=assistant_id, member_id=mid))
+
+    await db.commit()
+    return await _list_permissions(assistant_id, user.tenant_id, db)
+
+
+@router.post(
+    "/{assistant_id}/permissions",
+    response_model=list[PermissionMemberRead],
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_assistant_permissions(
+    assistant_id: UUID,
+    data: PermissionAdd,
+    user: CurrentUser,
+    _admin: AdminMember,
+    db: DbSession,
+) -> list[dict]:
+    """Grant additional members access to an assistant."""
+    await _get_tenant_assistant(assistant_id, user.tenant_id, db)
+
+    if not data.member_ids:
+        return await _list_permissions(assistant_id, user.tenant_id, db)
+
+    # Validate member_ids are active members
+    valid_result = await db.execute(
+        select(OrgMember.id).where(
+            OrgMember.id.in_(data.member_ids),
+            OrgMember.tenant_id == user.tenant_id,
+            OrgMember.status == MemberStatus.ACTIVE.value,
+        )
+    )
+    valid_ids = set(valid_result.scalars().all())
+    invalid = set(data.member_ids) - valid_ids
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Membres invalides ou inactifs: {[str(i) for i in invalid]}",
+        )
+
+    # Get existing permissions to skip duplicates
+    existing_result = await db.execute(
+        select(AssistantPermission.member_id).where(
+            AssistantPermission.assistant_id == assistant_id,
+            AssistantPermission.member_id.in_(data.member_ids),
+        )
+    )
+    existing_ids = set(existing_result.scalars().all())
+
+    for mid in valid_ids - existing_ids:
+        db.add(AssistantPermission(assistant_id=assistant_id, member_id=mid))
+
+    await db.commit()
+    return await _list_permissions(assistant_id, user.tenant_id, db)
+
+
+@router.delete(
+    "/{assistant_id}/permissions/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def remove_assistant_permission(
+    assistant_id: UUID,
+    member_id: UUID,
+    user: CurrentUser,
+    _admin: AdminMember,
+    db: DbSession,
+) -> None:
+    """Revoke a member's access to an assistant."""
+    await _get_tenant_assistant(assistant_id, user.tenant_id, db)
+
+    result = await db.execute(
+        select(AssistantPermission).where(
+            AssistantPermission.assistant_id == assistant_id,
+            AssistantPermission.member_id == member_id,
+        )
+    )
+    perm = result.scalar_one_or_none()
+    if not perm:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Permission introuvable.",
+        )
+
+    await db.delete(perm)
     await db.commit()
