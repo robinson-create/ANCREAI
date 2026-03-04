@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "mecano_chunks"
+    qdrant_api_key: str = ""  # empty = no auth (dev)
 
     # S3 / MinIO
     s3_endpoint_url: str | None = "http://localhost:9000"
@@ -56,6 +58,10 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     log_level: str = "INFO"
+    cors_origins: str = "*"  # comma-separated in prod, e.g. "https://app.ancre.app"
+
+    # Cost budget per tenant
+    monthly_api_cost_limit_usd: float = 20.0  # max $/month/tenant for LLM API calls
 
     # Clerk Authentication
     clerk_secret_key: str = ""
@@ -152,6 +158,14 @@ class Settings(BaseSettings):
     agent_sse_hard_timeout: float = 180.0  # max SSE duration (seconds)
     agent_stuck_run_threshold: int = 600  # seconds before a run is considered stuck
     agent_delta_batch_ms: int = 300  # batch delta events every N ms
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def fix_database_url(cls, v: str) -> str:
+        """Railway provides postgresql:// but we need postgresql+asyncpg://."""
+        if isinstance(v, str) and v.startswith("postgresql://") and "+asyncpg" not in v:
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
 
 @lru_cache

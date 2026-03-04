@@ -40,11 +40,13 @@ dependencies = [
     "beautifulsoup4>=4.12.0",
     "lxml>=5.3.0",
     "markdown>=3.7",
-    "docling>=2.14.0",
     
     # Utils
     "httpx>=0.28.0",
     "python-dotenv>=1.0.0",
+
+    # Rate limiting
+    "slowapi>=0.1.9",
 
     # Observability
     "structlog>=24.1.0",
@@ -55,12 +57,16 @@ dependencies = [
     "PyJWT>=2.8.0",
     "cryptography>=42.0.0",
 
-    # PDF export
-    "playwright>=1.49.0",
+    # Templating (jinja2 used by PDF export templates)
     "jinja2>=3.1.0",
 ]
 
 [project.optional-dependencies]
+# Heavy local-only deps (Docling pulls torch/easyocr, Playwright pulls Chromium)
+local = [
+    "docling>=2.14.0",
+    "playwright>=1.49.0",
+]
 dev = [
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",

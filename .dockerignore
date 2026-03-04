@@ -1,0 +1,27 @@
+# Frontend (deployed on Vercel, not in API image)
+frontend/
+copilot-runtime/
+slide-export-service/
+
+# Dev / IDE
+.venv/
+.git/
+.github/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+docs/
+*.md
+.env
+.env.*
+
+# Node
+node_modules/
+packages/
+
+# Docker
+docker-compose.yml
+docker-compose.*.yml

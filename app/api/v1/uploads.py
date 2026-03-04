@@ -3,8 +3,10 @@
 from uuid import UUID
 
 from arq import ArqRedis, create_pool
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
+
+from app.core.rate_limit import limiter
 from sqlalchemy import select
 
 from app.deps import CurrentUser, DbSession
@@ -202,7 +204,9 @@ async def get_download_url(
 
 
 @router.post("", response_model=list[UploadDocumentRead])
+@limiter.limit("20/minute")
 async def upload_documents(
+    request: Request,
     user: CurrentUser,
     db: DbSession,
     files: list[UploadFile],

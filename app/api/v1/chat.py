@@ -5,8 +5,10 @@ import json
 import logging
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request as FastAPIRequest, status
 from fastapi.responses import StreamingResponse
+
+from app.core.rate_limit import limiter
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
@@ -258,9 +260,11 @@ async def chat(
 
 
 @router.post("/{assistant_id}/stream")
+@limiter.limit("30/minute")
 async def chat_stream(
+    request: FastAPIRequest,
     assistant_id: UUID,
-    request: ChatRequest,
+    chat_request: ChatRequest,
     user: CurrentUser,
     member: CurrentMember,
     db: DbSession,
@@ -288,7 +292,7 @@ async def chat_stream(
             detail="Assistant not found",
         )
 
-    if not assistant.collections and not assistant.integrations and not request.attachment_ids:
+    if not assistant.collections and not assistant.integrations and not chat_request.attachment_ids:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="L'assistant n'a ni collections ni outils connectés.",
@@ -297,10 +301,10 @@ async def chat_stream(
     collection_ids = [c.id for c in assistant.collections]
 
     # Merge collections from uploaded attachments into the RAG scope
-    if request.attachment_ids:
+    if chat_request.attachment_ids:
         att_result = await db.execute(
             select(Document.collection_id)
-            .where(Document.id.in_(request.attachment_ids))
+            .where(Document.id.in_(chat_request.attachment_ids))
             .where(Document.tenant_id == tenant_id)
         )
         att_collection_ids = list({row[0] for row in att_result.all() if row[0]})
@@ -308,7 +312,7 @@ async def chat_stream(
             if cid not in collection_ids:
                 collection_ids.append(cid)
 
-    conversation_id = request.conversation_id or uuid4()
+    conversation_id = chat_request.conversation_id or uuid4()
 
     # Build integrations list for the chat service
     integrations_data = [
@@ -328,15 +332,18 @@ async def chat_stream(
     # Record quota usage immediately (before streaming)
     await quota_service.record_chat_request(db, user_id)
 
+    # Check cost budget (Mistral API spend cap)
+    await usage_service.check_cost_budget(db, tenant_id)
+
     # Get conversation history if requested
     history = []
-    if request.include_history and request.conversation_id:
+    if chat_request.include_history and chat_request.conversation_id:
         result = await db.execute(
             select(Message)
             .where(Message.assistant_id == assistant_id)
-            .where(Message.conversation_id == request.conversation_id)
+            .where(Message.conversation_id == chat_request.conversation_id)
             .order_by(Message.created_at.desc())
-            .limit(request.max_history_messages)
+            .limit(chat_request.max_history_messages)
         )
         messages = list(reversed(result.scalars().all()))
         history = [{"role": m.role, "content": m.content} for m in messages]
@@ -347,7 +354,7 @@ async def chat_stream(
             assistant_id=assistant_id,
             conversation_id=conversation_id,
             role=MessageRole.USER.value,
-            content=request.message,
+            content=chat_request.message,
             tokens_input=0,  # Will be updated after streaming
         )
         save_db.add(user_message)
@@ -363,7 +370,7 @@ async def chat_stream(
     producer_task = asyncio.create_task(
         _run_llm_producer(
             queue,
-            request_message=request.message,
+            request_message=chat_request.message,
             tenant_id=tenant_id,
             collection_ids=collection_ids,
             system_prompt=assistant.system_prompt,
@@ -372,7 +379,7 @@ async def chat_stream(
             assistant_id=assistant_id,
             conversation_id=conversation_id,
             user_message_id=user_message_id,
-            context_hint=request.context_hint,
+            context_hint=chat_request.context_hint,
         )
     )
     # Suppress "Task exception was never retrieved" warnings

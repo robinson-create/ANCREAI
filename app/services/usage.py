@@ -3,12 +3,16 @@
 from datetime import date, datetime, timezone
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.tenant import Tenant
 from app.models.usage import Usage
+
+_settings = get_settings()
 
 
 class UsageService:
@@ -241,6 +245,33 @@ class UsageService:
         """Record transcription usage."""
         usage = await self.get_or_create_usage(db, tenant_id)
         usage.transcription_seconds += seconds
+
+    async def check_cost_budget(
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+    ) -> None:
+        """Block if estimated LLM API cost exceeds monthly budget.
+
+        Approximate Mistral pricing:
+        - Input tokens: ~$2/M (medium), Output tokens: ~$6/M (medium)
+        - Embedding: ~$0.1/M tokens
+        """
+        usage = await self.get_or_create_usage(db, tenant_id)
+        estimated_cost = (
+            (usage.chat_input_tokens / 1_000_000) * 2.0
+            + (usage.chat_output_tokens / 1_000_000) * 6.0
+            + (usage.ingestion_tokens / 1_000_000) * 0.1
+        )
+        if estimated_cost >= _settings.monthly_api_cost_limit_usd:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Budget mensuel API atteint "
+                    f"(~${estimated_cost:.2f}/{_settings.monthly_api_cost_limit_usd}$). "
+                    f"Contactez le support pour augmenter votre limite."
+                ),
+            )
 
     async def reduce_storage(
         self,

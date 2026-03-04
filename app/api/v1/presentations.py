@@ -5,8 +5,10 @@ import json
 from uuid import UUID, uuid4
 
 from arq import ArqRedis, create_pool
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 from fastapi.responses import StreamingResponse
+
+from app.core.rate_limit import limiter
 from sqlalchemy import select
 
 from app.deps import CurrentUser, DbSession
@@ -159,7 +161,9 @@ async def list_presentations(
 
 
 @router.post("", response_model=PresentationRead, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def create_presentation(
+    request: Request,
     data: PresentationCreate,
     user: CurrentUser,
     db: DbSession,

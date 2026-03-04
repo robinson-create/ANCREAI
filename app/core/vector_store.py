@@ -26,7 +26,10 @@ class VectorStore:
     """Async Qdrant vector store client."""
 
     def __init__(self) -> None:
-        self.client = AsyncQdrantClient(url=settings.qdrant_url)
+        self.client = AsyncQdrantClient(
+            url=settings.qdrant_url,
+            api_key=settings.qdrant_api_key or None,
+        )
         self.collection_name = settings.qdrant_collection
         self.vector_size = settings.embedding_dimensions
 

@@ -2,8 +2,10 @@
 
 import math
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
+
+from app.core.rate_limit import limiter
 
 from app.deps import CurrentUser, DbSession
 from app.services.transcription import transcription_service
@@ -21,7 +23,9 @@ class TranscriptionResponse(BaseModel):
 
 
 @router.post("/transcribe", response_model=TranscriptionResponse)
+@limiter.limit("10/minute")
 async def transcribe_audio(
+    request: Request,
     user: CurrentUser,
     db: DbSession,
     file: UploadFile,

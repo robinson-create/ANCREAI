@@ -1,0 +1,62 @@
+# Multi-stage build from monorepo root (Railway root dir = /)
+# Needed because slide-export-service depends on @ancre/presentation-layout workspace package
+
+FROM node:20-slim AS builder
+
+WORKDIR /workspace
+
+# Copy root workspace config
+COPY package.json package-lock.json ./
+
+# Copy workspace packages needed for build
+COPY packages/presentation-layout/ ./packages/presentation-layout/
+COPY slide-export-service/ ./slide-export-service/
+
+# Install and build workspace packages
+RUN npm ci --workspace=@ancre/presentation-layout --workspace=slide-export-service
+RUN npm run build --workspace=@ancre/presentation-layout
+RUN npm run build --workspace=slide-export-service
+
+# --- Production stage ---
+FROM node:20-slim
+
+# Playwright Chromium deps + fonts for consistent slide rendering
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-inter \
+    fonts-open-sans \
+    curl \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libdbus-1-3 \
+    libxkbcommon0 \
+    libatspi2.0-0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libgbm1 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libasound2 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy built artifacts and deps
+COPY --from=builder /workspace/slide-export-service/dist/ ./dist/
+COPY --from=builder /workspace/slide-export-service/package*.json ./
+COPY --from=builder /workspace/slide-export-service/node_modules/ ./node_modules/
+
+# Install Playwright Chromium browser
+RUN npx playwright install chromium
+
+EXPOSE 4100
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s \
+    CMD curl -f http://localhost:4100/health || exit 1
+
+CMD ["node", "dist/index.js"]
