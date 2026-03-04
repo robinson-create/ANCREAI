@@ -5,7 +5,12 @@
 @tailwind utilities;
 
 @layer base {
-  html, body {
+  html {
+    overflow-x: clip;
+    overscroll-behavior: none;
+    background: hsl(215 70% 15%);
+  }
+  body {
     overflow-x: hidden;
     overscroll-behavior: none;
   }
