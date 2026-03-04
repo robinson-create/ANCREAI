@@ -571,6 +571,16 @@ class PresentationService:
 
             await db.flush()
 
+            # Enqueue RAG indexing (fire-and-forget)
+            try:
+                from arq import ArqRedis, create_pool
+                from app.workers.settings import redis_settings
+                pool: ArqRedis = await create_pool(redis_settings)
+                await pool.enqueue_job("index_presentation_task", str(pres_id))
+                await pool.close()
+            except Exception as idx_err:
+                logger.warning("Failed to enqueue presentation indexing: %s", idx_err)
+
             return slides
 
         except Exception as fatal:

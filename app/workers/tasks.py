@@ -194,6 +194,7 @@ async def process_document(ctx: dict, document_id: str) -> dict:
                 "id": str(db_chunk.id),
                 "vector": embedding,
                 "payload": {
+                    "scope": "org",
                     "tenant_id": str(tenant_id),
                     "collection_id": str(document.collection_id),
                     "document_id": str(doc_uuid),
@@ -1739,6 +1740,77 @@ async def consolidate_user_memory(
         await db.close()
 
 
+# ── Content indexing (workspace documents & presentations) ────────────
+
+
+async def index_workspace_document_task(ctx: dict, document_id: str) -> dict:
+    """Index a workspace document into the RAG __workspace__ collection."""
+    from app.models.workspace_document import WorkspaceDocument
+    from app.services.content_indexer import index_workspace_document
+
+    doc_uuid = UUID(document_id)
+    db = await get_db()
+
+    try:
+        result = await db.execute(
+            select(WorkspaceDocument).where(WorkspaceDocument.id == doc_uuid)
+        )
+        doc = result.scalar_one_or_none()
+        if not doc:
+            return {"error": "Document not found"}
+
+        chunk_count = await index_workspace_document(
+            db, doc.tenant_id, doc.id, doc.title, doc.content_json or {},
+        )
+        await db.commit()
+        return {"document_id": document_id, "chunks": chunk_count}
+
+    except Exception as e:
+        logger.exception(f"Error indexing workspace document {document_id}")
+        return {"error": str(e)}
+    finally:
+        await db.close()
+
+
+async def index_presentation_task(ctx: dict, presentation_id: str) -> dict:
+    """Index a presentation into the RAG __workspace__ collection."""
+    from app.models.presentation import Presentation, PresentationSlide
+    from app.services.content_indexer import index_presentation
+
+    pres_uuid = UUID(presentation_id)
+    db = await get_db()
+
+    try:
+        result = await db.execute(
+            select(Presentation).where(Presentation.id == pres_uuid)
+        )
+        pres = result.scalar_one_or_none()
+        if not pres:
+            return {"error": "Presentation not found"}
+
+        slides_result = await db.execute(
+            select(PresentationSlide)
+            .where(PresentationSlide.presentation_id == pres_uuid)
+            .order_by(PresentationSlide.position)
+        )
+        slides = [
+            {"content_json": s.content_json, "speaker_notes": s.speaker_notes}
+            for s in slides_result.scalars().all()
+        ]
+
+        chunk_count = await index_presentation(
+            db, pres.tenant_id, pres.id, pres.title, pres.prompt, slides,
+        )
+        await db.commit()
+        return {"presentation_id": presentation_id, "chunks": chunk_count}
+
+    except Exception as e:
+        logger.exception(f"Error indexing presentation {presentation_id}")
+        return {"error": str(e)}
+    finally:
+        await db.close()
+
+
 class WorkerSettings:
     """Arq worker settings."""
 
@@ -1756,6 +1828,7 @@ class WorkerSettings:
         send_email, sync_mail_account, sync_thread, run_agent,
         generate_presentation_slides_direct, generate_presentation_slides, export_presentation,
         extract_conversation_memory, consolidate_user_memory,
+        index_workspace_document_task, index_presentation_task,
     ]
     cron_jobs = [
         cron(

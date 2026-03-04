@@ -211,22 +211,21 @@ class VectorStore:
             )
         ]
 
-        # Personal-global mode: search ALL user content (personal + project)
+        # Personal-global mode: user's own chunks (personal + project)
+        # + ALL org chunks for the tenant (shared uploaded documents).
         if user_id is not None and not has_specific_scope:
-            # Invariant #8: tenant_id + user_id always together
-            must_conditions.append(
-                FieldCondition(
-                    key="user_id",
-                    match=MatchValue(value=str(user_id)),
-                )
-            )
-            # Invariant #5: explicit scope filter — must strict, no should
-            must_conditions.append(
-                FieldCondition(
-                    key="scope",
-                    match=MatchAny(any=["personal", "project"]),
-                )
-            )
+            # Use OR logic: (user_id match AND personal/project) OR (org/legacy chunks)
+            personal_filter = Filter(must=[
+                FieldCondition(key="user_id", match=MatchValue(value=str(user_id))),
+                FieldCondition(key="scope", match=MatchAny(any=["personal", "project"])),
+            ])
+            # Org chunks: legacy chunks have no 'scope' field, new ones have scope='org'.
+            # Use must_not to exclude personal/project, catching both cases.
+            org_filter = Filter(must_not=[
+                FieldCondition(key="scope", match=MatchAny(any=["personal", "project"])),
+            ])
+
+            must_conditions.append(Filter(should=[personal_filter, org_filter]))
 
             results = await self.client.query_points(
                 collection_name=self.collection_name,

@@ -150,10 +150,13 @@ async def _run_personal_global_llm_producer(
             "tenant_id": str(tenant_id),
             "user_id": str(user_id),
             "error": str(e),
-        })
-        await queue.put(("error", str(e)))
+        }, exc_info=True)
+        # Only send error to client if no content was streamed yet
+        if not full_response and not blocks_for_db:
+            await queue.put(("error", "Une erreur s'est produite. Réessayez."))
 
     finally:
+        # Always save whatever was produced (even partial)
         if full_response or blocks_for_db:
             try:
                 async with async_session_maker() as save_db:
@@ -212,8 +215,15 @@ async def _run_personal_global_llm_producer(
                     "tenant_id": str(tenant_id),
                     "user_id": str(user_id),
                     "error": str(save_err),
-                })
-                await queue.put(("error", "Failed to save message"))
+                }, exc_info=True)
+                # Don't send save errors to client — the response was already streamed
+
+        # Ensure done event is sent if content was produced but stream errored
+        if full_response or blocks_for_db:
+            await queue.put(("done", {
+                "tokens_input": tokens_input,
+                "tokens_output": tokens_output,
+            }))
 
         await queue.put(_STREAM_END)
 

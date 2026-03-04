@@ -1,10 +1,15 @@
 """Workspace documents API endpoints — CRUD, AI actions, PDF export."""
 
+import logging
 from uuid import UUID
 
+from arq import ArqRedis, create_pool
 from fastapi import APIRouter, HTTPException, status
 
 from app.deps import CurrentUser, DbSession
+from app.workers.settings import redis_settings
+
+logger = logging.getLogger(__name__)
 from app.schemas.workspace_document import (
     AddLineItemRequest,
     AiActionResponse,
@@ -101,6 +106,15 @@ async def patch_content(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document introuvable.",
         )
+
+    # Enqueue RAG indexing (fire-and-forget)
+    try:
+        pool: ArqRedis = await create_pool(redis_settings)
+        await pool.enqueue_job("index_workspace_document_task", str(doc_id))
+        await pool.close()
+    except Exception as e:
+        logger.warning("Failed to enqueue workspace document indexing: %s", e)
+
     return WorkspaceDocumentRead.model_validate(doc)
 
 

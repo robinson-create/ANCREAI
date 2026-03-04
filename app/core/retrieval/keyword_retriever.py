@@ -102,11 +102,13 @@ async def keyword_search(
         )
         params["project_ids"] = [str(pid) for pid in project_ids]
 
-    # Personal-global: all user chunks (personal + project), invariants #5, #7, #8
+    # Personal-global: user's own chunks (personal + project) + ALL org chunks
+    # for the tenant (shared docs uploaded to collections).
     if user_id is not None and not scope_clauses:
         scope_clauses.append(
             "(c.user_id = CAST(:user_id AS uuid) AND c.scope IN ('personal', 'project'))"
         )
+        scope_clauses.append("(c.scope = 'org')")
         params["user_id"] = str(user_id)
 
     if not scope_clauses:

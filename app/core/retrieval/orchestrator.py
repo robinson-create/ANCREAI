@@ -36,7 +36,7 @@ async def retrieve_context(
     - collection_ids → org-scope chunks
     - dossier_ids → personal-scope chunks (user's dossiers)
     - project_ids → project-scope chunks (user's projects)
-    - user_id (alone) → personal-global: ALL user chunks (personal + project)
+    - user_id (alone) → personal-global: user chunks (personal + project) + all org chunks
 
     Steps:
     1) Embed query

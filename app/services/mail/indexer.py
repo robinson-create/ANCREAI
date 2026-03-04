@@ -140,6 +140,7 @@ async def index_email_message(
             "id": str(db_chunk.id),
             "vector": embedding,
             "payload": {
+                "scope": "org",
                 "tenant_id": str(tenant_id),
                 "collection_id": str(collection_id),
                 "document_id": str(msg.id),
