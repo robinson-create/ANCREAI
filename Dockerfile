@@ -11,7 +11,7 @@ WORKDIR /app
 
 # Install Python dependencies (without docling/playwright — use Mistral OCR API in prod)
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
+RUN mkdir -p app && touch app/__init__.py && pip install --no-cache-dir . && rm -rf app
 
 # Copy application code
 COPY alembic.ini ./
