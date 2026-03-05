@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -29,10 +30,24 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
-    # Startup
-    # Connection pools are created lazily, but we can test connection here
-    async with engine.begin() as conn:
-        await conn.execute(text("SELECT 1"))
+    # Startup — wait for Postgres to be reachable (Railway starts services in parallel)
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            logger.info("database_connected", extra={"attempt": attempt})
+            break
+        except Exception as exc:
+            if attempt == max_retries:
+                logger.error("database_connect_failed after %d attempts", max_retries)
+                raise
+            delay = min(2 ** attempt, 30)
+            logger.warning(
+                "database_connect_retry attempt=%d/%d delay=%ds error=%s",
+                attempt, max_retries, delay, exc,
+            )
+            await asyncio.sleep(delay)
     
     yield
 
