@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,8 @@ const OnboardingSetup = () => {
   const navigate = useNavigate();
   const state = (location.state || {}) as SetupState;
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleStepClick = (step: typeof setupSteps[0]) => {
     // Marquer comme complété
@@ -58,6 +60,8 @@ const OnboardingSetup = () => {
   };
 
   const handleFinish = async () => {
+    setIsCompleting(true);
+    setError(null);
     try {
       // Marquer l'onboarding comme complété
       await onboardingApi.complete({
@@ -70,10 +74,11 @@ const OnboardingSetup = () => {
 
       // Rediriger vers l'app
       navigate("/app/search");
-    } catch (error) {
-      console.error("Error completing onboarding:", error);
-      // Rediriger quand même vers l'app
-      navigate("/app/search");
+    } catch (err) {
+      console.error("Error completing onboarding:", err);
+      setError("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -135,12 +140,16 @@ const OnboardingSetup = () => {
                 Vous pourrez toujours configurer ces options plus tard depuis les paramètres
               </p>
 
+              {error && (
+                <p className="text-sm text-destructive text-center mb-4">{error}</p>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button variant="outline" onClick={handleSkip} className="flex-1">
-                  Passer pour l'instant
+                <Button variant="outline" onClick={handleSkip} disabled={isCompleting} className="flex-1">
+                  {isCompleting ? "Chargement..." : "Passer pour l'instant"}
                 </Button>
-                <Button onClick={handleFinish} className="flex-1">
-                  Terminer la configuration
+                <Button onClick={handleFinish} disabled={isCompleting} className="flex-1">
+                  {isCompleting ? "Chargement..." : "Terminer la configuration"}
                 </Button>
               </div>
             </div>

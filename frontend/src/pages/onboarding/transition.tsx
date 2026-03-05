@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ const OnboardingTransition = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = (location.state || {}) as TransitionState;
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Si pas de state, rediriger vers l'onboarding
@@ -27,6 +29,8 @@ const OnboardingTransition = () => {
   }, [state, navigate]);
 
   const handleSkip = async () => {
+    setIsCompleting(true);
+    setError(null);
     try {
       // Marquer l'onboarding comme complété
       await onboardingApi.complete({
@@ -39,10 +43,11 @@ const OnboardingTransition = () => {
 
       // Rediriger vers l'app
       navigate("/app/search");
-    } catch (error) {
-      console.error("Error completing onboarding:", error);
-      // Rediriger quand même vers l'app
-      navigate("/app/search");
+    } catch (err) {
+      console.error("Error completing onboarding:", err);
+      setError("Une erreur est survenue. Veuillez réessayer.");
+    } finally {
+      setIsCompleting(false);
     }
   };
 
@@ -114,11 +119,15 @@ const OnboardingTransition = () => {
               </p>
             </div>
 
+            {error && (
+              <p className="text-sm text-destructive text-center">{error}</p>
+            )}
+
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button variant="outline" onClick={handleSkip} className="flex-1">
-                Je le ferai plus tard
+              <Button variant="outline" onClick={handleSkip} disabled={isCompleting} className="flex-1">
+                {isCompleting ? "Chargement..." : "Je le ferai plus tard"}
               </Button>
-              <Button onClick={handleConfigure} className="flex-1">
+              <Button onClick={handleConfigure} disabled={isCompleting} className="flex-1">
                 Configurer maintenant
               </Button>
             </div>
