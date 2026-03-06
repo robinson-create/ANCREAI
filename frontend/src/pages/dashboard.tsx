@@ -47,16 +47,6 @@ const actions = [
   },
 ];
 
-// Mock emails (same source as email-composer until a real API is available)
-const MOCK_EMAILS = [
-  { subject: "Relance devis TechCo", to: "j.martin@techco.fr", date: "2026-02-10", status: "Envoyé" },
-  { subject: "Proposition commerciale Q1", to: "j.martin@techco.fr", date: "2026-01-28", status: "Envoyé" },
-  { subject: "Proposition partenariat Acme", to: "contact@acme.com", date: "2026-02-08", status: "Brouillon" },
-  { subject: "Confirmation RDV vendredi", to: "s.dupont@client.fr", date: "2026-02-07", status: "Envoyé" },
-  { subject: "Suivi projet phase 2", to: "s.dupont@client.fr", date: "2026-02-01", status: "Envoyé" },
-  { subject: "Demande d'informations RGPD", to: "legal@partenaire.fr", date: "2026-02-05", status: "Envoyé" },
-  { subject: "Suivi onboarding nouveau client", to: "n.bernard@newco.fr", date: "2026-02-03", status: "Brouillon" },
-];
 
 // ── Unified history item ──
 
@@ -295,20 +285,6 @@ export function DashboardPage() {
       });
     }
 
-    // Emails (mock)
-    for (const email of MOCK_EMAILS) {
-      items.push({
-        id: `email-${email.subject}`,
-        type: "email",
-        title: email.subject,
-        subtitle: `À : ${email.to}`,
-        date: formatRelativeDate(email.date),
-        sortDate: new Date(email.date).getTime(),
-        status: email.status,
-        path: "/app/email",
-        emailState: { to: email.to, subject: email.subject },
-      });
-    }
 
     // Conversations
     for (const convo of conversations) {
