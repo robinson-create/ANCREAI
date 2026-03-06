@@ -49,7 +49,7 @@ import { workspaceDocumentsApi } from "@/api/workspace-documents";
 import type { Assistant, Citation } from "@/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useCopilotReadable } from "@copilotkit/react-core";
+// useCopilotReadable removed — crashes when CopilotKit provider is not mounted (production)
 import { BlockRenderer } from "@/components/blocks/BlockRenderer";
 import { useSearchStream } from "@/contexts/search-stream";
 import { useSearchView } from "@/contexts/search-view-context";
@@ -651,20 +651,7 @@ export function SearchPage() {
     setTimeout(() => setCopiedMessageId(null), 2000);
   }, []);
 
-  // Expose search context to CopilotKit popup
-  useCopilotReadable({
-    description: "Current search conversation messages",
-    value: messages.length > 0
-      ? messages.map((m) => `${m.role}: ${m.content}`).join("\n")
-      : "No active search conversation",
-  });
-
-  useCopilotReadable({
-    description: "Currently selected assistant for search",
-    value: selectedAssistant
-      ? `Assistant: ${selectedAssistant.name} (model: ${selectedAssistant.model})`
-      : "No assistant selected",
-  });
+  // CopilotKit readable hooks removed — CopilotKit provider not mounted in production
 
   return (
     <div className="flex flex-col h-full">
