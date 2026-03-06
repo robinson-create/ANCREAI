@@ -30,25 +30,35 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
-    # Startup — wait for Postgres to be reachable (Railway starts services in parallel)
-    max_retries = 20
+    # Startup — try to connect to Postgres but don't crash if unavailable.
+    # Railway starts services in parallel; the DB may come up later.
+    # Individual requests will fail gracefully until the DB is reachable.
+    max_retries = 15
+    db_connected = False
     for attempt in range(1, max_retries + 1):
         try:
             async with engine.begin() as conn:
                 await conn.execute(text("SELECT 1"))
             logger.info("database_connected", extra={"attempt": attempt})
+            db_connected = True
             break
         except Exception as exc:
             if attempt == max_retries:
-                logger.error("database_connect_failed after %d attempts", max_retries)
-                raise
-            delay = min(2 ** attempt, 60)
+                logger.error(
+                    "database_unavailable after %d attempts — starting in degraded mode. "
+                    "Requests requiring DB will fail until Postgres is reachable. error=%s",
+                    max_retries, exc,
+                )
+                break
+            delay = min(2 ** attempt, 30)
             logger.warning(
                 "database_connect_retry attempt=%d/%d delay=%ds error=%s",
                 attempt, max_retries, delay, exc,
             )
             await asyncio.sleep(delay)
-    
+
+    app.state.db_connected = db_connected
+
     yield
 
     # Shutdown
