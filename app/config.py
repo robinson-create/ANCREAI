@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
     cors_origins: str = "*"  # comma-separated in prod, e.g. "https://app.ancre.app"
+    frontend_url: str = "http://localhost:3000"  # https://ancreai.eu in prod
 
     # Cost budget per tenant
     monthly_api_cost_limit_usd: float = 20.0  # max $/month/tenant for LLM API calls

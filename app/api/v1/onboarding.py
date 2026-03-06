@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
+from app.config import get_settings
 from app.deps import CurrentUser, DbSession
 from app.models.assistant import Assistant
 from app.models.collection import Collection
@@ -158,11 +159,13 @@ async def complete_onboarding(
     # 8. Create Stripe trial checkout
     checkout_url: str | None = None
     try:
+        settings = get_settings()
+        base = settings.frontend_url.rstrip("/")
         checkout_url = await stripe_service.create_trial_checkout_session(
             db=db,
             user=user,
-            success_url="http://localhost:3000/app?onboarding=success",
-            cancel_url="http://localhost:3000/app/onboarding?step=6",
+            success_url=f"{base}/app?onboarding=success",
+            cancel_url=f"{base}/app/onboarding?step=6",
         )
     except Exception:
         logger.warning("Failed to create Stripe trial checkout", exc_info=True)

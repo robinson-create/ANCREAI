@@ -344,6 +344,9 @@ export function OnboardingPage() {
         first_name: firstName,
         last_name: lastName,
         company_name: companyName,
+        role: "",
+        team_emails: "",
+        selected_plan: "",
         memories,
         website_urls: websiteUrls.filter((u) => u.trim()),
       });
