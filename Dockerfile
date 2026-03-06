@@ -22,4 +22,4 @@ COPY run_worker.py ./
 EXPOSE 8000
 
 # Default: API server. Override for worker with: python run_worker.py
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
