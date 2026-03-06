@@ -83,11 +83,18 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(ObservabilityMiddleware)
 
 # CORS middleware
-_cors_origins = (
-    settings.cors_origins.split(",")
-    if settings.cors_origins != "*"
-    else ["*"]
-)
+if settings.cors_origins == "*":
+    _cors_origins = ["*"]
+else:
+    _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+
+# Always include production frontend
+_prod_origin = "https://ancreai.eu"
+if _prod_origin not in _cors_origins and "*" not in _cors_origins:
+    _cors_origins.append(_prod_origin)
+
+logger.info("cors_origins=%s", _cors_origins)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
