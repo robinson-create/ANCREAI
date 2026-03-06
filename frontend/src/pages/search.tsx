@@ -636,7 +636,6 @@ export function SearchPage() {
     });
   };
 
-  const selectedAssistant = assistants.find((a: Assistant) => a.id === selectedAssistantId);
   const hasConversation = messages.length > 0 && !forceListView;
 
   // Sync search home state for wallpaper in AppLayout
