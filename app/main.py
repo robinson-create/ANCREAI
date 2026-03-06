@@ -31,7 +31,7 @@ setup_logging()
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan handler."""
     # Startup — wait for Postgres to be reachable (Railway starts services in parallel)
-    max_retries = 10
+    max_retries = 20
     for attempt in range(1, max_retries + 1):
         try:
             async with engine.begin() as conn:
@@ -42,7 +42,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if attempt == max_retries:
                 logger.error("database_connect_failed after %d attempts", max_retries)
                 raise
-            delay = min(2 ** attempt, 30)
+            delay = min(2 ** attempt, 60)
             logger.warning(
                 "database_connect_retry attempt=%d/%d delay=%ds error=%s",
                 attempt, max_retries, delay, exc,
