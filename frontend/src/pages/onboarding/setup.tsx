@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ interface SetupState {
   company?: string;
   role?: string;
   teamEmails?: string;
+  selectedPlan?: string;
   initialQuery?: string;
 }
 
@@ -68,6 +69,9 @@ const OnboardingSetup = () => {
         first_name: state.firstName || "",
         last_name: state.lastName || "",
         company_name: state.company || "",
+        role: state.role || "",
+        team_emails: state.teamEmails || "",
+        selected_plan: state.selectedPlan || "",
         memories: "",
         website_urls: [],
       });

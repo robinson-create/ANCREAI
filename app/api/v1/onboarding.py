@@ -30,6 +30,9 @@ class OnboardingCompleteRequest(BaseModel):
     first_name: str
     last_name: str
     company_name: str = ""
+    role: str = ""
+    team_emails: str = ""
+    selected_plan: str = ""
     memories: str = ""
     website_urls: list[str] = []
 
@@ -123,8 +126,20 @@ async def complete_onboarding(
         db.add(ws)
         web_source_ids.append(str(ws.id))
 
-    # 6. Mark onboarding as completed
+    # 6. Save user profile from onboarding + mark completed
+    user.first_name = data.first_name
+    user.last_name = data.last_name
+    user.name = f"{data.first_name} {data.last_name}".strip()
+    user.company_name = data.company_name or None
+    user.role = data.role or None
     user.onboarding_completed = True
+
+    logger.info(
+        "onboarding_completed user_id=%s tenant_id=%s first_name=%s last_name=%s "
+        "company=%s role=%s plan=%s team_emails=%s",
+        user.id, tenant_id, data.first_name, data.last_name,
+        data.company_name, data.role, data.selected_plan, data.team_emails,
+    )
 
     await db.commit()
 

@@ -335,7 +335,7 @@ const OnboardingV2 = () => {
     } else {
       // Fin du tour - rediriger vers la transition
       navigate("/app/onboarding/transition", {
-        state: { firstName, lastName, company, role: selectedRole, teamEmails, initialQuery },
+        state: { firstName, lastName, company, role: selectedRole, teamEmails, selectedPlan, initialQuery },
       });
     }
   };

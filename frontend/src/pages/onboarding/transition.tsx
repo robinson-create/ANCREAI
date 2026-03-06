@@ -11,6 +11,7 @@ interface TransitionState {
   company?: string;
   role?: string;
   teamEmails?: string;
+  selectedPlan?: string;
   initialQuery?: string;
 }
 
@@ -37,6 +38,9 @@ const OnboardingTransition = () => {
         first_name: state.firstName || "",
         last_name: state.lastName || "",
         company_name: state.company || "",
+        role: state.role || "",
+        team_emails: state.teamEmails || "",
+        selected_plan: state.selectedPlan || "",
         memories: "",
         website_urls: [],
       });

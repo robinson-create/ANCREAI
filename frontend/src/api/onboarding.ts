@@ -8,6 +8,9 @@ export interface OnboardingCompleteRequest {
   first_name: string
   last_name: string
   company_name: string
+  role: string
+  team_emails: string
+  selected_plan: string
   memories: string
   website_urls: string[]
 }
